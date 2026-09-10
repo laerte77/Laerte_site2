@@ -1,0 +1,357 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root, .dark {
+    --gradient-start: 220 20% 5%;
+    --gradient-end: 220 15% 15%;
+    --bg-dark-primary: 220 20% 6%;
+    --bg-dark-secondary: 220 15% 12%;
+    
+    --neon-pessoal: 204 100% 50%;
+    --neon-lanhouse: 190 100% 50%;
+    --neon-igreja: 51 100% 50%;
+    --neon-entretenimento: 16 100% 60%;
+    --neon-barbearia: 51 100% 50%;
+    
+    --neon-blue: var(--neon-pessoal);
+    --neon-cyan: var(--neon-lanhouse);
+    --neon-gold: var(--neon-igreja);
+    --neon-orange: var(--neon-entretenimento);
+    
+    --text-primary: 0 0% 100%;
+    --text-secondary: 220 13% 82%;
+    --text-tertiary: 220 9% 61%;
+    
+    --border-dark: 220 13% 26%;
+    --card-bg: 220 15% 12%;
+    --input-bg: 220 20% 8%;
+    --input-border: 210 100% 50%;
+    
+    --status-active: 142 71% 45%; 
+    --status-inactive: 0 0% 50%; 
+    --highlight-top: 142 71% 45%;
+    --highlight-bottom: 0 84% 60%;
+    
+    --positive: 142 71% 45%;
+    --negative: 0 84% 60%;
+    --investment: 217 91% 60%;
+    --spending: 24 95% 53%;
+
+    --status-pago: 142 76% 36%;
+    --status-parcial: 41 96% 40%;
+    --status-pendente: 41 96% 40%;
+    --status-vencido: 0 84% 60%;
+
+    /* Stock Status Colors */
+    --stock-positive: 142 71% 45%;
+    --stock-low: 41 96% 40%;
+    --stock-negative: 0 84% 60%;
+
+    --background: var(--bg-dark-primary);
+    --foreground: var(--text-primary);
+    --card: var(--card-bg);
+    --card-foreground: var(--text-primary);
+    --popover: var(--bg-dark-secondary);
+    --popover-foreground: var(--text-primary);
+    --primary: var(--neon-blue);
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 15% 12%;
+    --secondary-foreground: var(--text-secondary);
+    --muted: 220 15% 12%;
+    --muted-foreground: var(--text-tertiary);
+    --accent: var(--neon-orange);
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: var(--border-dark);
+    --input: var(--input-bg);
+    --ring: var(--neon-blue);
+    --radius: 0.75rem;
+
+    --mobile-spacing-x: 16px;
+    --mobile-spacing-y: 24px;
+    --mobile-input-height: 44px;
+    --mobile-font-base: 16px;
+    
+    /* Install button variables */
+    --install-btn-color: var(--neon-cyan);
+    --install-btn-bg-hover: 190 100% 50%;
+  }
+
+  .theme-igreja {
+    --primary: 51 100% 50%;
+    --primary-foreground: 220 20% 6%;
+    --secondary: 45 100% 15%;
+    --secondary-foreground: 51 100% 80%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --muted: 220 15% 12%;
+    --muted-foreground: 220 13% 60%;
+    --accent: 51 100% 40%;
+    --accent-foreground: 220 20% 6%;
+    --card: 220 15% 12%;
+    --card-foreground: 0 0% 100%;
+    --popover: 220 15% 12%;
+    --popover-foreground: 0 0% 100%;
+    --border: 51 100% 50%;
+    --input: 220 20% 8%;
+    --ring: 51 100% 50%;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: manipulation;
+    overscroll-behavior: contain;
+    @apply text-foreground min-h-screen transition-colors duration-300;
+    font-family: 'Poppins', 'Inter', sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    background: linear-gradient(135deg, hsl(var(--gradient-start)) 0%, hsl(var(--gradient-end)) 100%);
+    background-attachment: fixed;
+    background-size: cover;
+    color: hsl(var(--text-primary));
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight text-foreground;
+  }
+}
+
+@layer utilities {
+  .bg-gradient-professional {
+    background: linear-gradient(135deg, hsl(var(--gradient-start)) 0%, hsl(var(--gradient-end)) 100%);
+    background-attachment: fixed;
+    background-size: cover;
+  }
+  
+  .text-positive { color: hsl(var(--positive)); }
+  .text-negative { color: hsl(var(--negative)); }
+  .text-investment { color: hsl(var(--investment)); }
+  .text-spending { color: hsl(var(--spending)); }
+  
+  .bg-positive { background-color: hsl(var(--positive)); }
+  .bg-negative { background-color: hsl(var(--negative)); }
+  .bg-investment { background-color: hsl(var(--investment)); }
+  .bg-spending { background-color: hsl(var(--spending)); }
+
+  .text-stock-positive { color: hsl(var(--stock-positive)); }
+  .text-stock-low { color: hsl(var(--stock-low)); }
+  .text-stock-negative { color: hsl(var(--stock-negative)); }
+  
+  .bg-stock-positive { background-color: hsl(var(--stock-positive)); }
+  .bg-stock-low { background-color: hsl(var(--stock-low)); }
+  .bg-stock-negative { background-color: hsl(var(--stock-negative)); }
+
+  .glow-neon { box-shadow: 0 0 15px hsl(var(--primary)/0.5); }
+  .glow-neon-hover:hover {
+    box-shadow: 0 8px 24px hsl(var(--primary)/0.4), inset 0 0 10px hsl(var(--primary)/0.2);
+    transform: scale(1.02);
+    transition: all 0.3s ease-in-out;
+  }
+
+  .glow-pessoal { box-shadow: 0 0 15px hsl(var(--neon-pessoal)/0.5); }
+  .glow-pessoal:hover { box-shadow: 0 8px 24px hsl(var(--neon-pessoal)/0.4), inset 0 0 10px hsl(var(--neon-pessoal)/0.2); transform: scale(1.02); }
+  
+  .animate-fade-in { animation: fadeIn 0.6s ease-in-out forwards; }
+  .animate-shimmer { 
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite linear; 
+  }
+
+  .responsive-container {
+    @apply w-full mx-auto;
+    max-width: 100vw;
+  }
+}
+
+@layer components {
+  .filter-section {
+    @apply flex flex-col md:flex-row gap-4 bg-card p-4 rounded-lg border shadow-sm transition-all;
+  }
+
+  .badge-pago { @apply bg-emerald-500/20 text-emerald-500 border border-emerald-500/50 hover:bg-emerald-500/30; }
+  .badge-pendente { @apply bg-amber-500/20 text-amber-500 border border-amber-500/50 hover:bg-amber-500/30; }
+  .badge-vencido { @apply bg-red-500/20 text-red-500 border border-red-500/50 hover:bg-red-500/30; }
+  .badge-ativo { @apply bg-emerald-500/20 text-emerald-500 border border-emerald-500/50 hover:bg-emerald-500/30; }
+  .badge-inativo { @apply bg-muted text-muted-foreground border border-muted-foreground/50 hover:bg-muted/80; }
+
+  .igreja-select-hover [role="option"]:hover,
+  .igreja-select-hover [role="option"][data-highlighted] {
+    background-color: #3B82F6 !important;
+    color: white !important;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .stock-update-flash {
+    animation: flashStock 1.5s ease-out;
+  }
+
+  /* Install Prompt Button Styles */
+  .install-prompt-btn {
+    background-color: hsl(var(--install-btn-color) / 0.1);
+    color: hsl(var(--install-btn-color));
+    border: 1px solid hsl(var(--install-btn-color) / 0.5);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px hsl(var(--install-btn-color) / 0.1);
+  }
+  
+  .install-prompt-btn:hover {
+    background-color: hsl(var(--install-btn-color) / 0.2);
+    box-shadow: 0 0 15px hsl(var(--install-btn-color) / 0.4);
+    transform: translateY(-2px);
+  }
+
+  .install-prompt-btn:active {
+    transform: translateY(0);
+  }
+}
+
+input, select, textarea {
+  font-size: 16px !important;
+  -webkit-appearance: none;
+}
+
+button, a, .touch-target {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.responsive-table-wrapper {
+  @apply w-full overflow-x-auto rounded-md border border-border bg-card shadow-sm touch-pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.neon-zebra-table tr { transition: all 0.3s ease; }
+.neon-zebra-table tr:nth-child(even) { background-color: hsl(var(--card-bg) / 0.4); }
+.neon-zebra-table tr:hover {
+  background-color: hsl(var(--primary) / 0.1) !important;
+  box-shadow: inset 0 0 8px hsl(var(--primary) / 0.2);
+}
+
+@media (max-width: 767px) {
+  .mobile-optimized-container {
+    padding-left: var(--mobile-spacing-x) !important;
+    padding-right: var(--mobile-spacing-x) !important;
+    padding-bottom: calc(var(--mobile-spacing-y) * 3) !important;
+  }
+  
+  .touch-target {
+    min-height: var(--mobile-input-height) !important;
+    min-width: var(--mobile-input-height) !important;
+  }
+
+  .mobile-stack {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 1rem !important;
+  }
+
+  .mobile-full-width {
+    width: 100% !important;
+  }
+
+  .mobile-card {
+    padding: 1rem !important;
+    margin-bottom: 1rem !important;
+    border-radius: 0.75rem !important;
+  }
+
+  header { padding: 0 16px !important; }
+
+  .dialog-content-responsive {
+    width: 95vw !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px !important;
+    border-radius: 16px !important;
+  }
+
+  /* Responsive tuning for install button */
+  .install-prompt-btn {
+    padding: 0.875rem 1rem;
+    font-size: 1rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .tablet-optimized-container {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+    padding-bottom: 32px !important;
+  }
+  header { padding: 0 24px !important; }
+  .touch-target { min-height: 40px !important; }
+}
+
+@media (min-width: 1024px) {
+  .desktop-optimized-container {
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+    padding-bottom: 32px !important;
+  }
+  header { padding: 0 32px !important; }
+}
+
+/* Visible scrollbar for scrollable modal forms */
+.modal-form-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.6) hsl(var(--muted) / 0.3);
+}
+.modal-form-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.modal-form-scroll::-webkit-scrollbar-track {
+  background: hsl(var(--muted) / 0.3);
+  border-radius: 8px;
+}
+.modal-form-scroll::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.5);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.modal-form-scroll::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.8);
+  background-clip: padding-box;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes flashStock {
+  0% { background-color: transparent; }
+  20% { background-color: hsl(var(--primary)/0.3); box-shadow: inset 0 0 15px hsl(var(--primary)/0.5); }
+  100% { background-color: transparent; box-shadow: none; }
+}
