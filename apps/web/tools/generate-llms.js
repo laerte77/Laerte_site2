@@ -95,7 +95,6 @@ function findReactFiles(dir) {
         .filter(entry => entry.isFile())
         .map(entry => path.join(dir, entry.name));
 }
-}
 
 function extractHelmetData(content, filePath, routes) {
 	const cleanedContent = cleanContent(content);
