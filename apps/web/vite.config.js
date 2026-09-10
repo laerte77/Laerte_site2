@@ -372,7 +372,7 @@ export default defineConfig({
 	},
 	customLogger: logger,
 	plugins: [
-		...(isDev ? iframeRouteRestorationPlugin(), sitePagesPlugin(), pocketbaseAuthPlugin(), sessionJournalPlugin()] : []),
+		...(isDev ? [iframeRouteRestorationPlugin(), sitePagesPlugin(), pocketbaseAuthPlugin(), sessionJournalPlugin()] : []),
 		react(),
 		addTransformIndexHtml
 	],
