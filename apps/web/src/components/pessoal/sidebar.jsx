@@ -17,7 +17,7 @@ const NavLink = ({ to, icon: Icon, children }) => {
         isActive && 'bg-accent text-primary'
       )}
     >
-      {Ícone && <Ícone nomeDaClasse="h-4 w-4" />}
+      {Icon && <Icon className="h-4 w-4" />}
       {children}
     </Link>
   );
