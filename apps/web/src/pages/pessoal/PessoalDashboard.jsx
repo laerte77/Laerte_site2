@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
-import Sidebar from '@/components/pessoal/Sidebar';
+import Sidebar from '@/components/pessoal/sidebar';
 import Header from '@/components/pessoal/Header';
 import DashboardHome from '@/components/pessoal/DashboardHome';
 import AlertasInteligentes from '@/components/pessoal/AlertasInteligentes';
