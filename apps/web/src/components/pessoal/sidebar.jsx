@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Settings, BarChart2, DollarSign, BookOpen, Landmark, ShieldCheck, ChevronLeft, ChevronRight, LayoutGrid, LogOut } from 'lucide-react';
+import { Home, Settings, BarChart2, DollarSign, BookOpen, Landmark, ShieldCheck, ChevronLeft, ChevronRight, LayoutGrid, LogOut, ArrowLeftRight, TrendingUp, PieChart } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -47,13 +47,13 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
       <nav className="flex-1 overflow-auto py-4 px-2 text-sm font-medium">
         <ul className="space-y-1">
           <li><NavLink to="/pessoal/dashboard" icon={Home}>{(isOpen || isMobile) ? 'Dashboard' : ''}</NavLink></li>
-          <li><NavLink to="/pessoal/dashboard/alertas">Alertas Inteligentes</NavLink></li>
-          <li><NavLink to="/pessoal/dashboard/contas-mes">Contas do Mês</NavLink></li>
-          <li><NavLink to="/pessoal/dashboard/planejamento">Planejamento Financeiro</NavLink></li>
-          <Accordion type="multiple" className="w-full" defaultValue={['cadastros', 'lancamentos', 'investimentos', 'relatorios', 'admin']}>
+          <li><NavLink to="/pessoal/dashboard/alertas" icon={DollarSign}>Alertas Inteligentes</NavLink></li>
+          <li><NavLink to="/pessoal/dashboard/contas-mes" icon={BookOpen}>Contas do Mês</NavLink></li>
+          <li><NavLink to="/pessoal/dashboard/planejamento" icon={Landmark}>Planejamento Financeiro</NavLink></li>
+          <Accordion type="multiple" className="w-full" defaultValue={['cadastros']}>
             <AccordionItem value="cadastros" className="border-b-0">
               <AccordionTrigger className="py-2 px-3 hover:no-underline rounded-lg hover:bg-accent [&[data-state=open]>div>svg]:rotate-180">
-                <div className="flex items-center gap-3"><Settings className="h-4 w-4" /> {(isOpen || isMobile) && 'Cadastros'}</div>
+                <div className="flex items-center gap-3"><BookOpen className="h-4 w-4" /> {(isOpen || isMobile) && 'Cadastros'}</div>
               </AccordionTrigger>
               <AccordionContent className="pl-7 space-y-1 mt-1">
                 <NavLink to="/pessoal/dashboard/cadastros/tipos-receita">Tipos de Receita</NavLink>
@@ -65,7 +65,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
             </AccordionItem>
             <AccordionItem value="lancamentos" className="border-b-0">
                <AccordionTrigger className="py-2 px-3 hover:no-underline rounded-lg hover:bg-accent [&[data-state=open]>div>svg]:rotate-180">
-                <div className="flex items-center gap-3"><DollarSign className="h-4 w-4" /> {(isOpen || isMobile) && 'Lançamentos'}</div>
+                <div className="flex items-center gap-3"><ArrowLeftRight className="h-4 w-4" /> {(isOpen || isMobile) && 'Lançamentos'}</div>
               </AccordionTrigger>
               <AccordionContent className="pl-7 space-y-1 mt-1">
                 <NavLink to="/pessoal/dashboard/lancamentos/receitas">Receitas</NavLink>
@@ -82,7 +82,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
             </AccordionItem>
             <AccordionItem value="investimentos" className="border-b-0">
                <AccordionTrigger className="py-2 px-3 hover:no-underline rounded-lg hover:bg-accent [&[data-state=open]>div>svg]:rotate-180">
-                <div className="flex items-center gap-3"><Landmark className="h-4 w-4" /> {(isOpen || isMobile) && 'Investimentos'}</div>
+                <div className="flex items-center gap-3"><TrendingUp className="h-4 w-4" /> {(isOpen || isMobile) && 'Investimentos'}</div>
               </AccordionTrigger>
               <AccordionContent className="pl-7 space-y-1 mt-1">
                 <NavLink to="/pessoal/dashboard/investimentos/aportes">Aportes</NavLink>
@@ -91,7 +91,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
             </AccordionItem>
              <AccordionItem value="relatorios" className="border-b-0">
                <AccordionTrigger className="py-2 px-3 hover:no-underline rounded-lg hover:bg-accent [&[data-state=open]>div>svg]:rotate-180">
-                <div className="flex items-center gap-3"><BarChart2 className="h-4 w-4" /> {(isOpen || isMobile) && 'Relatórios'}</div>
+                <div className="flex items-center gap-3"><PieChart className="h-4 w-4" /> {(isOpen || isMobile) && 'Relatórios'}</div>
               </AccordionTrigger>
               <AccordionContent className="pl-7 space-y-1 mt-1">
                 <NavLink to="/pessoal/dashboard/relatorios/receitas">Receitas</NavLink>
