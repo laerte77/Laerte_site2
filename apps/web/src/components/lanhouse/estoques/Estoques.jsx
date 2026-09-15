@@ -66,6 +66,16 @@ const Estoques = () => {
 
       if (folhasError) throw folhasError;
 
+      // Fetch folhas gastas nos serviços
+      const { data: servicosData, error: servicosError } = await supabase
+        .from('lm_lanc_servicos')
+        .select('data, folhas_gastas')
+        .eq('user_id', user.id)
+        .gte('data', baseline)
+        .not('folhas_gastas', 'is', null);
+
+if (servicosError) throw servicosError;
+
       // Build inventory calculation
       const prodMap = {};
 
@@ -118,7 +128,40 @@ const Estoques = () => {
           prodMap[produto].perdas += quantidade;
         }
       });
+      // Processar folhas gastas nos serviços
+      (servicosData || []).forEach(item => {
+        const folhas = item.folhas_gastas || [];
 
+        if (!Array.isArray(folhas)) return;
+
+        if (
+          !latestMovement ||
+          new Date(item.data) > new Date(latestMovement)
+        ) {
+          latestMovement = item.data;
+        }
+
+        folhas.forEach(f => {
+          if (!f.e_rascunho && f.tipo_folha && f.quantidade) {
+            const produto = f.tipo_folha.toUpperCase().trim();
+            const quantidade = parseInt(f.quantidade || 0, 10);
+
+            if (!prodMap[produto]) {
+              prodMap[produto] = {
+                produto,
+                baseline: 0,
+                entradas: 0,
+                saidas: 0,
+                perdas: 0,
+                estoqueAtual: 0,
+                variacao: 0
+              };
+            }
+
+            prodMap[produto].saidas += quantidade;
+          }
+        });
+      });
       // Calculate current stock and variation for each product
       Object.keys(prodMap).forEach(produto => {
         const p = prodMap[produto];
