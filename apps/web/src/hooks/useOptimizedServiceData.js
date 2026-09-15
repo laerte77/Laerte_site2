@@ -57,6 +57,7 @@ export const useOptimizedServiceData = ({ month, year }) => {
           servico_id,
           cliente_id,
           cliente,
+          folhas_gastas,
           lm_servicos!inner(id, servico),
           lm_clientes(id, nome)
         `, { count: 'exact' })
