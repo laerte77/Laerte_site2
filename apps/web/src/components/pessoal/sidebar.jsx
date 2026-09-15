@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Settings, BarChart2, DollarSign, BookOpen, Landmark, ShieldCheck, ChevronLeft, ChevronRight, LayoutGrid, LogOut } from 'lucide-react';
+import { Home, Settings, BarChart2, DollarSign, BookOpen, Landmark, ShieldCheck, ChevronLeft, ChevronRight, LayoutGrid, LogOut, UserRound } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -13,8 +13,8 @@ const NavLink = ({ to, icon: Icon, children }) => {
     <Link
       to={to}
       className={cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary',
-        isActive && 'bg-accent text-primary'
+        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-all hover:text-blue-400 hover:bg-blue-500/5',
+        isActive && 'border border-blue-500 bg-blue-500/10 text-blue-400'
       )}
     >
       {Icon && <Icon className="h-4 w-4" />}
@@ -33,8 +33,10 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
     )}>
       <div className="flex h-16 items-center justify-between px-4 border-b shrink-0">
         <Link to="/" className={cn("flex items-center gap-2 font-semibold text-primary transition-opacity", !(isOpen || isMobile) && "opacity-0 pointer-events-none")}>
-          <DollarSign className="h-6 w-6" />
-          <span>Finanças</span>
+        <div className="flex items-center justify-center h-7 w-7 rounded-md bg-blue-600 text-white">
+        <UserRound className="h-4 w-4" />
+        </div>
+        <span className="text-sm font-bold uppercase">PESSOAL</span>
         </Link>
         {!isMobile && (
           <Button variant="ghost" size="icon" onClick={() => setOpen(!isOpen)}>
