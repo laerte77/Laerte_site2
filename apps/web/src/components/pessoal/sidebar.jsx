@@ -53,6 +53,8 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
               <AccordionContent className="pl-7 space-y-1 mt-1">
                 <NavLink to="/pessoal/dashboard/cadastros/tipos-receita">Tipos de Receita</NavLink>
                 <NavLink to="/pessoal/dashboard/cadastros/tipos-despesa">Tipos de Despesa</NavLink>
+                <NavLink to="/pessoal/dashboard/cadastros/cartoes-credito">Cartões de Crédito</NavLink>
+                <NavLink to="/pessoal/dashboard/cadastros/cartao-usuarios">Pessoas do Cartão</NavLink>
                 <NavLink to="/pessoal/dashboard/cadastros/livros">Livros</NavLink>
               </AccordionContent>
             </AccordionItem>
@@ -64,6 +66,8 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
                 <NavLink to="/pessoal/dashboard/lancamentos/receitas">Receitas</NavLink>
                 <NavLink to="/pessoal/dashboard/lancamentos/despesas">Despesas</NavLink>
                 <NavLink to="/pessoal/dashboard/lancamentos/despesa-prevista">Despesa Prevista</NavLink>
+                <NavLink to="/pessoal/dashboard/lancamentos/faturas">Faturas do Cartão</NavLink>
+                <NavLink to="/pessoal/dashboard/lancamentos/cartao-lancamentos">Lanç. do Cartão</NavLink>
                 <NavLink to="/pessoal/dashboard/lancamentos/devedores">Devedores</NavLink>
                 <NavLink to="/pessoal/dashboard/lancamentos/dizimos-e-ofertas">Dízimos e Ofertas</NavLink>
                 <NavLink to="/pessoal/dashboard/lancamentos/metas">Metas</NavLink>
@@ -87,6 +91,8 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
                 <NavLink to="/pessoal/dashboard/relatorios/receitas">Receitas</NavLink>
                 <NavLink to="/pessoal/dashboard/relatorios/despesas">Despesas</NavLink>
                 <NavLink to="/pessoal/dashboard/relatorios/despesas-previstas">Despesas Previstas</NavLink>
+                <NavLink to="/pessoal/dashboard/relatorios/cartoes">Cartões de Crédito</NavLink>
+                <NavLink to="/pessoal/dashboard/relatorios/cartoes-pessoas">Cartões por Pessoa</NavLink> 
                 <NavLink to="/pessoal/dashboard/relatorios/devedores">Devedores</NavLink>
                 <NavLink to="/pessoal/dashboard/relatorios/leitura">Leitura</NavLink>
               </AccordionContent>
