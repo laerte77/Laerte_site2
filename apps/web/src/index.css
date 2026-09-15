@@ -322,6 +322,9 @@ button, a, .touch-target {
 .landscape-mode {
   width: 100%;
 }
+
+}
+
   @media (max-width: 767px) and (orientation: landscape) {
   .mobile-optimized-container {
     padding-bottom: 24px !important;
