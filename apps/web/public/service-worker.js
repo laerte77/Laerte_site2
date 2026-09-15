@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestao-app-cache-v1';
+const CACHE_NAME = 'gestao-app-cache-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
