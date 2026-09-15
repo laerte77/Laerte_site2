@@ -76,6 +76,10 @@
     --mobile-spacing-y: 24px;
     --mobile-input-height: 44px;
     --mobile-font-base: 16px;
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
     
     /* Install button variables */
     --install-btn-color: var(--neon-cyan);
@@ -255,14 +259,15 @@ button, a, .touch-target {
 
 @media (max-width: 767px) {
   .mobile-optimized-container {
-    padding-left: var(--mobile-spacing-x) !important;
-    padding-right: var(--mobile-spacing-x) !important;
-    padding-bottom: calc(var(--mobile-spacing-y) * 3) !important;
+    padding-left: calc(var(--mobile-spacing-x) + var(--safe-area-left)) !important;
+    padding-right: calc(var(--mobile-spacing-x) + var(--safe-area-right)) !important;
+    padding-bottom: calc((var(--mobile-spacing-y) * 3) + var(--safe-area-bottom)) !important;
+    min-height: 100dvh !important;
   }
   
   .touch-target {
-    min-height: var(--mobile-input-height) !important;
-    min-width: var(--mobile-input-height) !important;
+    min-height: 44px !important;
+    min-width: 44px !important;
   }
 
   .mobile-stack {
@@ -282,14 +287,20 @@ button, a, .touch-target {
     border-radius: 0.75rem !important;
   }
 
-  header { padding: 0 16px !important; }
+  header {
+  padding-left: calc(16px + var(--safe-area-left)) !important;
+  padding-right: calc(16px + var(--safe-area-right)) !important;
+}
 
   .dialog-content-responsive {
     width: 95vw !important;
-    max-height: 90vh !important;
+    max-height: calc(100dvh - 32px) !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
-    padding: 16px !important;
+    padding-top: calc(16px + var(--safe-area-top)) !important;
+    padding-right: calc(16px + var(--safe-area-right)) !important;
+    padding-bottom: calc(16px + var(--safe-area-bottom)) !important;
+    padding-left: calc(16px + var(--safe-area-left)) !important;
     border-radius: 16px !important;
   }
 
@@ -298,16 +309,42 @@ button, a, .touch-target {
     padding: 0.875rem 1rem;
     font-size: 1rem;
   }
+  .ios-device {
+    -webkit-text-size-adjust: 100%;
+  }
+  .android-device {
+  -webkit-text-size-adjust: 100%;
+}
+  .portrait-mode {
+  width: 100%;
 }
 
+.landscape-mode {
+  width: 100%;
+}
+  @media (max-width: 767px) and (orientation: landscape) {
+  .mobile-optimized-container {
+    padding-bottom: 24px !important;
+  }
+
+  .dialog-content-responsive {
+    max-height: calc(100dvh - 16px) !important;
+  }
+}
 @media (min-width: 768px) and (max-width: 1023px) {
   .tablet-optimized-container {
     padding-left: 24px !important;
     padding-right: 24px !important;
     padding-bottom: 32px !important;
   }
-  header { padding: 0 24px !important; }
-  .touch-target { min-height: 40px !important; }
+  header {
+  padding-left: calc(24px + var(--safe-area-left)) !important;
+  padding-right: calc(24px + var(--safe-area-right)) !important;
+}
+  .touch-target {
+  min-height: 44px !important;
+  min-width: 44px !important;
+}
 }
 
 @media (min-width: 1024px) {
