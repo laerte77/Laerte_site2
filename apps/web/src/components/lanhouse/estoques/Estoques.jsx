@@ -75,6 +75,17 @@ const Estoques = () => {
         .not('folhas_gastas', 'is', null);
 
 if (servicosError) throw servicosError;
+      // Buscar compras/reposições de folhas
+      const { data: reposicoesData, error: reposicoesError } = await supabase
+        .from('lm_lanc_despesas')
+        .select('data, tipo_folha, quantidade, tipo_lancamento')
+        .eq('user_id', user.id)
+        .eq('tipo_lancamento', 'Estoque')
+        .gte('data', baseline)
+        .not('tipo_folha', 'is', null)
+        .not('quantidade', 'is', null);
+
+if (reposicoesError) throw reposicoesError;
 
       // Build inventory calculation
       const prodMap = {};
@@ -162,6 +173,34 @@ if (servicosError) throw servicosError;
           }
         });
       });
+      // Processar compras/reposições de folhas
+(reposicoesData || []).forEach(item => {
+  if (!item.tipo_folha || !item.quantidade) return;
+
+  const produto = item.tipo_folha.toUpperCase().trim();
+  const quantidade = parseInt(item.quantidade || 0, 10);
+
+  if (!prodMap[produto]) {
+    prodMap[produto] = {
+      produto,
+      baseline: 0,
+      entradas: 0,
+      saidas: 0,
+      perdas: 0,
+      estoqueAtual: 0,
+      variacao: 0
+    };
+  }
+
+  prodMap[produto].entradas += quantidade;
+
+  if (
+    !latestMovement ||
+    new Date(item.data) > new Date(latestMovement)
+  ) {
+    latestMovement = item.data;
+  }
+});
       // Calculate current stock and variation for each product
       Object.keys(prodMap).forEach(produto => {
         const p = prodMap[produto];
