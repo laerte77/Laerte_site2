@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Settings, BarChart2, DollarSign, BookOpen, Landmark, ShieldCheck, ChevronLeft, ChevronRight, LayoutGrid, LogOut, UserRound } from 'lucide-react';
+import { Home, Settings, BarChart2, DollarSign, BookOpen, Landmark, ShieldCheck, ChevronLeft, ChevronRight, LayoutGrid, LogOut } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -34,7 +34,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
       <div className="flex h-16 items-center justify-between px-4 border-b shrink-0">
         <Link to="/" className={cn("flex items-center gap-2 font-semibold text-primary transition-opacity", !(isOpen || isMobile) && "opacity-0 pointer-events-none")}>
         <div className="flex items-center justify-center h-7 w-7 rounded-md bg-blue-600 text-white">
-        <UserRound className="h-4 w-4" />
+        <DollarSign className="h-4 w-4" />
         </div>
         <span className="text-sm font-bold uppercase">PESSOAL</span>
         </Link>
