@@ -135,5 +135,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
 </div>
 
 </aside>
+  );
+};
 
 export default Sidebar;
