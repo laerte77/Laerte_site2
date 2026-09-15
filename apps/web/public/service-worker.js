@@ -34,14 +34,31 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Simple network-first strategy for API and HTML, cache-first for static assets
   if (event.request.method !== 'GET') return;
-  
+
+  const cacheableDestinations = [
+    'document',
+    'script',
+    'style',
+    'image',
+    'font',
+    'manifest'
+  ];
+
+  if (!cacheableDestinations.includes(event.request.destination)) {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const resClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
+        if (response.ok) {
+          const resClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, resClone);
+          });
+        }
+
         return response;
       })
       .catch(() => caches.match(event.request))
