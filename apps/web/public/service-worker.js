@@ -2,8 +2,7 @@ const CACHE_NAME = 'gestao-app-cache-v1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/manifest.json',
-  '/vite.svg'
+  '/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
