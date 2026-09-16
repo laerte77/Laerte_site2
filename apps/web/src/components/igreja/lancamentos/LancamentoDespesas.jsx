@@ -71,15 +71,51 @@ const LancamentoDespesas = () => {
         if (!formData.data || !formData.valor || !formData.despesa) { toast({ title: 'Erro', description: 'Preencha todos os campos.', variant: 'destructive' }); return; }
         const dataToSave = { data: formData.data, valor: formData.valor, despesa: formData.despesa, user_id: adminUser?.id || user.id };
         try {
-            if (currentItem) { await supabase.from('igreja_despesas').update(dataToSave).eq('id', currentItem.id); toast({ title: 'Sucesso', description: 'Atualizada.' }); } else { await supabase.from('igreja_despesas').insert(dataToSave); toast({ title: 'Sucesso', description: 'Registrada.' }); }
+            if (currentItem) {
+    const { error } = await supabase
+        .from('igreja_despesas')
+        .update(dataToSave)
+        .eq('id', currentItem.id);
+
+    if (error) throw error;
+
+    toast({ title: 'Sucesso', description: 'Atualizada.' });
+} else {
+    const { error } = await supabase
+        .from('igreja_despesas')
+        .insert(dataToSave);
+
+    if (error) throw error;
+
+    toast({ title: 'Sucesso', description: 'Registrada.' });
+}
             setFormData(initialFormState); setCurrentItem(null);
         } catch (error) { toast({ title: 'Erro', variant: 'destructive', description: error.message }); }
     };
 
     const openDialog = (item = null) => { if (item) { setCurrentItem(item); setFormData({ data: item.data || '', valor: item.valor || '', despesa: item.despesa || '' }); } else { resetForm(); } setIsDialogOpen(true); };
 
-    const handleDelete = async () => { if (!itemToDelete) return; try { await supabase.from('igreja_despesas').delete().eq('id', itemToDelete.id); toast({ title: 'Removido' }); setItemToDelete(null); } catch (error) { toast({ title: 'Erro', variant: 'destructive', description: error.message }); } };
+    const handleDelete = async () => {
+    if (!itemToDelete) return;
 
+    try {
+        const { error } = await supabase
+            .from('igreja_despesas')
+            .delete()
+            .eq('id', itemToDelete.id);
+
+        if (error) throw error;
+
+        toast({ title: 'Removido' });
+        setItemToDelete(null);
+    } catch (error) {
+        toast({
+            title: 'Erro',
+            variant: 'destructive',
+            description: error.message
+        });
+    }
+};
     const handleExport = () => { if (filteredItems.length === 0) { toast({ title: 'Aviso', description: 'Nenhum dado.', variant: 'destructive' }); return; } const dataToExport = filteredItems.map(item => ({ 'Data': new Date(item.data).toLocaleDateString('pt-BR', { timeZone: 'UTC' }), 'Descrição': item.despesa, 'Valor': parseFloat(item.valor) })); exportToExcel(dataToExport, 'Lançamento_Despesas', 'Despesas'); };
 
     return (
