@@ -44,3 +44,8 @@ export const syncPendingData = async (userId) => {
       count: syncedCount,
       failed: failedCount
     };
+  } catch (err) {
+    handleSyncError(err);
+    return { success: false, count: 0 };
+  }
+};
