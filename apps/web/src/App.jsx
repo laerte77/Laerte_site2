@@ -118,6 +118,7 @@ function App() {
                 
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+             </MobileOptimizedLayout>
           </ErrorBoundary>
         </SupabaseErrorBoundary>
       </div>
