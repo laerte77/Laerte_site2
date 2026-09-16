@@ -21,6 +21,7 @@ const CartoesCredito = () => {
   const { toast } = useToast();
   const [cartoes, setCartoes] = useState([]);
   const [lancamentos, setLancamentos] = useState([]);
+  const [pagamentos, setPagamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
