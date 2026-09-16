@@ -91,7 +91,7 @@ function App() {
           <ErrorBoundary>
             <SupabaseConnectionStatus />
             <PermissionsUpdateNotification />
-            <MobileOptimizedLayout>
+           <MobileOptimizedLayout device={device}>
               <Routes>
                 {/* Core Routes */}
                 <Route path="/loading" element={<LoadingScreen />} />
@@ -118,7 +118,6 @@ function App() {
                 
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
-            <MobileOptimizedLayout device={device}>
           </ErrorBoundary>
         </SupabaseErrorBoundary>
       </div>
