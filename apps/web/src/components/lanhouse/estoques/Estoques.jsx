@@ -19,7 +19,7 @@ const Estoques = () => {
 
   const [loading, setLoading] = useState(true);
   const [estoqueData, setEstoqueData] = useState([]);
-  const [baselineDate, setBaselineDate] = useState('2026-05-06');
+  const [baselineDate, setBaselineDate] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -41,11 +41,17 @@ const Estoques = () => {
       if (baselineError) throw baselineError;
 
       // Get baseline date from first record
-      let baseline = '2026-05-06'; // Default
+      let baseline = baselineData?.[0]?.data_inventario || null;
       if (baselineData && baselineData.length > 0) {
-        baseline = baselineData[0].data_inventario;
-        setBaselineDate(baseline);
-      }
+    baseline = baselineData[0].data_inventario;
+    setBaselineDate(baseline);
+}
+
+if (!baseline) {
+    setEstoqueData([]);
+    setLastUpdate(null);
+    return;
+}
 
       // Create baseline map
       const baselineMap = {};
