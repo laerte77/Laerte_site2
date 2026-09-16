@@ -50,23 +50,62 @@ const CartoesCredito = () => {
       .eq('user_id', user.id);
     setLancamentos(data || []);
   }, [user]);
+  const fetchPagamentos = useCallback(async () => {
+  if (!user) return;
+
+  const { data: faturas } = await supabase
+    .from('pessoal_faturas')
+    .select('id, cartao_id')
+    .eq('user_id', user.id);
+
+  const faturaIds = (faturas || []).map((f) => f.id);
+
+  if (faturaIds.length === 0) {
+    setPagamentos([]);
+    return;
+  }
+
+  const { data: pagamentosData } = await supabase
+    .from('pessoal_cartao_pagamentos')
+    .select('fatura_id, valor')
+    .in('fatura_id', faturaIds);
+
+  const pagamentosPorCartao = (pagamentosData || []).map((pagamento) => {
+    const fatura = (faturas || []).find((f) => f.id === pagamento.fatura_id);
+
+    return {
+      cartao_id: fatura?.cartao_id,
+      valor: Number(pagamento.valor || 0)
+    };
+  });
+
+  setPagamentos(pagamentosPorCartao);
+}, [user]);
 
   useEffect(() => {
-    fetchCartoes();
-    fetchLancamentos();
+  fetchCartoes();
+  fetchLancamentos();
+  fetchPagamentos();
     if (!user) return;
     const channel = supabase.channel('pessoal_cartoes_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pessoal_cartoes' }, () => { fetchCartoes(); fetchLancamentos(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pessoal_cartao_lancamentos' }, fetchLancamentos)
-      .subscribe();
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'pessoal_cartoes' }, () => { fetchCartoes(); fetchLancamentos(); })
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'pessoal_cartao_lancamentos' }, fetchLancamentos)
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'pessoal_cartao_pagamentos' }, fetchPagamentos)
+  .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [user, fetchCartoes, fetchLancamentos]);
+ }, [user, fetchCartoes, fetchLancamentos, fetchPagamentos]);
 
   const valorUtilizado = (cartaoId) => {
-    return lancamentos
-      .filter((l) => l.cartao_id === cartaoId)
-      .reduce((acc, l) => acc + (Number(l.valor) / Math.max(1, l.parcelas)), 0);
-  };
+  const totalLancado = lancamentos
+    .filter((l) => l.cartao_id === cartaoId)
+    .reduce((acc, l) => acc + (Number(l.valor) / Math.max(1, l.parcelas)), 0);
+
+  const totalPago = pagamentos
+    .filter((p) => p.cartao_id === cartaoId)
+    .reduce((acc, p) => acc + Number(p.valor || 0), 0);
+
+  return Math.max(0, totalLancado - totalPago);
+};
 
   const resetForm = () => {
     setFormData({ nome: '', bandeira: 'Visa', limite: '', dia_fechamento: '1', dia_vencimento: '10' });
