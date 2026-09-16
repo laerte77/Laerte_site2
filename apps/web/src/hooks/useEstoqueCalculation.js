@@ -33,6 +33,7 @@ export function useEstoqueCalculation() {
                 .from('lm_lanc_despesas')
                 .select('tipo_folha, quantidade')
                 .eq('user_id', user.id)
+                .eq('tipo_lancamento', 'Estoque')
                 .not('tipo_folha', 'is', null)
                 .not('quantidade', 'is', null);
 
