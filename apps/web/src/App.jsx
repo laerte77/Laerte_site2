@@ -1,4 +1,4 @@
-import React, { createContext, useEffect } from 'react';
+import React, { createContext } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { useToast } from '@/components/ui/use-toast';
@@ -32,7 +32,6 @@ import SupabaseConnectionStatus from '@/components/SupabaseConnectionStatus.jsx'
 import PermissionsUpdateNotification from '@/components/PermissionsUpdateNotification.jsx';
 import { useDeviceDetection } from '@/hooks/useDeviceDetection';
 import { Loader2 } from 'lucide-react';
-import { useProfileEnsure } from '@/hooks/useProfileEnsure';
 import MobileOptimizedLayout from '@/components/MobileOptimizedLayout.jsx';
 
 export const DeviceContext = createContext();
@@ -40,15 +39,8 @@ export const DeviceContext = createContext();
 const PrivateRoute = ({ children, adminOnly = false, requiredModule = null }) => {
   const { user, isAdmin, loading, canAccessModule } = useAuth();
   const { toast } = useToast();
-  const { ensureProfile, ensuring } = useProfileEnsure();
   
-  useEffect(() => {
-    if (user && !loading) {
-        ensureProfile(user);
-    }
-  }, [user, loading, ensureProfile]);
-  
-  if (loading || ensuring) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-transparent text-foreground">
         <Loader2 className="w-10 h-10 animate-spin text-[hsl(var(--neon-cyan))] mb-4" />
