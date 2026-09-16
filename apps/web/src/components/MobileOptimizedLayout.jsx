@@ -1,18 +1,17 @@
 import React from 'react';
-import { useDeviceDetection } from '@/hooks/useDeviceDetection';
 import { cn } from '@/lib/utils';
 
-export default function MobileOptimizedLayout({ children }) {
-  const {
-  isMobile,
-  isTablet,
-  isDesktop,
-  isAndroid,
-  isIOS,
-  isTouchDevice,
-  isStandalone,
-  orientation
-} = useDeviceDetection();
+export default function MobileOptimizedLayout({ children, device }) {
+    const {
+    isMobile,
+    isTablet,
+    isDesktop,
+    isAndroid,
+    isIOS,
+    isTouchDevice,
+    isStandalone,
+    orientation
+  } = device;
   
   return (
     <div 
