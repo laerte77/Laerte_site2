@@ -22,7 +22,6 @@ initDB().catch(err => console.error("IndexedDB init failed:", err));
 
 // Clean corrupt or expired tokens BEFORE rendering anything 
 // to prevent initial render issues or ghost sessions
-validateStoredTokens();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <>
