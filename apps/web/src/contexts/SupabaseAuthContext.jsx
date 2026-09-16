@@ -7,8 +7,6 @@ import { usePermissionsRealtime } from '@/hooks/usePermissionsRealtime';
 
 const AuthContext = createContext(undefined);
 
-const ADMIN_EMAIL = 'laertemendes722@gmail.com';
-
 export const AuthProvider = ({ children }) => {
   const { toast } = useToast();
   const { ensureProfile } = useProfileEnsure();
@@ -123,8 +121,8 @@ export const AuthProvider = ({ children }) => {
   }, [handleSession]);
 
   const isAdmin = useMemo(() => {
-    return user?.email === ADMIN_EMAIL;
-  }, [user]);
+  return profile?.is_admin === true;
+}, [profile]);
 
   const dataSharingPreferences = useMemo(() => {
     return profile?.data_sharing_preferences || {};
