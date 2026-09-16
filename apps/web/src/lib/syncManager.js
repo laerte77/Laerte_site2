@@ -26,18 +26,21 @@ export const syncPendingData = async (userId) => {
     if (pendingData.length === 0) return { success: true, count: 0 };
 
     let syncedCount = 0;
+    let failedCount = 0;
+
     for (const item of pendingData) {
       try {
         await syncDataType(item.type, item.data, userId);
         await clearOfflineData(item.id);
         syncedCount++;
       } catch (err) {
+        failedCount++;
         handleSyncError(err);
       }
     }
-    return { success: true, count: syncedCount };
-  } catch (err) {
-    handleSyncError(err);
-    return { success: false, count: 0 };
-  }
-};
+
+    return {
+      success: failedCount === 0,
+      count: syncedCount,
+      failed: failedCount
+    };
