@@ -12,6 +12,7 @@ const modules = [
     description: 'Gestão completa das suas finanças, metas e investimentos.',
     icon: User,
     path: '/pessoal/dashboard',
+    requiredModule: 'pessoal',
     colorClass: 'blue',
     hex: 'hsl(var(--neon-blue))'
   },
@@ -20,6 +21,7 @@ const modules = [
     description: 'Controle de serviços, estoque e clientes da lan house.',
     icon: Printer,
     path: '/lm-impressoes/dashboard',
+    requiredModule: 'lm-impressoes',
     colorClass: 'cyan',
     hex: 'hsl(var(--neon-cyan))'
   },
@@ -28,6 +30,7 @@ const modules = [
     description: 'Tesouraria, secretaria e gestão integrada de membros.',
     icon: Church,
     path: '/igreja',
+    requiredModule: 'igreja',
     colorClass: 'gold',
     hex: 'hsl(var(--neon-gold))'
   },
@@ -36,6 +39,7 @@ const modules = [
     description: 'Gestão de partidas, jogadores e estatísticas esportivas.',
     icon: Gamepad2,
     path: '/entretenimento/dashboard',
+    requiredModule: 'entretenimento',
     colorClass: 'orange',
     hex: 'hsl(var(--neon-orange))'
   },
@@ -44,13 +48,14 @@ const modules = [
     description: 'Agenda, controle de clientes, serviços e finanças.',
     icon: Scissors,
     path: '/barbearia/dashboard',
+    requiredModule: 'barbearia',
     colorClass: 'gold',
     hex: 'hsl(var(--neon-gold))'
   }
 ];
 
 export default function ModuleSelectionScreen() {
-  const { signOut } = useAuth();
+  const { signOut, canAccessModule } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -140,7 +145,7 @@ export default function ModuleSelectionScreen() {
             animate="visible"
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-10 max-w-7xl mx-auto"
           >
-            {modules.map((mod) => (
+            {modules.filter((mod) => canAccessModule(mod.requiredModule)).map((mod) => (
               <motion.div
                 key={mod.path}
                 variants={itemVariants}
