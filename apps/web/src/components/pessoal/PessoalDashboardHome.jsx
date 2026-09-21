@@ -12,92 +12,370 @@ import {
 export default function PessoalDashboardHome() {
   const { user, isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState('all');
   const [data, setData] = useState({
     totalIncome: 0, totalExpenses: 0, balance: 0, savings: 0,
     monthlyChart: [], trendChart: [], pieChart: [], budgetProgress: []
   });
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user) return;
-      try {
-        const year = 2026;
-        const startOfYear = new Date(year, 0, 1).toISOString();
-        const endOfYear = new Date(year, 11, 31).toISOString();
+  const fetchData = async () => {
+    if (!user) return;
 
-        const [recRes, despRes, aportesRes] = await Promise.all([
-          getAccessibleDataQuery(user.id, isAdmin, 'receitas', 'data, valor').gte('data', startOfYear).lte('data', endOfYear),
-          getAccessibleDataQuery(user.id, isAdmin, 'despesas', 'data, valor, categoria').gte('data', startOfYear).lte('data', endOfYear),
-          getAccessibleDataQuery(user.id, isAdmin, 'aportes', 'valor').gte('data', startOfYear).lte('data', endOfYear),
-        ]);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const year = selectedYear;
+        const startOfYear = new Date(year, 0, 1, 0, 0, 0).toISOString();
+        const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999).toISOString();
+
+        const [recRes, despRes, aportesRes, despesasPrevRes] = await Promise.all([
+  getAccessibleDataQuery(user.id, isAdmin, 'receitas', 'data, valor')
+    .gte('data', startOfYear)
+    .lte('data', endOfYear),
+
+  getAccessibleDataQuery(user.id, isAdmin, 'despesas', 'data, valor, categoria')
+    .gte('data', startOfYear)
+    .lte('data', endOfYear),
+
+  getAccessibleDataQuery(user.id, isAdmin, 'aportes', 'data, valor')
+    .gte('data', startOfYear)
+    .lte('data', endOfYear),
+
+  getAccessibleDataQuery(user.id, isAdmin, 'despesas_previstas', 'data_vencimento, valor')
+    .gte('data_vencimento', startOfYear)
+    .lte('data_vencimento', endOfYear),
+]);
 
         const receitas = recRes.data || [];
         const despesas = despRes.data || [];
+        const aportes = aportesRes.data || [];
+        const despesasPrevistas = despesasPrevRes.data || [];
+
+        const receitasFiltradas = selectedMonth === 'all'
+          ? receitas
+          : receitas.filter((r) => new Date(r.data).getMonth() === Number(selectedMonth));
+
+        const despesasFiltradas = selectedMonth === 'all'
+          ? despesas
+          : despesas.filter((d) => new Date(d.data).getMonth() === Number(selectedMonth));
+
+        const aportesFiltrados = selectedMonth === 'all'
+          ? aportes
+          : aportes.filter((a) => new Date(a.data).getMonth() === Number(selectedMonth));
+
+        const despesasPrevistasFiltradas = selectedMonth === 'all'
+          ? despesasPrevistas
+          : despesasPrevistas.filter(
+          (d) => new Date(d.data_vencimento).getMonth() === Number(selectedMonth)
+        );
         
-        const totalIncome = receitas.reduce((a, b) => a + Number(b.valor), 0);
-        const totalExpenses = despesas.reduce((a, b) => a + Number(b.valor), 0);
-        const savings = aportesRes.data?.reduce((a, b) => a + Number(b.valor), 0) || 0;
+        const totalIncome = receitasFiltradas.reduce((a, b) => a + Number(b.valor), 0);
+        const totalExpenses = despesasFiltradas.reduce((a, b) => a + Number(b.valor), 0);
+        const savings = aportesFiltrados.reduce((a, b) => a + Number(b.valor), 0);
 
         const months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
-        const monthlyData = months.map(m => ({ name: m, Receita: 0, Despesa: 0 }));
-        const trendData = months.map(m => ({ name: m, Saldo: 0 }));
 
-        receitas.forEach(r => { 
-          const mIdx = new Date(r.data).getMonth();
-          monthlyData[mIdx].Receita += Number(r.valor); 
-          trendData[mIdx].Saldo += Number(r.valor);
+        const chartMonths = selectedMonth === 'all'
+          ? months
+          : [months[Number(selectedMonth)]];
+
+        const monthlyData = chartMonths.map(m => ({
+          name: m,
+          Receita: 0,
+          Despesa: 0
+        }));
+
+        const trendData = chartMonths.map(m => ({
+          name: m,
+          Saldo: 0
+        }));
+
+        receitasFiltradas.forEach(r => {
+         const mIdx = new Date(r.data).getMonth();
+         const chartIndex = selectedMonth === 'all' ? mIdx : 0;
+
+        monthlyData[chartIndex].Receita += Number(r.valor);
+        trendData[chartIndex].Saldo += Number(r.valor);
         });
-        despesas.forEach(d => { 
+
+        despesasFiltradas.forEach(d => {
           const mIdx = new Date(d.data).getMonth();
-          monthlyData[mIdx].Despesa += Number(d.valor); 
-          trendData[mIdx].Saldo -= Number(d.valor);
-        });
+          const chartIndex = selectedMonth === 'all' ? mIdx : 0;
 
+        monthlyData[chartIndex].Despesa += Number(d.valor);
+        trendData[chartIndex].Saldo -= Number(d.valor);
+        });
         let acc = 0;
         trendData.forEach(t => { acc += t.Saldo; t.Saldo = acc; });
-
         const catMap = {};
-        despesas.forEach(d => {
+        despesasFiltradas.forEach(d => {
           const cat = d.categoria || 'Diversos';
           catMap[cat] = (catMap[cat] || 0) + Number(d.valor);
         });
         const pieData = Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value).slice(0, 5);
 
-        const budgetProgress = [
-          { name: "Q1", Orcamento: 15000, Gasto: monthlyData.slice(0,3).reduce((a,b)=>a+b.Despesa,0) },
-          { name: "Q2", Orcamento: 15000, Gasto: monthlyData.slice(3,6).reduce((a,b)=>a+b.Despesa,0) },
-          { name: "Q3", Orcamento: 15000, Gasto: monthlyData.slice(6,9).reduce((a,b)=>a+b.Despesa,0) },
-          { name: "Q4", Orcamento: 15000, Gasto: monthlyData.slice(9,12).reduce((a,b)=>a+b.Despesa,0) }
-        ];
+        const budgetProgress = selectedMonth === 'all'
+  ? [0, 1, 2, 3].map((quarter) => {
+      const startMonth = quarter * 3;
+      const endMonth = startMonth + 2;
+
+      const orcamento = despesasPrevistas
+        .filter((d) => {
+          const month = new Date(d.data_vencimento).getMonth();
+          return month >= startMonth && month <= endMonth;
+        })
+        .reduce((total, d) => total + Number(d.valor || 0), 0);
+
+      const gasto = despesas
+        .filter((d) => {
+          const month = new Date(d.data).getMonth();
+          return month >= startMonth && month <= endMonth;
+        })
+        .reduce((total, d) => total + Number(d.valor || 0), 0);
+
+      return {
+        name: `Q${quarter + 1}`,
+        Orcamento: orcamento,
+        Gasto: gasto
+      };
+    })
+  : [{
+      name: months[Number(selectedMonth)],
+      Orcamento: despesasPrevistasFiltradas.reduce(
+        (total, d) => total + Number(d.valor || 0),
+        0
+      ),
+      Gasto: despesasFiltradas.reduce(
+        (total, d) => total + Number(d.valor || 0),
+        0
+      )
+    }];
 
         setData({
           totalIncome, totalExpenses, balance: totalIncome - totalExpenses, savings,
           monthlyChart: monthlyData, trendChart: trendData, pieChart: pieData, budgetProgress
         });
-      } catch (err) {} finally { setLoading(false); }
+      } catch (err) {
+  console.error('Erro ao carregar dashboard Pessoal:', err);
+  setError(err?.message || 'Não foi possível carregar os dados.');
+} finally {
+  setLoading(false);
+}
     };
     fetchData();
-  }, [user, isAdmin]);
+  }, [user, isAdmin, selectedYear, selectedMonth]);
 
-  const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-  const pieColors = ['hsl(var(--neon-gold))', 'hsl(var(--neon-orange))', 'hsl(var(--neon-blue))', 'hsl(var(--neon-purple))', 'hsl(var(--neon-cyan))'];
+  const fmt = (v) =>
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(v);
 
-  if (loading) return <div className="p-8 text-center text-muted-foreground animate-pulse">Carregando Pessoal...</div>;
+const pieColors = [
+  'hsl(var(--neon-blue))',
+  'hsl(var(--neon-blue) / 0.8)',
+  'hsl(var(--neon-blue) / 0.65)',
+  'hsl(var(--neon-blue) / 0.5)',
+  'hsl(var(--neon-blue) / 0.35)'
+];
+
+const monthNames = [
+  "JAN", "FEV", "MAR", "ABR", "MAI", "JUN",
+  "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"
+];
+
+  if (loading) {
+  return (
+    <div className="p-8 text-center text-muted-foreground animate-pulse">
+      Atualizando painel Pessoal...
+    </div>
+  );
+}
+
+if (error) {
+  return (
+    <div className="p-8">
+      <NeonCard colorScheme="pessoal" className="p-6 text-center">
+        <p className="font-semibold text-destructive">
+          Não foi possível carregar o painel.
+        </p>
+        <p className="text-sm text-muted-foreground mt-2">
+          {error}
+        </p>
+      </NeonCard>
+    </div>
+  );
+}
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-7xl mx-auto w-full">
-      <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-8 text-center md:text-left">Painel Pessoal</h1>
-      
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <KPICard colorScheme="pessoal" icon={ArrowUp} label="Total Receitas" value={fmt(data.totalIncome)} iconColor="blue" className="w-full" />
-        <KPICard colorScheme="pessoal" icon={ArrowDown} label="Total Despesas" value={fmt(data.totalExpenses)} iconColor="purple" className="w-full" />
-        <KPICard colorScheme="pessoal" icon={Wallet} label="Saldo Atual" value={fmt(data.balance)} iconColor="blue" className="w-full" />
-        <KPICard colorScheme="pessoal" icon={TrendingUp} label="Economias" value={fmt(data.savings)} iconColor="orange" className="w-full" />
-      </div>
+  <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-7xl mx-auto w-full">
+    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold text-center md:text-left">
+  Painel Pessoal
+</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        <NeonCard colorScheme="pessoal" className="h-[300px] md:h-[400px]">
-          <h3 className="text-lg md:text-xl font-semibold mb-4">Receita vs Despesa</h3>
+<p className="text-sm text-muted-foreground text-center md:text-left mt-1">
+  Acompanhe sua movimentação financeira
+</p>
+
+<p className="text-xs font-medium text-[hsl(var(--neon-blue))] text-center md:text-left mt-2">
+  {selectedMonth === 'all'
+    ? `Visão anual • ${selectedYear}`
+    : `Visão mensal • ${monthNames[Number(selectedMonth)]} de ${selectedYear}`}
+</p>
+
+      <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+        <div className="flex flex-col gap-1 w-full sm:w-36">
+          <label className="text-xs font-medium text-muted-foreground">
+            Ano
+          </label>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary"
+          >
+            {Array.from({ length: 5 }, (_, index) => new Date().getFullYear() - index).map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1 w-full sm:w-40">
+          <label className="text-xs font-medium text-muted-foreground">
+            Período
+          </label>
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary"
+          >
+            <option value="all">Todos os meses</option>
+            <option value="0">Janeiro</option>
+            <option value="1">Fevereiro</option>
+            <option value="2">Março</option>
+            <option value="3">Abril</option>
+            <option value="4">Maio</option>
+            <option value="5">Junho</option>
+            <option value="6">Julho</option>
+            <option value="7">Agosto</option>
+            <option value="8">Setembro</option>
+            <option value="9">Outubro</option>
+            <option value="10">Novembro</option>
+            <option value="11">Dezembro</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+  <KPICard
+    colorScheme="pessoal"
+    icon={ArrowUp}
+    label="Total Receitas"
+    value={fmt(data.totalIncome)}
+    iconColor="blue"
+    className="w-full"
+  />
+
+  <KPICard
+    colorScheme="pessoal"
+    icon={ArrowDown}
+    label="Total Despesas"
+    value={fmt(data.totalExpenses)}
+    iconColor="red"
+    className="w-full"
+  />
+
+  <KPICard
+    colorScheme="pessoal"
+    icon={Wallet}
+    label="Saldo Atual"
+    value={fmt(data.balance)}
+    iconColor={data.balance >= 0 ? "blue" : "red"}
+    className="w-full"
+  />
+
+  <KPICard
+    colorScheme="pessoal"
+    icon={TrendingUp}
+    label="Economias"
+    value={fmt(data.savings)}
+    iconColor="blue"
+    className="w-full"
+  />
+</div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+  <NeonCard colorScheme="pessoal" className="p-4">
+    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+      Saldo do período
+    </p>
+    <p className="text-xl font-bold mt-1">
+      {fmt(data.balance)}
+    </p>
+    <p className="text-xs text-muted-foreground mt-1">
+      Receitas menos despesas realizadas
+    </p>
+  </NeonCard>
+
+  <NeonCard colorScheme="pessoal" className="p-4">
+    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+      Taxa de economia
+    </p>
+    <p className="text-xl font-bold mt-1">
+      {data.totalIncome > 0
+        ? `${((data.savings / data.totalIncome) * 100).toFixed(1)}%`
+        : '0,0%'}
+    </p>
+    <p className="text-xs text-muted-foreground mt-1">
+      Economias sobre as receitas
+    </p>
+  </NeonCard>
+
+  <NeonCard colorScheme="pessoal" className="p-4">
+    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+      Período analisado
+    </p>
+    <p className="text-xl font-bold mt-1">
+      {selectedMonth === 'all'
+        ? selectedYear
+        : monthNames[Number(selectedMonth)]}
+    </p>
+    <p className="text-xs text-muted-foreground mt-1">
+      Dados financeiros do período selecionado
+    </p>
+  </NeonCard>
+        <NeonCard colorScheme="pessoal" className="p-4">
+  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+    Comprometimento da receita
+  </p>
+
+  <p className="text-xl font-bold mt-1">
+    {data.totalIncome > 0
+      ? `${((data.totalExpenses / data.totalIncome) * 100).toFixed(1)}%`
+      : '0,0%'}
+  </p>
+
+  <p className="text-xs text-muted-foreground mt-1">
+    Despesas em relação às receitas
+  </p>
+</NeonCard>
+</div>
+
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+  <NeonCard colorScheme="pessoal" className="h-[300px] md:h-[400px]">
+          <h3 className="text-lg md:text-xl font-semibold mb-4">
+  {selectedMonth === 'all'
+    ? `Receitas vs Despesas • ${selectedYear}`
+    : `Receitas vs Despesas • ${monthNames[Number(selectedMonth)]} ${selectedYear}`}
+</h3>
           <ResponsiveContainer width="100%" height="85%">
             <BarChart data={data.monthlyChart}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
@@ -112,7 +390,11 @@ export default function PessoalDashboardHome() {
         </NeonCard>
 
         <NeonCard colorScheme="pessoal" className="h-[300px] md:h-[400px]">
-          <h3 className="text-lg md:text-xl font-semibold mb-4">Evolução do Saldo</h3>
+          <h3 className="text-lg md:text-xl font-semibold mb-4">
+  {selectedMonth === 'all'
+    ? `Evolução do Saldo • ${selectedYear}`
+    : `Evolução do Saldo • ${monthNames[Number(selectedMonth)]} ${selectedYear}`}
+</h3>
           <ResponsiveContainer width="100%" height="85%">
             <LineChart data={data.trendChart}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
@@ -140,7 +422,11 @@ export default function PessoalDashboardHome() {
         </NeonCard>
 
         <NeonCard colorScheme="pessoal" className="h-[300px] md:h-[350px]">
-          <h3 className="text-lg md:text-xl font-semibold mb-4">Progresso do Orçamento (Trimestre)</h3>
+          <h3 className="text-lg md:text-xl font-semibold mb-4">
+          {selectedMonth === 'all'
+            ? 'Orçamento por Trimestre'
+            : `Orçamento de ${monthNames[Number(selectedMonth)]}`}
+          </h3>
           <ResponsiveContainer width="100%" height="85%">
             <BarChart data={data.budgetProgress}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
@@ -148,8 +434,20 @@ export default function PessoalDashboardHome() {
               <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={v => `R$${v/1000}k`} tickLine={false} axisLine={false} width={45} fontSize={12} />
               <Tooltip cursor={{fill: 'hsl(var(--accent)/0.1)'}} contentStyle={{backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))'}} />
               <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Bar dataKey="Orcamento" fill="hsl(var(--neon-blue))" radius={[4,4,0,0]} opacity={0.5} />
-              <Bar dataKey="Gasto" fill="hsl(var(--neon-blue))" radius={[4,4,0,0]} />
+              <Bar
+              dataKey="Orcamento"
+              name="Previsto"
+              fill="hsl(var(--neon-blue))"
+              radius={[4,4,0,0]}
+              opacity={0.5}
+              />
+
+             <Bar
+              dataKey="Gasto"
+              name="Realizado"
+              fill="hsl(var(--neon-red))"
+              radius={[4,4,0,0]}
+              />
             </BarChart>
           </ResponsiveContainer>
         </NeonCard>
