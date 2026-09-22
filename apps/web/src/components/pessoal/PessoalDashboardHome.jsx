@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {Wallet,TrendingUp,ArrowUp,ArrowDown,AlertTriangle,CheckCircle2} from 'lucide-react';
+import {Wallet,TrendingUp,ArrowUp,ArrowDown,Heart,AlertTriangle,CheckCircle2} from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { getAccessibleDataQuery } from '@/lib/dataAccessUtils';
 import KPICard from '@/components/ui/KPICard';
@@ -11,7 +11,8 @@ export default function PessoalDashboardHome() {
   const [error, setError] = useState(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState('all');
-  const [data, setData] = useState({totalIncome: 0,totalExpenses: 0,balance: 0,saldoPeriodo: 0,savings: 0,monthlyChart: [],trendChart: [],pieChart: [],budgetProgress: [],movimentacoesRecentes: []});
+  const [data, setData] = useState({ totalIncome: 0, totalExpenses: 0, balance: 0, saldoPeriodo: 0, savings: 0, totalDizimosOfertas: 0, monthlyChart: [], trendChart: [], pieChart: [], budgetProgress: [], movimentacoesRecentes: []
+});
 
   useEffect(() => {
   const fetchData = async () => {
@@ -43,7 +44,7 @@ export default function PessoalDashboardHome() {
     .gte('data_vencimento', startOfYear)
     .lte('data_vencimento', endOfYear),
 
-  getAccessibleDataQuery(user.id, isAdmin, 'pessoal_dizimos_ofertas', 'data, valor')
+  getAccessibleDataQuery(user.id, isAdmin, 'pessoal_dizimos_ofertas', 'data, valor, tipo_movimento')
     .gte('data', startOfYear)
     .lte('data', endOfYear),
 
@@ -56,6 +57,24 @@ export default function PessoalDashboardHome() {
   getAccessibleDataQuery(user.id, isAdmin, 'pessoal_dizimos_ofertas', 'valor'),
 ]);
 
+const queryErrors = [
+  recRes.error,
+  despRes.error,
+  aportesRes.error,
+  despesasPrevRes.error,
+  dizimosRes.error,
+  allTimeRecRes.error,
+  allTimeDespRes.error,
+  allTimeAportesRes.error,
+  allTimeDizimosRes.error
+].filter(Boolean);
+
+if (queryErrors.length > 0) {
+  throw new Error(
+    queryErrors[0]?.message || 'Não foi possível carregar os dados financeiros.'
+  );
+}
+
         const receitas = recRes.data || [];
         const despesas = despRes.data || [];
         const aportes = aportesRes.data || [];
@@ -63,31 +82,31 @@ export default function PessoalDashboardHome() {
         const dizimos = dizimosRes.data || [];
         const receitasFiltradas = selectedMonth === 'all'
           ? receitas
-          : receitas.filter((r) => new Date(r.data).getMonth() === Number(selectedMonth));
+          : receitas.filter((r) => getMonthFromDate(r.data) === Number(selectedMonth));
 
         const despesasFiltradas = selectedMonth === 'all'
           ? despesas
-          : despesas.filter((d) => new Date(d.data).getMonth() === Number(selectedMonth));
-
+          : despesas.filter((d) => getMonthFromDate(d.data) === Number(selectedMonth));
+      
         const aportesFiltrados = selectedMonth === 'all'
           ? aportes
-          : aportes.filter((a) => new Date(a.data).getMonth() === Number(selectedMonth));
+          : aportes.filter((a) => getMonthFromDate(a.data) === Number(selectedMonth));
 
       const dizimosFiltrados = selectedMonth === 'all'
           ? dizimos
-          : dizimos.filter((d) => new Date(d.data).getMonth() === Number(selectedMonth));
+          : dizimos.filter((d) => getMonthFromDate(d.data) === Number(selectedMonth));
 
         const despesasPrevistasFiltradas = selectedMonth === 'all'
           ? despesasPrevistas
           : despesasPrevistas.filter(
-      (d) => new Date(d.data_vencimento).getMonth() === Number(selectedMonth)
+      (d) => getMonthFromDate(d.data_vencimento) === Number(selectedMonth)
     );
     
         const totalIncome = receitasFiltradas.reduce((a, b) => a + Number(b.valor), 0);
-const totalExpenses = despesasFiltradas.reduce((a, b) => a + Number(b.valor), 0);
-const savings = aportesFiltrados.reduce((a, b) => a + Number(b.valor), 0);
+        const totalExpenses = despesasFiltradas.reduce((a, b) => a + Number(b.valor), 0);
+        const savings = aportesFiltrados.reduce((a, b) => a + Number(b.valor), 0);
 
-const totalDizimosOfertasPeriodo = dizimosFiltrados.reduce(
+        const totalDizimosOfertasPeriodo = dizimosFiltrados.reduce(
   (a, b) => a + Number(b.valor),
   0
 );
@@ -142,7 +161,7 @@ const saldoAtual =
         }));
 
         receitasFiltradas.forEach(r => {
-         const mIdx = new Date(r.data).getMonth();
+         const mIdx = getMonthFromDate(r.data);
          const chartIndex = selectedMonth === 'all' ? mIdx : 0;
 
         monthlyData[chartIndex].Receita += Number(r.valor);
@@ -150,15 +169,15 @@ const saldoAtual =
         });
 
         despesasFiltradas.forEach(d => {
-  const mIdx = new Date(d.data).getMonth();
-  const chartIndex = selectedMonth === 'all' ? mIdx : 0;
+          const mIdx = getMonthFromDate(d.data);
+          const chartIndex = selectedMonth === 'all' ? mIdx : 0;
 
   monthlyData[chartIndex].Despesa += Number(d.valor);
   trendData[chartIndex].Saldo -= Number(d.valor);
 });
 
 aportesFiltrados.forEach(a => {
-  const mIdx = new Date(a.data).getMonth();
+  const mIdx = getMonthFromDate(a.data);
   const chartIndex = selectedMonth === 'all' ? mIdx : 0;
 
   trendData[chartIndex].Saldo -= Number(a.valor);
@@ -167,7 +186,7 @@ aportesFiltrados.forEach(a => {
 let acc = 0;
 
       dizimosFiltrados.forEach(d => {
-  const mIdx = new Date(d.data).getMonth();
+  const mIdx = getMonthFromDate(d.data);
   const chartIndex = selectedMonth === 'all' ? mIdx : 0;
 
   trendData[chartIndex].Saldo -= Number(d.valor);
@@ -187,14 +206,14 @@ let acc = 0;
 
       const orcamento = despesasPrevistas
         .filter((d) => {
-          const month = new Date(d.data_vencimento).getMonth();
+          const month = getMonthFromDate(d.data_vencimento);
           return month >= startMonth && month <= endMonth;
         })
         .reduce((total, d) => total + Number(d.valor || 0), 0);
 
       const gasto = despesas
         .filter((d) => {
-          const month = new Date(d.data).getMonth();
+          const month = getMonthFromDate(d.data);
           return month >= startMonth && month <= endMonth;
         })
         .reduce((total, d) => total + Number(d.valor || 0), 0);
@@ -216,32 +235,47 @@ let acc = 0;
         0
       )
     }];
-setData({
-  totalIncome,
-  totalExpenses,
-  balance: saldoAtual,
-  saldoPeriodo,
-  savings,
+setData({ totalIncome, totalExpenses, balance: saldoAtual, saldoPeriodo, savings, 
+  totalDizimosOfertas: totalDizimosOfertasPeriodo,
   monthlyChart: monthlyData,
   trendChart: trendData,
   pieChart: pieData,
   budgetProgress,
   movimentacoesRecentes: [
-    ...receitasFiltradas.map((item) => ({
-  tipo: 'receita',
-  descricao: item.origem || item.receita || 'Receita',
-  categoria: item.receita || 'Receita',
-  valor: Number(item.valor || 0),
-  data: item.data
-})),
-...despesasFiltradas.map((item) => ({
+  ...receitasFiltradas.map((item) => ({
+    tipo: 'receita',
+    descricao: item.origem || item.receita || 'Receita',
+    categoria: item.receita || 'Receita',
+    valor: Number(item.valor || 0),
+    data: item.data
+  })),
+
+  ...despesasFiltradas.map((item) => ({
   tipo: 'despesa',
   descricao: item.despesa || 'Despesa',
   categoria: item.categoria || 'Diversos',
   valor: Number(item.valor || 0),
   data: item.data
+})),
+
+...aportesFiltrados.map((item) => ({
+  tipo: 'aporte',
+  descricao: 'Aporte',
+  categoria: 'Investimento',
+  valor: Number(item.valor || 0),
+  data: item.data
 }))
-  ]
+
+  ,
+
+...dizimosFiltrados.map((item) => ({
+  tipo: 'dizimo',
+  descricao: item.tipo_movimento || 'Dízimo/Oferta',
+  categoria: 'Dízimos/Ofertas',
+  valor: Number(item.valor || 0),
+  data: item.data
+}))
+]
     .sort((a, b) => new Date(b.data) - new Date(a.data))
     .slice(0, 6)
 });
@@ -260,7 +294,26 @@ setData({
     style: 'currency',
     currency: 'BRL'
   }).format(v);
+const fmtAxis = (value) => {
+  const num = Number(value || 0);
 
+  if (Math.abs(num) >= 1000) {
+    return `R$${(num / 1000).toFixed(1)}k`;
+  }
+
+  return `R$${num.toFixed(0)}`;
+};
+  const getMonthFromDate = (date) => {
+  if (!date) return -1;
+
+  const dateString = String(date);
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateString)) {
+    return Number(dateString.slice(5, 7)) - 1;
+  }
+
+  return new Date(date).getMonth();
+};
 const pieColors = [
   'hsl(var(--neon-blue))',
   'hsl(var(--neon-blue) / 0.8)',
@@ -275,21 +328,26 @@ const monthNames = [
 ];
   const alertasFinanceiros = [];
 
-if (data.totalIncome > 0 && data.totalExpenses > data.totalIncome) {
+const totalSaidasPeriodo =
+  data.totalExpenses +
+  data.savings +
+  data.totalDizimosOfertas;
+
+if (data.totalIncome > 0 && totalSaidasPeriodo > data.totalIncome) {
   alertasFinanceiros.push({
     tipo: 'danger',
     icone: AlertTriangle,
-    titulo: 'Despesas acima das receitas',
-    descricao: 'As despesas do período ultrapassaram o total de receitas.'
+    titulo: 'Saídas acima das receitas',
+    descricao: 'As saídas totais do período ultrapassaram o total de receitas.'
   });
 }
 
-if (data.totalIncome > 0 && (data.totalExpenses / data.totalIncome) >= 0.8) {
+if (data.totalIncome > 0 && (totalSaidasPeriodo / data.totalIncome) >= 0.8) {
   alertasFinanceiros.push({
     tipo: 'warning',
     icone: AlertTriangle,
     titulo: 'Alto comprometimento da receita',
-    descricao: 'As despesas representam 80% ou mais das receitas do período.'
+    descricao: 'As saídas totais representam 80% ou mais das receitas do período.'
   });
 }
 
@@ -297,18 +355,10 @@ if (data.saldoPeriodo < 0) {
   alertasFinanceiros.push({
     tipo: 'danger',
     icone: AlertTriangle,
-    titulo: 'Saldo negativo',
-    descricao: 'O período selecionado apresenta saldo negativo.'
+    titulo: 'Saldo do período negativo',
+    descricao: 'O resultado do período ficou negativo após despesas, aportes e dízimos/ofertas.'
   });
 }
-
-if (alertasFinanceiros.length === 0) {
-  alertasFinanceiros.push({
-    tipo: 'success',
-    icone: CheckCircle2,
-    titulo: 'Situação financeira equilibrada',
-    descricao: 'Nenhum alerta financeiro relevante foi identificado no período.'
-  });
 }
   if (loading) {
   return (
@@ -341,7 +391,7 @@ if (error) {
         Painel Pessoal
         </h1>
 
-        <div className="h-1 w-16 rounded-full bg-[hsl(var(--neon-blue))] mt-3 mx-auto md:mx-0" />
+        <div className="h-1 w-16 rounded-full bg-[hsl(var(--neon-pessoal))] mt-3 mx-auto md:mx-0" />
 
 <p className="text-sm text-muted-foreground text-center md:text-left mt-1">
   Acompanhe sua movimentação financeira
@@ -363,7 +413,7 @@ if (error) {
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="h-10 rounded-lg border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary"
+            className="h-10 rounded-lg border border-[hsl(var(--neon-pessoal))/50] bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:border-[hsl(var(--neon-pessoal))] focus:ring-2 focus:ring-[hsl(var(--neon-pessoal))/20]"
           >
             {Array.from({ length: 5 }, (_, index) => new Date().getFullYear() - index).map((year) => (
               <option key={year} value={year}>
@@ -380,7 +430,7 @@ if (error) {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="h-10 rounded-lg border border-border bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:ring-2 focus:ring-primary"
+            className="h-10 rounded-lg border border-[hsl(var(--neon-pessoal))/50] bg-card px-3 text-sm font-medium text-foreground outline-none transition focus:border-[hsl(var(--neon-pessoal))] focus:ring-2 focus:ring-[hsl(var(--neon-pessoal))/20]"
           >
             <option value="all">Todos os meses</option>
             <option value="0">Janeiro</option>
@@ -424,7 +474,7 @@ if (error) {
   <KPICard
   colorScheme="pessoal"
   icon={Wallet}
-  label="Saldo Atual"
+  label="Saldo atual • Histórico"
   value={data.balance}
   isCurrency
   iconColor={data.balance >= 0 ? "blue" : "red"}
@@ -457,15 +507,15 @@ if (error) {
 
   <NeonCard colorScheme="pessoal" className="p-4">
     <p className="text-xs uppercase tracking-wide text-muted-foreground">
-      Taxa de economia
+      Taxa de aportes
     </p>
     <p className="text-xl font-bold mt-1">
       {data.totalIncome > 0
-        ? `${((data.savings / data.totalIncome) * 100).toFixed(1)}%`
-        : '0,0%'}
+      ? `${((data.savings / data.totalIncome) * 100).toFixed(1)}%`
+      : '0,0%'}
     </p>
     <p className="text-xs text-muted-foreground mt-1">
-      Economias sobre as receitas
+     Aportes em relação às receitas
     </p>
   </NeonCard>
 
@@ -485,17 +535,17 @@ if (error) {
   </NeonCard>
         <NeonCard colorScheme="pessoal" className="p-4">
   <p className="text-xs uppercase tracking-wide text-muted-foreground">
-    Comprometimento da receita
+    Comprometimento da receita total
   </p>
 
   <p className="text-xl font-bold mt-1">
     {data.totalIncome > 0
-      ? `${((data.totalExpenses / data.totalIncome) * 100).toFixed(1)}%`
-      : '0,0%'}
+    ? `${((totalSaidasPeriodo / data.totalIncome) * 100).toFixed(1)}%`
+    : '0,0%'}
   </p>
 
   <p className="text-xs text-muted-foreground mt-1">
-    Despesas em relação às receitas
+    Saídas totais em relação às receitas
   </p>
 </NeonCard>
 </div>
@@ -511,7 +561,7 @@ if (error) {
             <BarChart data={data.monthlyChart}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
               <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} fontSize={12} />
-              <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={v => `R$${v/1000}k`} tickLine={false} axisLine={false} width={45} fontSize={12} />
+              <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={fmtAxis} tickLine={false} axisLine={false} width={45} fontSize={12} />
               <Tooltip
               cursor={{ fill: 'hsl(var(--accent)/0.1)' }}
               formatter={(value) => fmt(value)}
@@ -531,17 +581,16 @@ if (error) {
         <NeonCard colorScheme="pessoal" className="h-[300px] md:h-[400px] overflow-hidden">
           <h3 className="text-lg md:text-xl font-semibold mb-4">
           {selectedMonth === 'all'
-          ? `Evolução do Saldo do Período • ${selectedYear}`
-          : `Evolução do Saldo do Período • ${monthNames[Number(selectedMonth)]} ${selectedYear}`}
+          ? `Resultado acumulado do período • ${selectedYear}`
+          : `Resultado do período • ${monthNames[Number(selectedMonth)]} ${selectedYear}`}
           </h3>
           <ResponsiveContainer width="100%" height="85%">
             <LineChart data={data.trendChart}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
               <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} fontSize={12} />
-              <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={v => `R$${v/1000}k`} tickLine={false} axisLine={false} width={45} fontSize={12} />
-              <Tooltip formatter={(value) => fmt(value)} contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '10px'}} />
-              <Line type="monotone" dataKey="Saldo" name="Saldo" stroke="hsl(var(--neon-blue))" strokeWidth={3} dot={{ r: 4, fill: "hsl(var(--neon-blue))" }} activeDot={{ r: 6 }}
-              />
+              <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={fmtAxis} tickLine={false} axisLine={false} width={45} fontSize={12} />
+              <Tooltip formatter={(value) => [fmt(value), 'Resultado acumulado']} contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '10px'}} />
+              <Line type="monotone" dataKey="Saldo" name="Saldo acumulado no período" stroke="hsl(var(--neon-blue))" strokeWidth={3} dot={{ r: 4, fill: "hsl(var(--neon-blue))" }} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>
         </NeonCard>
@@ -582,15 +631,15 @@ if (error) {
         <NeonCard colorScheme="pessoal" className="h-[300px] md:h-[350px] overflow-hidden">
           <h3 className="text-lg md:text-xl font-semibold mb-4">
           {selectedMonth === 'all'
-            ? 'Orçamento por Trimestre'
-            : `Orçamento de ${monthNames[Number(selectedMonth)]}`}
+            ? 'Orçamento x Realizado por Trimestre'
+           : `Orçamento x Realizado • ${monthNames[Number(selectedMonth)]} ${selectedYear}`
           </h3>
           <ResponsiveContainer width="100%" height="85%">
             <BarChart data={data.budgetProgress}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
               <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} fontSize={12} />
-              <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={v => `R$${v/1000}k`} tickLine={false} axisLine={false} width={45} fontSize={12} />
-              <Tooltip cursor={{fill: 'hsl(var(--accent)/0.1)'}} contentStyle={{backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))'}} />
+              <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={fmtAxis} tickLine={false} axisLine={false} width={45} fontSize={12} />
+              <Tooltip cursor={{ fill: 'hsl(var(--accent)/0.1)' }} formatter={(value) => fmt(value)} contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '10px'}}/>
               <Legend wrapperStyle={{ fontSize: '12px' }} />
               <Bar dataKey="Orcamento" name="Previsto" fill="hsl(var(--neon-blue))" radius={[4,4,0,0]} opacity={0.5}
               />
@@ -608,10 +657,10 @@ if (error) {
           Movimentações recentes
         </h3>
 
-        <div className="inline-flex items-center rounded-full bg-[hsl(var(--neon-blue)/0.1)] px-2.5 py-1 mt-2">
+        <div className="inline-flex items-center rounded-full border border-[hsl(var(--neon-pessoal))/25] bg-[hsl(var(--neon-pessoal))/10] px-2.5 py-1 mt-2">
         <span className="text-xs font-semibold text-[hsl(var(--neon-blue))]">
-         {data.movimentacoesRecentes.length} lançamento
-        {data.movimentacoesRecentes.length !== 1 ? 's' : ''}
+         {data.movimentacoesRecentes.length} movimentação
+        {data.movimentacoesRecentes.length !== 1 ? 'ões' : ''}
       </span>
       </div>
         <p className="text-xs text-muted-foreground mt-1">
@@ -625,21 +674,29 @@ if (error) {
         {data.movimentacoesRecentes.map((item, index) => (
           <div
           key={`${item.tipo}-${item.data}-${index}`}
-          className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-background/30 p-3 transition-colors hover:bg-accent/30"
+          className="flex items-center justify-between gap-3 rounded-xl border border-[hsl(var(--neon-pessoal))/25] bg-background/30 p-3 transition-colors hover:bg-[hsl(var(--neon-pessoal))/5]"
           >
   <div
-    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-      item.tipo === 'receita'
-        ? 'bg-[hsl(var(--neon-blue)/0.12)] text-[hsl(var(--neon-blue))]'
-        : 'bg-destructive/10 text-destructive'
-    }`}
-  >
-    {item.tipo === 'receita' ? (
-      <ArrowUp className="h-4 w-4" />
-    ) : (
-      <ArrowDown className="h-4 w-4" />
-    )}
-  </div>
+  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+    item.tipo === 'receita'
+      ? 'bg-[hsl(var(--neon-blue)/0.12)] text-[hsl(var(--neon-blue))]'
+      : item.tipo === 'despesa'
+        ? 'bg-destructive/10 text-destructive'
+        : item.tipo === 'aporte'
+          ? 'bg-purple-500/10 text-purple-400'
+          : 'bg-yellow-500/10 text-yellow-400'
+  }`}
+>
+  {item.tipo === 'receita' ? (
+    <ArrowUp className="h-4 w-4" />
+  ) : item.tipo === 'despesa' ? (
+    <ArrowDown className="h-4 w-4" />
+  ) : item.tipo === 'aporte' ? (
+    <TrendingUp className="h-4 w-4" />
+  ) : (
+    <Heart className="h-4 w-4" />
+  )}
+</div>
             <div className="min-w-0">
               <p className="font-medium truncate">
                 {item.descricao}
@@ -647,18 +704,22 @@ if (error) {
 
               <p className="text-xs text-muted-foreground">
                 {item.categoria} •{' '}
-                {new Date(item.data).toLocaleDateString('pt-BR')}
+                {String(item.data).slice(0, 10).split('-').reverse().join('/')}
               </p>
             </div>
 
             <span
               className={`font-semibold whitespace-nowrap ${
-                item.tipo === 'receita'
-                  ? 'text-[hsl(var(--neon-blue))]'
-                  : 'text-destructive'
-              }`}
-            >
-              {item.tipo === 'receita' ? '+' : '-'} {fmt(item.valor)}
+              item.tipo === 'receita'
+              ? 'text-[hsl(var(--neon-blue))]'
+              : item.tipo === 'despesa'
+              ? 'text-destructive'
+              : item.tipo === 'aporte'
+              ? 'text-purple-400'
+              : 'text-yellow-400'
+            }`}
+              >
+  {item.tipo === 'receita' ? '+' : '-'} {fmt(item.valor)}
             </span>
           </div>
         ))}
@@ -674,7 +735,7 @@ if (error) {
   </p>
 
   <p className="text-xs text-muted-foreground mt-1">
-    Não existem receitas ou despesas registradas neste período.
+    Não existem receitas, despesas, aportes ou dízimos/ofertas registrados neste período.
   </p>
 </div>
     )}
@@ -685,7 +746,7 @@ if (error) {
     <div className="flex items-start justify-between gap-3 mb-4">
   <div>
     <h3 className="text-lg font-semibold">
-      Atenção financeira
+      Indicadores financeiros
     </h3>
 
     <p className="text-xs text-muted-foreground mt-1">
@@ -700,13 +761,14 @@ if (error) {
 </div>
 
     <div className="space-y-3">
-      {alertasFinanceiros.map((alerta, index) => {
+    {alertasFinanceiros.length > 0 ? (
+    alertasFinanceiros.map((alerta, index) => {
   const Icon = alerta.icone;
 
   return (
     <div
       key={`${alerta.tipo}-${index}`}
-      className="flex items-start gap-3 rounded-xl border border-border/50 bg-background/30 p-3"
+      className="flex items-start gap-3 rounded-xl border border-[hsl(var(--neon-pessoal))/25] bg-background/30 p-3"
     >
       <div
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
@@ -739,7 +801,22 @@ if (error) {
       </div>
     </div>
   );
-})}
+    })
+  ) : (
+    <div className="flex flex-col items-center justify-center py-6 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[hsl(var(--neon-blue)/0.1)] text-[hsl(var(--neon-blue))]">
+        <CheckCircle2 className="h-5 w-5" />
+      </div>
+
+      <p className="font-medium mt-3">
+        Nenhum alerta financeiro
+      </p>
+
+      <p className="text-xs text-muted-foreground mt-1">
+        Não foram identificados indicadores de atenção no período selecionado.
+      </p>
+    </div>
+  )}
     </div>
   </NeonCard>
            </div>
