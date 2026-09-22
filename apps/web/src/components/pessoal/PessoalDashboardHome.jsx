@@ -150,13 +150,28 @@ const saldoAtual =
         });
 
         despesasFiltradas.forEach(d => {
-          const mIdx = new Date(d.data).getMonth();
-          const chartIndex = selectedMonth === 'all' ? mIdx : 0;
+  const mIdx = new Date(d.data).getMonth();
+  const chartIndex = selectedMonth === 'all' ? mIdx : 0;
 
-        monthlyData[chartIndex].Despesa += Number(d.valor);
-        trendData[chartIndex].Saldo -= Number(d.valor);
-        });
-        let acc = 0;
+  monthlyData[chartIndex].Despesa += Number(d.valor);
+  trendData[chartIndex].Saldo -= Number(d.valor);
+});
+
+aportesFiltrados.forEach(a => {
+  const mIdx = new Date(a.data).getMonth();
+  const chartIndex = selectedMonth === 'all' ? mIdx : 0;
+
+  trendData[chartIndex].Saldo -= Number(a.valor);
+});
+
+let acc = 0;
+
+      dizimosFiltrados.forEach(d => {
+  const mIdx = new Date(d.data).getMonth();
+  const chartIndex = selectedMonth === 'all' ? mIdx : 0;
+
+  trendData[chartIndex].Saldo -= Number(d.valor);
+});
         trendData.forEach(t => { acc += t.Saldo; t.Saldo = acc; });
         const catMap = {};
         despesasFiltradas.forEach(d => {
@@ -516,30 +531,16 @@ if (error) {
         <NeonCard colorScheme="pessoal" className="h-[300px] md:h-[400px] overflow-hidden">
           <h3 className="text-lg md:text-xl font-semibold mb-4">
           {selectedMonth === 'all'
-          ? `Evolução do Saldo • ${selectedYear}`
-          : `Evolução do Saldo • ${monthNames[Number(selectedMonth)]} ${selectedYear}`}
+          ? `Evolução do Saldo do Período • ${selectedYear}`
+          : `Evolução do Saldo do Período • ${monthNames[Number(selectedMonth)]} ${selectedYear}`}
           </h3>
           <ResponsiveContainer width="100%" height="85%">
             <LineChart data={data.trendChart}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
               <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} fontSize={12} />
               <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={v => `R$${v/1000}k`} tickLine={false} axisLine={false} width={45} fontSize={12} />
-              <Tooltip
-              formatter={(value) => fmt(value)}
-              contentStyle={{
-              backgroundColor: 'hsl(var(--card))',
-              border: '1px solid hsl(var(--border))',
-              borderRadius: '10px'
-              }}
-              />
-              <Line
-              type="monotone"
-              dataKey="Saldo"
-              name="Saldo"
-              stroke="hsl(var(--neon-blue))"
-              strokeWidth={3}
-              dot={{ r: 4, fill: "hsl(var(--neon-blue))" }}
-              activeDot={{ r: 6 }}
+              <Tooltip formatter={(value) => fmt(value)} contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '10px'}} />
+              <Line type="monotone" dataKey="Saldo" name="Saldo" stroke="hsl(var(--neon-blue))" strokeWidth={3} dot={{ r: 4, fill: "hsl(var(--neon-blue))" }} activeDot={{ r: 6 }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -557,15 +558,7 @@ if (error) {
                 <Pie data={data.pieChart} cx="50%" cy="50%" innerRadius={50} outerRadius={70} dataKey="value" paddingAngle={5}>
                   {data.pieChart.map((e, i) => <Cell key={i} fill={pieColors[i % pieColors.length]} />)}
                 </Pie>
-                <Tooltip
-                cursor={{ fill: 'hsl(var(--accent)/0.1)' }}
-                formatter={(value) => fmt(value)}
-                contentStyle={{
-                backgroundColor: 'hsl(var(--card))',
-                border: '1px solid hsl(var(--border))',
-                borderRadius: '10px'
-                }}
-                />
+                <Tooltip cursor={{ fill: 'hsl(var(--accent)/0.1)' }}formatter= {(value) => fmt(value)} contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '10px'}} />
                 <Legend wrapperStyle={{ fontSize: '12px' }} />
               </PieChart>
            ) : (
@@ -599,20 +592,10 @@ if (error) {
               <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={v => `R$${v/1000}k`} tickLine={false} axisLine={false} width={45} fontSize={12} />
               <Tooltip cursor={{fill: 'hsl(var(--accent)/0.1)'}} contentStyle={{backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))'}} />
               <Legend wrapperStyle={{ fontSize: '12px' }} />
-              <Bar
-              dataKey="Orcamento"
-              name="Previsto"
-              fill="hsl(var(--neon-blue))"
-              radius={[4,4,0,0]}
-              opacity={0.5}
+              <Bar dataKey="Orcamento" name="Previsto" fill="hsl(var(--neon-blue))" radius={[4,4,0,0]} opacity={0.5}
               />
 
-             <Bar
-              dataKey="Gasto"
-              name="Realizado"
-              fill="hsl(var(--neon-red))"
-              radius={[4,4,0,0]}
-              />
+             <Bar dataKey="Gasto" name="Realizado" fill="hsl(var(--neon-red))" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </NeonCard>
