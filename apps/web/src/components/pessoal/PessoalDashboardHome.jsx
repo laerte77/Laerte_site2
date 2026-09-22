@@ -11,17 +11,7 @@ export default function PessoalDashboardHome() {
   const [error, setError] = useState(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState('all');
-  const [data, setData] = useState({
-  totalIncome: 0,
-  totalExpenses: 0,
-  balance: 0,
-  savings: 0,
-  monthlyChart: [],
-  trendChart: [],
-  pieChart: [],
-  budgetProgress: [],
-  movimentacoesRecentes: []
-});
+  const [data, setData] = useState({totalIncome: 0,totalExpenses: 0,balance: 0,saldoPeriodo: 0,savings: 0,monthlyChart: [],trendChart: [],pieChart: [],budgetProgress: [],movimentacoesRecentes: []});
 
   useEffect(() => {
   const fetchData = async () => {
@@ -35,7 +25,8 @@ export default function PessoalDashboardHome() {
         const startOfYear = new Date(year, 0, 1, 0, 0, 0).toISOString();
         const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999).toISOString();
 
-        const [recRes, despRes, aportesRes, despesasPrevRes] = await Promise.all([
+        const [recRes,despRes,aportesRes,despesasPrevRes,dizimosRes,allTimeRecRes,allTimeDespRes,allTimeAportesRes,allTimeDizimosRes] = await Promise.all([
+          
   getAccessibleDataQuery(user.id, isAdmin, 'receitas', 'data, valor, receita, origem')
     .gte('data', startOfYear)
     .lte('data', endOfYear),
@@ -51,13 +42,25 @@ export default function PessoalDashboardHome() {
   getAccessibleDataQuery(user.id, isAdmin, 'despesas_previstas', 'data_vencimento, valor')
     .gte('data_vencimento', startOfYear)
     .lte('data_vencimento', endOfYear),
+
+  getAccessibleDataQuery(user.id, isAdmin, 'pessoal_dizimos_ofertas', 'data, valor')
+    .gte('data', startOfYear)
+    .lte('data', endOfYear),
+
+  getAccessibleDataQuery(user.id, isAdmin, 'receitas', 'valor'),
+
+  getAccessibleDataQuery(user.id, isAdmin, 'despesas', 'valor'),
+
+  getAccessibleDataQuery(user.id, isAdmin, 'aportes', 'valor'),
+
+  getAccessibleDataQuery(user.id, isAdmin, 'pessoal_dizimos_ofertas', 'valor'),
 ]);
 
         const receitas = recRes.data || [];
         const despesas = despRes.data || [];
         const aportes = aportesRes.data || [];
         const despesasPrevistas = despesasPrevRes.data || [];
-
+        const dizimos = dizimosRes.data || [];
         const receitasFiltradas = selectedMonth === 'all'
           ? receitas
           : receitas.filter((r) => new Date(r.data).getMonth() === Number(selectedMonth));
@@ -70,15 +73,56 @@ export default function PessoalDashboardHome() {
           ? aportes
           : aportes.filter((a) => new Date(a.data).getMonth() === Number(selectedMonth));
 
+      const dizimosFiltrados = selectedMonth === 'all'
+          ? dizimos
+          : dizimos.filter((d) => new Date(d.data).getMonth() === Number(selectedMonth));
+
         const despesasPrevistasFiltradas = selectedMonth === 'all'
-  ? despesasPrevistas
-  : despesasPrevistas.filter(
+          ? despesasPrevistas
+          : despesasPrevistas.filter(
       (d) => new Date(d.data_vencimento).getMonth() === Number(selectedMonth)
     );
     
         const totalIncome = receitasFiltradas.reduce((a, b) => a + Number(b.valor), 0);
-        const totalExpenses = despesasFiltradas.reduce((a, b) => a + Number(b.valor), 0);
-        const savings = aportesFiltrados.reduce((a, b) => a + Number(b.valor), 0);
+const totalExpenses = despesasFiltradas.reduce((a, b) => a + Number(b.valor), 0);
+const savings = aportesFiltrados.reduce((a, b) => a + Number(b.valor), 0);
+
+const totalDizimosOfertasPeriodo = dizimosFiltrados.reduce(
+  (a, b) => a + Number(b.valor),
+  0
+);
+
+const saldoPeriodo =
+  totalIncome -
+  totalExpenses -
+  savings -
+  totalDizimosOfertasPeriodo;
+
+const totalReceitasAtual = (allTimeRecRes.data || []).reduce(
+  (a, b) => a + Number(b.valor),
+  0
+);
+
+const totalDespesasAtual = (allTimeDespRes.data || []).reduce(
+  (a, b) => a + Number(b.valor),
+  0
+);
+
+const totalAportesAtual = (allTimeAportesRes.data || []).reduce(
+  (a, b) => a + Number(b.valor),
+  0
+);
+
+const totalDizimosAtual = (allTimeDizimosRes.data || []).reduce(
+  (a, b) => a + Number(b.valor),
+  0
+);
+
+const saldoAtual =
+  totalReceitasAtual -
+  totalDespesasAtual -
+  totalAportesAtual -
+  totalDizimosAtual;
 
         const months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
@@ -160,7 +204,8 @@ export default function PessoalDashboardHome() {
 setData({
   totalIncome,
   totalExpenses,
-  balance: totalIncome - totalExpenses,
+  balance: saldoAtual,
+  saldoPeriodo,
   savings,
   monthlyChart: monthlyData,
   trendChart: trendData,
@@ -233,7 +278,7 @@ if (data.totalIncome > 0 && (data.totalExpenses / data.totalIncome) >= 0.8) {
   });
 }
 
-if (data.balance < 0) {
+if (data.saldoPeriodo < 0) {
   alertasFinanceiros.push({
     tipo: 'danger',
     icone: AlertTriangle,
@@ -342,28 +387,31 @@ if (error) {
 
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
   <KPICard
-    colorScheme="pessoal"
-    icon={ArrowUp}
-    label="Total Receitas"
-    value={fmt(data.totalIncome)}
-    iconColor="blue"
-    className="w-full"
-  />
+  colorScheme="pessoal"
+  icon={ArrowUp}
+  label="Total Receitas"
+  value={data.totalIncome}
+  isCurrency
+  iconColor="blue"
+  className="w-full"
+/>
 
   <KPICard
-    colorScheme="pessoal"
-    icon={ArrowDown}
-    label="Total Despesas"
-    value={fmt(data.totalExpenses)}
-    iconColor="red"
-    className="w-full"
-  />
+  colorScheme="pessoal"
+  icon={ArrowDown}
+  label="Total Despesas"
+  value={data.totalExpenses}
+  isCurrency
+  iconColor="red"
+  className="w-full"
+/>
 
   <KPICard
   colorScheme="pessoal"
   icon={Wallet}
   label="Saldo Atual"
-  value={fmt(data.balance)}
+  value={data.balance}
+  isCurrency
   iconColor={data.balance >= 0 ? "blue" : "red"}
   className={`w-full ${data.balance < 0 ? 'border-destructive/40' : ''}`}
 />
@@ -372,7 +420,8 @@ if (error) {
     colorScheme="pessoal"
     icon={TrendingUp}
     label="Economias"
-    value={fmt(data.savings)}
+    value={data.savings}
+    isCurrency
     iconColor="blue"
     className="w-full"
   />
@@ -384,10 +433,10 @@ if (error) {
       Saldo do período
     </p>
     <p className="text-xl font-bold mt-1">
-      {fmt(data.balance)}
+      {fmt(data.saldoPeriodo)}
     </p>
     <p className="text-xs text-muted-foreground mt-1">
-      Receitas menos despesas realizadas
+      Entradas menos saídas, aportes e dízimos/ofertas
     </p>
   </NeonCard>
 
