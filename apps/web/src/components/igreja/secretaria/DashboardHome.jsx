@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Users, UserCheck, UserX, Crown, GraduationCap, Droplets, Wind, UserRoundCog, Church, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Users, UserCheck, UserX, Crown, GraduationCap, Droplets, Wind, Settings, Church, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { useToast } from '@/components/ui/use-toast';
@@ -75,7 +75,7 @@ export default function DashboardHome() {
   }, [user, fetchData]);
 
   const pendencias = useMemo(() => [
-    stats.semFuncao > 0 && { tipo: 'warning', icon: UserRoundCog, title: `${fmtNumber(stats.semFuncao)} membro(s) sem função`, description: 'Existem membros cadastrados sem função vinculada.' },
+    stats.semFuncao > 0 && { tipo: 'warning', icon: Settings, title: `${fmtNumber(stats.semFuncao)} membro(s) sem função`, description: 'Existem membros cadastrados sem função vinculada.' },
     stats.semConjunto > 0 && { tipo: 'warning', icon: Church, title: `${fmtNumber(stats.semConjunto)} membro(s) sem conjunto`, description: 'Existem membros ainda não vinculados a um conjunto.' },
     stats.semClasseEbd > 0 && { tipo: 'warning', icon: GraduationCap, title: `${fmtNumber(stats.semClasseEbd)} membro(s) sem classe de EBD`, description: 'Existem membros sem classe de Escola Bíblica Dominical.' }
   ].filter(Boolean), [stats]);
@@ -105,7 +105,7 @@ export default function DashboardHome() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-5">
         <KPICard colorScheme="igreja" icon={Droplets} label="Batizados em Águas" value={stats.batizadosAguas} iconColor="blue" className="w-full" />
         <KPICard colorScheme="igreja" icon={Wind} label="Batizados no Espírito Santo" value={stats.batizadosEspiritoSanto} iconColor="igreja" className="w-full" />
-        <KPICard colorScheme="igreja" icon={UserRoundCog} label="Sem Função" value={stats.semFuncao} iconColor="orange" className="w-full" />
+        <KPICard colorScheme="igreja" icon={Settings} label="Sem Função" value={stats.semFuncao} iconColor="orange" className="w-full" />
         <KPICard colorScheme="igreja" icon={Church} label="Sem Conjunto" value={stats.semConjunto} iconColor="orange" className="w-full" />
         <KPICard colorScheme="igreja" icon={GraduationCap} label="Sem Classe EBD" value={stats.semClasseEbd} iconColor="orange" className="w-full" />
       </div>
