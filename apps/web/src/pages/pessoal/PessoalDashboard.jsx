@@ -4,7 +4,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import Sidebar from '@/components/pessoal/sidebar';
 import Header from '@/components/pessoal/Header';
-import DashboardHome from '@/components/pessoal/DashboardHome';
+import PessoalDashboardHome from '@/components/pessoal/PessoalDashboardHome';
 import AlertasInteligentes from '@/components/pessoal/AlertasInteligentes';
 import PlanejamentoFinanceiro from '@/components/pessoal/orcamento/PlanejamentoFinanceiro';
 import TiposReceita from '@/components/pessoal/cadastros/TiposReceita';
@@ -81,7 +81,7 @@ const PessoalDashboard = () => {
                 <Header toggleSidebar={() => setSidebarOpen(prev => !prev)} isSidebarOpen={isSidebarOpen} />
                 <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto bg-transparent relative [&_.neon-card]:neon-border-blue [&_.neon-card]:neon-hover-blue">
                     <Routes>
-                        <Route path="/" element={<DashboardHome />} />
+                        <Route path="/" element={<PessoalDashboardHome />} />
                         <Route path="/alertas" element={<AlertasInteligentes />} />
                         <Route path="/planejamento" element={<PlanejamentoFinanceiro />} />
                         <Route path="/contas-mes" element={<ContasMes />} />
