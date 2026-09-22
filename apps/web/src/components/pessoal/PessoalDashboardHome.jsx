@@ -36,11 +36,11 @@ export default function PessoalDashboardHome() {
         const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999).toISOString();
 
         const [recRes, despRes, aportesRes, despesasPrevRes] = await Promise.all([
-  getAccessibleDataQuery(user.id, isAdmin, 'receitas', 'data, valor, descricao')
+  getAccessibleDataQuery(user.id, isAdmin, 'receitas', 'data, valor, receita, origem')
     .gte('data', startOfYear)
     .lte('data', endOfYear),
 
-  getAccessibleDataQuery(user.id, isAdmin, 'despesas', 'data, valor, categoria, descricao')
+  getAccessibleDataQuery(user.id, isAdmin, 'despesas', 'data, valor, despesa, categoria')
     .gte('data', startOfYear)
     .lte('data', endOfYear),
 
@@ -168,19 +168,19 @@ setData({
   budgetProgress,
   movimentacoesRecentes: [
     ...receitasFiltradas.map((item) => ({
-      tipo: 'receita',
-      descricao: item.descricao || 'Receita',
-      categoria: 'Receita',
-      valor: Number(item.valor || 0),
-      data: item.data
-    })),
-    ...despesasFiltradas.map((item) => ({
-      tipo: 'despesa',
-      descricao: item.descricao || 'Despesa',
-      categoria: item.categoria || 'Diversos',
-      valor: Number(item.valor || 0),
-      data: item.data
-    }))
+  tipo: 'receita',
+  descricao: item.origem || item.receita || 'Receita',
+  categoria: item.receita || 'Receita',
+  valor: Number(item.valor || 0),
+  data: item.data
+})),
+...despesasFiltradas.map((item) => ({
+  tipo: 'despesa',
+  descricao: item.despesa || 'Despesa',
+  categoria: item.categoria || 'Diversos',
+  valor: Number(item.valor || 0),
+  data: item.data
+}))
   ]
     .sort((a, b) => new Date(b.data) - new Date(a.data))
     .slice(0, 6)
