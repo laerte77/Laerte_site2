@@ -115,7 +115,7 @@ export default function DashboardHome(){
   if(error)return <div className="p-5 max-w-7xl mx-auto"><NeonCard colorScheme="lanhouse" className="p-8 text-center"><AlertTriangle className="mx-auto w-10 h-10 text-destructive mb-3"/><p className="font-semibold text-destructive">Erro ao carregar o painel</p><p className="text-sm text-muted-foreground mt-2">{error}</p></NeonCard></div>;
 
   return(
-    <div className="relative p-4 md:p-6 space-y-5 md:space-y-6 max-w-7xl mx-auto w-full overflow-hidden">
+    <div className="relative p-2 md:p-3 space-y-5 md:space-y-6 w-full overflow-hidden">
       <div className="pointer-events-none absolute -top-32 -right-32 w-72 h-72 rounded-full bg-[hsl(var(--neon-lanhouse)/0.12)] blur-3xl"/>
       <div className="pointer-events-none absolute top-[420px] -left-32 w-60 h-60 rounded-full bg-cyan-400/5 blur-3xl"/>
 
