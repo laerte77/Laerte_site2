@@ -31,7 +31,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
             <Home className="h-5 w-5 text-[hsl(var(--neon-pessoal))]" />
         </Button>
         <DividerLine moduleName="pessoal" vertical className="mx-2 h-8 opacity-40 hidden md:block" />
-        <Link to="/pessoal/dashboard/home" className={cn("flex items-center gap-2 group", isSearchOpen ? "hidden md:flex" : "flex")}>
+        <Link to="/pessoal/dashboard" className={cn("flex items-center gap-2 group", isSearchOpen ? "hidden md:flex" : "flex")}>
           <div className="flex flex-col">
              <span className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-[hsl(var(--neon-pessoal))] to-blue-400 tracking-tight group-hover:opacity-80 transition-opacity">Pessoal</span>
           </div>
