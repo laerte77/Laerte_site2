@@ -7,7 +7,8 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
-import { supabase } from '@/integrations/supabase/client';
+import { getAccessibleDataQuery } from '@/lib/dataAccessUtils';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { NeonCard, KPICard } from '@/components/ui/neon-card';
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -18,6 +19,7 @@ const dataMes = d => new Date(`${d}T12:00:00`).getMonth() + 1;
 const dataAno = d => new Date(`${d}T12:00:00`).getFullYear();
 
 export default function PessoalDashboardHome() {
+  const { user, isAdmin } = useAuth();
   const hoje = new Date();
   const [selectedYear, setSelectedYear] = useState(hoje.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(hoje.getMonth() + 1);
@@ -35,15 +37,15 @@ export default function PessoalDashboardHome() {
 
       try {
         const q = await Promise.all([
-          supabase.from('receitas').select('*').gte('data', ini).lt('data', fim),
-          supabase.from('despesas').select('*').gte('data', ini).lt('data', fim),
-          supabase.from('aportes').select('*').gte('data', ini).lt('data', fim),
-          supabase.from('despesas_previstas').select('*').gte('data_vencimento', ini).lt('data_vencimento', fim),
-          supabase.from('pessoal_dizimos_ofertas').select('*').gte('data', ini).lt('data', fim),
-          supabase.from('receitas').select('valor'),
-          supabase.from('despesas').select('valor'),
-          supabase.from('aportes').select('valor'),
-          supabase.from('pessoal_dizimos_ofertas').select('valor')
+          getAccessibleDataQuery(user?.id, isAdmin, 'receitas').gte('data', ini).lt('data', fim),
+          getAccessibleDataQuery(user?.id, isAdmin, 'despesas').gte('data', ini).lt('data', fim),
+          getAccessibleDataQuery(user?.id, isAdmin, 'aportes').gte('data', ini).lt('data', fim),
+          getAccessibleDataQuery(user?.id, isAdmin, 'despesas_previstas').gte('data_vencimento', ini).lt('data_vencimento', fim),
+          getAccessibleDataQuery(user?.id, isAdmin, 'pessoal_dizimos_ofertas').gte('data', ini).lt('data', fim),
+          getAccessibleDataQuery(user?.id, isAdmin, 'receitas', 'valor'),
+          getAccessibleDataQuery(user?.id, isAdmin, 'despesas', 'valor'),
+          getAccessibleDataQuery(user?.id, isAdmin, 'aportes', 'valor'),
+          getAccessibleDataQuery(user?.id, isAdmin, 'pessoal_dizimos_ofertas', 'valor')
         ]);
 
         const err = q.find(x => x.error)?.error;
@@ -62,7 +64,7 @@ export default function PessoalDashboardHome() {
       }
     };
     load();
-  }, [selectedYear]);
+  }, [selectedYear, user?.id, isAdmin]);
 
   const filtrar = useMemo(() => a =>
     a.filter(x => selectedMonth === 0 || dataMes(x.data || x.data_vencimento) === Number(selectedMonth)), [selectedMonth]);
