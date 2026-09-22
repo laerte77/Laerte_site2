@@ -217,36 +217,39 @@ const monthNames = [
 
 if (data.totalIncome > 0 && data.totalExpenses > data.totalIncome) {
   alertasFinanceiros.push({
-  tipo: 'danger',
-  icone: AlertTriangle,
-  titulo: 'Despesas acima das receitas',
-  descricao: 'As despesas do período ultrapassaram o total de receitas.'
-});
+    tipo: 'danger',
+    icone: AlertTriangle,
+    titulo: 'Despesas acima das receitas',
+    descricao: 'As despesas do período ultrapassaram o total de receitas.'
+  });
+}
 
 if (data.totalIncome > 0 && (data.totalExpenses / data.totalIncome) >= 0.8) {
   alertasFinanceiros.push({
-  tipo: 'warning',
-  icone: AlertTriangle,
-  titulo: 'Alto comprometimento da receita',
-  descricao: 'As despesas representam 80% ou mais das receitas do período.'
-});
+    tipo: 'warning',
+    icone: AlertTriangle,
+    titulo: 'Alto comprometimento da receita',
+    descricao: 'As despesas representam 80% ou mais das receitas do período.'
+  });
+}
 
 if (data.balance < 0) {
   alertasFinanceiros.push({
-  tipo: 'danger',
-  icone: AlertTriangle,
-  titulo: 'Saldo negativo',
-  descricao: 'O período selecionado apresenta saldo negativo.'
-});
+    tipo: 'danger',
+    icone: AlertTriangle,
+    titulo: 'Saldo negativo',
+    descricao: 'O período selecionado apresenta saldo negativo.'
+  });
+}
 
 if (alertasFinanceiros.length === 0) {
   alertasFinanceiros.push({
-  tipo: 'success',
-  icone: CheckCircle2,
-  titulo: 'Situação financeira equilibrada',
-  descricao: 'Nenhum alerta financeiro relevante foi identificado no período.'
-});
-
+    tipo: 'success',
+    icone: CheckCircle2,
+    titulo: 'Situação financeira equilibrada',
+    descricao: 'Nenhum alerta financeiro relevante foi identificado no período.'
+  });
+}
   if (loading) {
   return (
     <div className="p-8 text-center text-muted-foreground animate-pulse">
@@ -705,8 +708,7 @@ if (error) {
 })}
     </div>
   </NeonCard>
-      </div>
-    )}
+           </div>
     </div>
   );
 }
