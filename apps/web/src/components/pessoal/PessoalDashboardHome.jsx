@@ -295,10 +295,6 @@ export default function PessoalDashboardHome() {
             })}
           </div>
         </NeonCard>
-      </div>
-    </div>
-  );
-}
-    </div>
+          </div>
   );
 }
