@@ -2,7 +2,7 @@ import React, { useEffect, useState, useContext } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '@/components/igreja/Sidebar';
 import Header from '@/components/igreja/Header';
-import DashboardHome from '@/components/igreja/DashboardHome';
+import DashboardHome from '@/components/igreja/IgrejaDashboardHome';
 import CadastroTipoEntrada from '@/components/igreja/cadastros/CadastroTipoEntrada';
 import CadastroTipoDespesa from '@/components/igreja/cadastros/CadastroTipoDespesa';
 import CadastroDizimistas from '@/components/igreja/cadastros/CadastroDizimistas';
