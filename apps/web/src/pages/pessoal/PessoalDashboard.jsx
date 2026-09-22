@@ -79,7 +79,7 @@ const PessoalDashboard = () => {
                 !isMobile && (isSidebarOpen ? 'ml-64' : 'ml-20')
             )}>
                 <Header toggleSidebar={() => setSidebarOpen(prev => !prev)} isSidebarOpen={isSidebarOpen} />
-                <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto bg-transparent relative [&_.neon-card]:neon-border-blue [&_.neon-card]:neon-hover-blue">
+                <main className="flex-1 p-2 md:p-4 lg:p-5 overflow-y-auto bg-transparent relative [&_.neon-card]:neon-border-blue [&_.neon-card]:neon-hover-blue">
                     <Routes>
                         <Route path="/" element={<PessoalDashboardHome />} />
                         <Route path="/alertas" element={<AlertasInteligentes />} />
