@@ -572,7 +572,7 @@ if (error) {
               />
               <Legend wrapperStyle={{ fontSize: '12px' }} />
               <Bar dataKey="Receita" fill="hsl(var(--neon-blue))" radius={[4,4,0,0]} />
-              <Bar dataKey="Despesa" fill="hsl(var(--neon-red))" radius={[4,4,0,0]} />
+              <Bar dataKey="Despesa" fill="hsl(var(--destructive))" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </NeonCard>
@@ -642,8 +642,7 @@ if (error) {
               <Legend wrapperStyle={{ fontSize: '12px' }} />
               <Bar dataKey="Orcamento" name="Previsto" fill="hsl(var(--neon-blue))" radius={[4,4,0,0]} opacity={0.5}
               />
-
-             <Bar dataKey="Gasto" name="Realizado" fill="hsl(var(--neon-red))" radius={[4,4,0,0]} />
+             <Bar dataKey="Gasto" name="Realizado" fill="hsl(var(--destructive))" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </NeonCard>
