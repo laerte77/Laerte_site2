@@ -293,6 +293,8 @@ if (error) {
     : `Visão mensal • ${monthNames[Number(selectedMonth)]} de ${selectedYear}`}
 </p>
 
+      </div>
+
       <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
         <div className="flex flex-col gap-1 w-full sm:w-36">
           <label className="text-xs font-medium text-muted-foreground">
