@@ -359,7 +359,6 @@ if (data.saldoPeriodo < 0) {
     descricao: 'O resultado do período ficou negativo após despesas, aportes e dízimos/ofertas.'
   });
 }
-}
   if (loading) {
   return (
     <div className="p-8 text-center text-muted-foreground animate-pulse">
