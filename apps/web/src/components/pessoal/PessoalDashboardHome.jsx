@@ -705,7 +705,8 @@ if (error) {
 })}
     </div>
   </NeonCard>
-</div>
+      </div>
+    )}
     </div>
   );
 }
