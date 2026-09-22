@@ -62,13 +62,13 @@ const LmImpressoesDashboard = () => {
     }, [isMobile]);
 
     if (loading || (!session && !loading)) {
-        return (
-            <div className="flex flex-col items-center justify-center h-screen bg-transparent text-foreground">
-                <Loader2 className="w-10 h-10 animate-spin text-[hsl(var(--neon-cyan))] mb-4" />
-                <p className="uppercase tracking-widest font-medium text-muted-foreground">Carregando LM Impressões...</p>
-            </div>
-        );
-    }
+    return (
+        <div className="flex flex-col items-center justify-center h-screen bg-transparent text-foreground">
+            <Loader2 className="w-10 h-10 animate-spin text-[hsl(var(--neon-cyan))] mb-4" />
+            <p className="uppercase tracking-widest font-medium text-muted-foreground">Carregando LM Impressões...</p>
+        </div>
+    );
+}
 
     return (
         <div className="flex min-h-screen w-full font-sans text-foreground bg-gradient-professional" style={{ '--primary': 'var(--neon-cyan)', '--ring': 'var(--neon-cyan)' }}>
@@ -83,8 +83,8 @@ const LmImpressoesDashboard = () => {
                 !isMobile && (isSidebarOpen ? 'ml-64' : 'ml-20')
             )}>
                 <Header toggleSidebar={() => setSidebarOpen(prev => !prev)} isSidebarOpen={isSidebarOpen} />
-                <main className="flex-1 p-4 md:p-8 lg:p-10 overflow-y-auto bg-transparent [&_.neon-card]:neon-border-cyan [&_.neon-card]:neon-hover-cyan">
-                    <div className="max-w-7xl mx-auto">
+                <main className="flex-1 p-2 md:p-4 lg:p-5 overflow-y-auto bg-transparent [&_.neon-card]:neon-border-cyan [&_.neon-card]:neon-hover-cyan">
+                    <div className="w-full">
                         <Routes>
                             <Route path="/" element={<DashboardHome />} />
                             <Route path="/despesas-previstas-mes" element={<ContasMesLM />} />
