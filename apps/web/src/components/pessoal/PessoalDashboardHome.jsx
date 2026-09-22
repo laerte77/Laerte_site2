@@ -632,7 +632,7 @@ if (error) {
           <h3 className="text-lg md:text-xl font-semibold mb-4">
           {selectedMonth === 'all'
             ? 'Orçamento x Realizado por Trimestre'
-           : `Orçamento x Realizado • ${monthNames[Number(selectedMonth)]} ${selectedYear}`
+            : `Orçamento x Realizado • ${monthNames[Number(selectedMonth)]} ${selectedYear}`}
           </h3>
           <ResponsiveContainer width="100%" height="85%">
             <BarChart data={data.budgetProgress}>
