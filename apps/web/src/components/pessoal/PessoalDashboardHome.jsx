@@ -9,7 +9,8 @@ import {
 } from 'recharts';
 import { getAccessibleDataQuery } from '@/lib/dataAccessUtils';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { NeonCard, KPICard } from '@/components/ui/neon-card';
+import NeonCard from '@/components/ui/NeonCard';
+import KPICard from '@/components/ui/KPICard';
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const meses = ['Todos', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -172,10 +173,10 @@ export default function PessoalDashboardHome() {
         </NeonCard>
 
         <div className="xl:col-span-2 grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KPICard title="Receitas" value={totalReceitas} icon={ArrowUp} iconColor="pessoal" isCurrency />
-          <KPICard title="Despesas" value={totalDespesas} icon={ArrowDown} iconColor="pessoal" isCurrency />
-          <KPICard title="Saldo do período" value={saldoPeriodo} icon={TrendingUp} iconColor="pessoal" isCurrency />
-          <KPICard title="Economias" value={economias} icon={PiggyBank} iconColor="pessoal" isCurrency />
+          <KPICard label="Receitas" value={totalReceitas} icon={ArrowUp} iconColor="pessoal" isCurrency />
+          <KPICard label="Despesas" value={totalDespesas} icon={ArrowDown} iconColor="pessoal" isCurrency />
+          <KPICard label="Saldo do período" value={saldoPeriodo} icon={TrendingUp} iconColor="pessoal" isCurrency />
+          <KPICard label="Economias" value={economias} icon={PiggyBank} iconColor="pessoal" isCurrency />
         </div>
       </div>
 
