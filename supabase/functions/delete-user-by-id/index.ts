@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.30.0';
 import { corsHeaders } from './cors.ts';
 import { getAdminContext } from '../_shared/admin.ts';
 
@@ -32,17 +32,44 @@ Deno.serve(async (req) => {
     }
 
     const tablesToCheck = [
-      'igreja_entradas', 'igreja_despesas_previstas', 'igreja_membros',
-      'lm_lanc_servicos', 'lm_lanc_despesas', 'despesas_previstas',
-      'ent_partidas', 'ent_artilharia', 'igreja_despesas',
-      'cargos_igreja', 'igreja_conjuntos', 'igreja_funcoes', 'igreja_classes',
-      'igreja_dizimistas', 'igreja_tipos_entrada', 'igreja_tipos_despesa',
-      'lm_clientes', 'lm_servicos', 'lm_despesas', 'lm_clientes_debito',
-      'lm_despesas_previstas', 'lm_folhas', 'lm_dizimos_ofertas', 'lm_metas', 'lm_tipos_folha',
-      'ent_players', 'ent_jogadores',
-      'despesas', 'receitas', 'leituras', 'metas', 'aportes', 'rendimentos',
-      'tipos_receita', 'tipos_despesa', 'livros',
-      'pessoal_devedores', 'pessoal_dizimos_ofertas'
+      'igreja_entradas',
+      'igreja_despesas_previstas',
+      'igreja_membros',
+      'lm_lanc_servicos',
+      'lm_lanc_despesas',
+      'despesas_previstas',
+      'ent_partidas',
+      'ent_artilharia',
+      'igreja_despesas',
+      'cargos_igreja',
+      'igreja_conjuntos',
+      'igreja_funcoes',
+      'igreja_classes',
+      'igreja_dizimistas',
+      'igreja_tipos_entrada',
+      'igreja_tipos_despesa',
+      'lm_clientes',
+      'lm_servicos',
+      'lm_despesas',
+      'lm_clientes_debito',
+      'lm_despesas_previstas',
+      'lm_folhas',
+      'lm_dizimos_ofertas',
+      'lm_metas',
+      'lm_tipos_folha',
+      'ent_players',
+      'ent_jogadores',
+      'despesas',
+      'receitas',
+      'leituras',
+      'metas',
+      'aportes',
+      'rendimentos',
+      'tipos_receita',
+      'tipos_despesa',
+      'livros',
+      'pessoal_devedores',
+      'pessoal_dizimos_ofertas',
     ];
 
     if (!force) {
@@ -61,36 +88,69 @@ Deno.serve(async (req) => {
       const tablesWithData = results.filter(Boolean);
 
       if (tablesWithData.length > 0) {
-        return new Response(JSON.stringify({
-          error: 'Este usuário possui dados relacionados',
-          tables: tablesWithData
-        }), {
-          status: 409,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return new Response(
+          JSON.stringify({
+            error: 'Este usuário possui dados relacionados',
+            tables: tablesWithData,
+          }),
+          {
+            status: 409,
+            headers: {
+              ...corsHeaders,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
       }
     }
 
     for (const table of tablesToCheck) {
-      await supabaseAdmin.from(table).delete().eq('user_id', userId);
+      const { error } = await supabaseAdmin
+        .from(table)
+        .delete()
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error(`Error deleting from ${table}:`, error);
+      }
     }
 
-    await supabaseAdmin.from('usuarios_sistema').delete().eq('id', userId);
-    await supabaseAdmin.from('profiles').delete().eq('id', userId);
+    await supabaseAdmin
+      .from('usuarios_sistema')
+      .delete()
+      .eq('id', userId);
 
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    await supabaseAdmin
+      .from('profiles')
+      .delete()
+      .eq('id', userId);
 
-    if (error) throw error;
+    const { error: authError } =
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+
+    if (authError) throw authError;
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      },
     });
-
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error('Delete user error:', error);
+
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }),
+      {
+        status: 500,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
   }
 });
