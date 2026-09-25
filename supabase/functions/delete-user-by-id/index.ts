@@ -1,5 +1,6 @@
-import { corsHeaders } from "./cors.ts";
-import { getAdminContext } from "../_shared/admin.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { corsHeaders } from './cors.ts';
+import { getAdminContext } from '../_shared/admin.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -16,7 +17,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseAdmin = admin.supabase;
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
     const { userId, force = false } = await req.json();
 
     if (!userId) {
@@ -55,7 +60,7 @@ Deno.serve(async (req) => {
 
       const tablesWithData = results.filter(Boolean);
 
-      if (tablesWithData.length > 0) {
+      if (tablesWithData.length) {
         return new Response(JSON.stringify({
           error: 'Este usuário possui dados relacionados',
           tables: tablesWithData
@@ -83,11 +88,7 @@ Deno.serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Delete user error:', error);
-
-    return new Response(JSON.stringify({
-      error: error.message
-    }), {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
