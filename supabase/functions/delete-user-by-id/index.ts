@@ -38,8 +38,8 @@ Deno.serve(async (req) => {
       'cargos_igreja', 'igreja_conjuntos', 'igreja_funcoes', 'igreja_classes',
       'igreja_dizimistas', 'igreja_tipos_entrada', 'igreja_tipos_despesa',
       'lm_clientes', 'lm_servicos', 'lm_despesas', 'lm_clientes_debito',
-      'lm_despesas_previstas', 'lm_folhas', 'lm_dizimos_ofertas',
-      'lm_metas', 'lm_tipos_folha', 'ent_players', 'ent_jogadores',
+      'lm_despesas_previstas', 'lm_folhas', 'lm_dizimos_ofertas', 'lm_metas', 'lm_tipos_folha',
+      'ent_players', 'ent_jogadores',
       'despesas', 'receitas', 'leituras', 'metas', 'aportes', 'rendimentos',
       'tipos_receita', 'tipos_despesa', 'livros',
       'pessoal_devedores', 'pessoal_dizimos_ofertas'
@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
 
       const tablesWithData = results.filter(Boolean);
 
-      if (tablesWithData.length) {
+      if (tablesWithData.length > 0) {
         return new Response(JSON.stringify({
           error: 'Este usuário possui dados relacionados',
           tables: tablesWithData
