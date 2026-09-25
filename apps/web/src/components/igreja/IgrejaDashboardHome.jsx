@@ -160,7 +160,7 @@ export default function IgrejaDashboardHome() {
   const periodo = filters.month === 'all' ? 'Todos os meses' : monthNames[Number(filters.month)];
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-7xl mx-auto w-full">
+    <div className="relative p-2 md:p-3 space-y-5 md:space-y-6 w-full overflow-hidden">
 
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-border/50 pb-5">
         <div>
