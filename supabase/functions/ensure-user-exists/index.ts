@@ -7,21 +7,95 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email, userId } = await req.json();
-    
-    if (!email || !userId) {
-      throw new Error('Missing required fields: email or userId');
+    // 1. Exige autenticação
+    const auth = req.headers.get('Authorization');
+
+    if (!auth) {
+      return new Response(JSON.stringify({
+        error: 'Unauthorized'
+      }), {
+        status: 401,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+      });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const token = auth.replace(/^Bearer\s+/i, '');
 
-    // Initialize Supabase client with Service Role to bypass RLS if necessary
+    // 2. Cliente administrativo
+    // Só será usado depois de validar o JWT.
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Check if user exists in usuarios_sistema
+    // 3. Valida o JWT do usuário
+    const {
+      data: { user: authUser },
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !authUser) {
+      return new Response(JSON.stringify({
+        error: 'Unauthorized'
+      }), {
+        status: 401,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+      });
+    }
+
+    // 4. Lê o corpo da requisição
+    const body = await req.json().catch(() => ({}));
+
+    const { userId } = body;
+
+    if (!userId) {
+      return new Response(JSON.stringify({
+        error: 'User ID is required'
+      }), {
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+      });
+    }
+
+    // 5. Impede um usuário de informar o ID de outra pessoa
+    if (userId !== authUser.id) {
+      return new Response(JSON.stringify({
+        error: 'User ID does not match authenticated user'
+      }), {
+        status: 403,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+      });
+    }
+
+    // 6. O email verdadeiro vem do JWT.
+    // Não confiamos em email enviado pelo frontend.
+    if (!authUser.email) {
+      return new Response(JSON.stringify({
+        error: 'Authenticated user has no email'
+      }), {
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+      });
+    }
+
+    const normalizedEmail = authUser.email.trim().toLowerCase();
+
+    // 7. Procura o usuário na tabela do sistema
     const { data: existingUser, error: checkError } = await supabaseAdmin
       .from('usuarios_sistema')
       .select('*')
@@ -29,48 +103,105 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Error checking user existence:', checkError);
+      console.error(
+        'Error checking user existence:',
+        checkError
+      );
+
       throw checkError;
     }
 
-    // 2. If user exists, return it
+    // 8. Se já existe, confirma que pertence ao usuário autenticado
     if (existingUser) {
-      return new Response(JSON.stringify({ data: existingUser }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+
+      if (existingUser.id !== authUser.id) {
+        console.error(
+          'User identity mismatch:',
+          {
+            email: normalizedEmail,
+            authenticatedUserId: authUser.id,
+            existingRecordId: existingUser.id
+          }
+        );
+
+        return new Response(JSON.stringify({
+          error: 'User identity mismatch'
+        }), {
+          status: 409,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          },
+        });
+      }
+
+      return new Response(JSON.stringify({
+        data: existingUser
+      }), {
         status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
       });
     }
 
-    // 3. If user does not exist, create it with default module 'pessoal'
+    // 9. Usuário autenticado existe no Auth,
+    // mas ainda não possui registro em usuarios_sistema.
     const now = new Date().toISOString();
-    const { data: newUser, error: insertError } = await supabaseAdmin
-      .from('usuarios_sistema')
-      .insert([
-        {
-          id: userId,
-          email: normalizedEmail,
-          modulos_acesso: ['pessoal'],
-          criado_em: now,
-          atualizado_em: now
-        }
-      ])
-      .select()
-      .single();
+
+    const { data: newUser, error: insertError } =
+      await supabaseAdmin
+        .from('usuarios_sistema')
+        .insert([
+          {
+            id: authUser.id,
+            email: normalizedEmail,
+            modulos_acesso: ['pessoal'],
+            criado_em: now,
+            atualizado_em: now
+          }
+        ])
+        .select()
+        .single();
 
     if (insertError) {
-      console.error('Error inserting new user:', insertError);
+      console.error(
+        'Error inserting new user:',
+        insertError
+      );
+
       throw insertError;
     }
 
-    return new Response(JSON.stringify({ data: newUser }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({
+      data: newUser
+    }), {
       status: 201,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
     });
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+
+    console.error(
+      'ensure-user-exists error:',
+      error
+    );
+
+    return new Response(JSON.stringify({
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Unexpected error'
+    }), {
       status: 400,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      },
     });
   }
 });
