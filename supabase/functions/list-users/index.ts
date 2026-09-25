@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from './cors.ts';
+import { getAdminContext } from '../_shared/admin.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -12,32 +13,17 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Missing authorization header');
-    }
-    const jwt = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(jwt);
-
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Authentication failed' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (user.email !== 'laertemendes722@gmail.com') {
+    const admin = await getAdminContext(req);
+    if (!admin.ok) {
       return new Response(JSON.stringify({ error: 'not_admin' }), {
-        status: 403,
+        status: admin.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const { data, error } = await supabaseAdmin.auth.admin.listUsers();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
