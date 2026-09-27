@@ -38,7 +38,7 @@ export default function DashboardHome(){
 
       const [
         servRes,despRes,cliRes,pedRes,debRes,prevRes,
-        allServRes,allDespRes,entAnoRes,despAnoRes
+        allServRes,allDespRes,allDizimosRes,entAnoRes,despAnoRes
       ]=await Promise.all([
         getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_servicos','data,valor,cliente,cliente_id,lm_servicos(servico)').gte('data',start.toISOString()).lte('data',end.toISOString()),
         getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_despesas','data,valor').gte('data',start.toISOString()).lte('data',end.toISOString()),
@@ -48,17 +48,19 @@ export default function DashboardHome(){
         getAccessibleDataQuery(user.id,isAdmin,'lm_despesas_previstas','data_vencimento,valor,status').gte('data_vencimento',start.toISOString().slice(0,10)).lte('data_vencimento',end.toISOString().slice(0,10)),
         getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_servicos','valor'),
         getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_despesas','valor'),
+        getAccessibleDataQuery(user.id,isAdmin,'lm_dizimos_ofertas','valor'),
         getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_servicos','data,valor').gte('data',ys).lte('data',ye),
         getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_despesas','data,valor').gte('data',ys).lte('data',ye)
       ]);
 
-      const err=[servRes,despRes,cliRes,pedRes,debRes,prevRes,allServRes,allDespRes,entAnoRes,despAnoRes].map(r=>r.error).find(Boolean);
+      const err=[servRes,despRes,cliRes,pedRes,debRes,prevRes,allServRes,allDespRes,allDizimosRes,entAnoRes,despAnoRes].map(r=>r.error).find(Boolean);
       if(err)throw new Error(err.message||'Erro ao carregar os dados.');
 
       const serv=servRes.data||[],desp=despRes.data||[],prev=prevRes.data||[];
       const soma=a=>a.reduce((t,i)=>t+Number(i.valor||0),0);
       const entradas=soma(serv),despesas=soma(desp),saldo=entradas-despesas;
-      const saldoGeral=soma(allServRes.data||[])-soma(allDespRes.data||[]);
+      const totalDizimosOfertas=soma(allDizimosRes.data||[]);
+      const saldoGeral= soma(allServRes.data||[]) - soma(allDespRes.data||[]) - totalDizimosOfertas;
       const debitos=new Set((debRes.data||[]).map(i=>i.cliente)).size;
 
       const cMap={},sMap={};
