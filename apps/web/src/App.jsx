@@ -47,11 +47,62 @@ const PrivateRoute = ({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-transparent text-foreground">
-        <Loader2 className="w-10 h-10 animate-spin text-[hsl(var(--neon-cyan))] mb-4" />
-        <p className="text-[hsl(var(--text-secondary))] animate-pulse">
-          Verificando credenciais...
-        </p>
+      <div
+        className="
+          flex
+          min-h-screen
+          w-full
+          flex-col
+          items-center
+          justify-center
+          bg-transparent
+          text-foreground
+          px-4
+        "
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <div
+          className="
+            flex
+            flex-col
+            items-center
+            justify-center
+            rounded-2xl
+            border
+            border-[hsl(var(--neon-cyan))]/20
+            bg-[hsl(var(--card-bg))]/40
+            px-8
+            py-8
+            shadow-[0_0_20px_hsl(var(--neon-cyan)/0.12)]
+            backdrop-blur-md
+          "
+        >
+          <Loader2
+            className="
+              mb-4
+              h-9
+              w-9
+              animate-spin
+              text-[hsl(var(--neon-cyan))]
+              motion-reduce:animate-none
+            "
+            aria-hidden="true"
+          />
+
+          <p
+            className="
+              text-center
+              text-sm
+              sm:text-base
+              font-medium
+              text-[hsl(var(--text-secondary))]
+            "
+          >
+            Verificando credenciais...
+          </p>
+        </div>
       </div>
     );
   }
@@ -103,22 +154,38 @@ function App() {
         }}
       >
         <Helmet>
-          <title>Sistema Empresarial - Gestão Integrada</title>
+          <title>
+            Sistema Empresarial - Gestão Integrada
+          </title>
+
           <meta
             name="description"
             content="Sistema empresarial completo com múltiplos módulos de gestão."
           />
         </Helmet>
 
-        <div className="dark min-h-screen text-foreground bg-gradient-professional transition-colors duration-300">
+        <div
+          className="
+            dark
+            min-h-screen
+            text-foreground
+            bg-gradient-professional
+            transition-[background-color,opacity]
+            duration-300
+            ease-out
+            motion-reduce:transition-none
+          "
+        >
           <SupabaseErrorBoundary>
             <ErrorBoundary>
               <SupabaseConnectionStatus />
+
               <PermissionsUpdateNotification />
 
               <MobileOptimizedLayout device={device}>
                 <Routes>
                   {/* Core Routes */}
+
                   <Route
                     path="/loading"
                     element={<LoadingScreen />}
@@ -157,6 +224,7 @@ function App() {
                   />
 
                   {/* Dashboard Direct Homes */}
+
                   <Route
                     path="/pessoal/dashboard/home"
                     element={
@@ -194,6 +262,7 @@ function App() {
                   />
 
                   {/* Existing Nested Layout Routes */}
+
                   <Route
                     path="/pessoal/dashboard/*"
                     element={
