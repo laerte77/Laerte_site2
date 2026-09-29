@@ -14,6 +14,7 @@ Deno.serve(async (req) => {
     );
 
     const admin = await getAdminContext(req);
+
     if (!admin.ok) {
       return new Response(JSON.stringify({ error: 'not_admin' }), {
         status: admin.status,
@@ -23,12 +24,26 @@ Deno.serve(async (req) => {
 
     const { email, password, allowed_modules } = await req.json();
 
-    const { data: { user }, error } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { allowed_modules },
-    });
+    if (
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !email.trim() ||
+      password.length < 6 ||
+      !Array.isArray(allowed_modules)
+    ) {
+      return new Response(JSON.stringify({ error: 'Dados inválidos' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { data: { user }, error } =
+      await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { allowed_modules },
+      });
 
     if (error) throw error;
 
@@ -36,7 +51,9 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({
+      error: error instanceof Error ? error.message : 'Erro desconhecido',
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
