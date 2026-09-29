@@ -38,47 +38,158 @@ const ModuleCard = ({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.1, duration: 0.4 }}
-      whileHover={{ scale: 1.02, y: -4 }}
-      whileTap={{ scale: 0.99 }}
-      className="relative p-8 card-base min-h-[200px] cursor-pointer group transition-smooth-300"
+      initial={{
+        opacity: 0,
+        y: 20
+      }}
+      animate={{
+        opacity: 1,
+        y: 0
+      }}
+      transition={{
+        delay: index * 0.1,
+        duration: 0.4,
+        ease: 'easeOut'
+      }}
+      whileHover={{
+        scale: 1.02,
+        y: -4
+      }}
+      whileTap={{
+        scale: 0.99
+      }}
+      className="
+        relative
+        min-h-[200px]
+        cursor-pointer
+        rounded-xl
+        p-8
+        card-base
+        group
+
+        transition-[background-color,border-color,box-shadow,opacity]
+        duration-300
+        ease-out
+
+        focus-visible:outline-none
+
+        motion-reduce:transition-none
+      "
       onClick={handleNavigate}
       onKeyDown={handleKeyDown}
       role="button"
       tabIndex={0}
       aria-label={`Acessar módulo ${title}`}
     >
-      <div className="flex flex-col h-full">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="p-4 rounded-2xl bg-[hsl(var(--cyan-primary))]/20 group-hover:bg-[hsl(var(--cyan-primary))]/30 transition-smooth-300 group-hover:shadow-cyan-lg">
+      <div className="flex h-full flex-col">
+        <div className="mb-4 flex items-center gap-4">
+          <div
+            className="
+              rounded-2xl
+              bg-[hsl(var(--cyan-primary))]/20
+              p-4
+
+              transition-[background-color,box-shadow]
+              duration-200
+              ease-out
+
+              group-hover:bg-[hsl(var(--cyan-primary))]/30
+              group-hover:shadow-cyan-lg
+
+              motion-reduce:transition-none
+            "
+          >
             <Icon
-              className="w-16 h-16 text-[hsl(var(--cyan-primary))]"
+              className="
+                h-16
+                w-16
+                text-[hsl(var(--cyan-primary))]
+              "
               aria-hidden="true"
             />
           </div>
         </div>
 
-        <h3 className="text-2xl font-bold text-white mb-3 font-['Poppins']">
+        <h3
+          className="
+            mb-3
+            text-2xl
+            font-bold
+            text-white
+            font-['Poppins']
+          "
+        >
           {title}
         </h3>
 
-        <p className="text-[hsl(var(--text-secondary))] mb-4 flex-grow font-['Inter'] leading-relaxed">
+        <p
+          className="
+            mb-4
+            flex-grow
+            font-['Inter']
+            leading-relaxed
+            text-[hsl(var(--text-secondary))]
+          "
+        >
           {description}
         </p>
 
-        <div className="flex items-center text-[hsl(var(--cyan-primary))] font-semibold group-hover:gap-3 transition-all duration-300 gap-2 font-['Inter']">
+        <div
+          className="
+            flex
+            items-center
+            gap-2
+            font-['Inter']
+            font-semibold
+            text-[hsl(var(--cyan-primary))]
+
+            transition-[gap,color]
+            duration-200
+            ease-out
+
+            group-hover:gap-3
+
+            motion-reduce:transition-none
+          "
+        >
           <span>Acessar</span>
 
           <ArrowRight
-            className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300"
+            className="
+              h-5
+              w-5
+              transition-transform
+              duration-200
+              ease-out
+              group-hover:translate-x-1
+              motion-reduce:transition-none
+              motion-reduce:transform-none
+            "
             aria-hidden="true"
           />
         </div>
       </div>
 
-      <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-[hsl(var(--cyan-primary))]/0 to-[hsl(var(--cyan-primary))]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+      <div
+        className="
+          pointer-events-none
+          absolute
+          inset-0
+          rounded-lg
+          bg-gradient-to-br
+          from-[hsl(var(--cyan-primary))]/0
+          to-[hsl(var(--cyan-primary))]/5
+          opacity-0
+
+          transition-opacity
+          duration-300
+
+          group-hover:opacity-100
+
+          motion-reduce:transition-none
+        "
+        aria-hidden="true"
+      />
     </motion.div>
   );
 };
@@ -137,7 +248,13 @@ const MODULE_CONFIG = {
 
 const ModuleSelection = () => {
   const navigate = useNavigate();
-  const { isAdmin, canAccessModule, loading, signOut } = useAuth();
+
+  const {
+    isAdmin,
+    canAccessModule,
+    loading,
+    signOut
+  } = useAuth();
 
   const handleNavigation = (path) => {
     navigate(path);
@@ -145,14 +262,47 @@ const ModuleSelection = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[hsl(var(--cyan-primary))] via-[hsl(var(--dark-bg))] to-[hsl(var(--dark-bg))] flex items-center justify-center text-white">
+      <div
+        className="
+          flex
+          min-h-screen
+          items-center
+          justify-center
+          bg-gradient-to-br
+          from-[hsl(var(--cyan-primary))]
+          via-[hsl(var(--dark-bg))]
+          to-[hsl(var(--dark-bg))]
+          px-4
+          text-white
+        "
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         <div className="flex flex-col items-center">
           <Loader2
-            className="w-12 h-12 animate-spin text-[hsl(var(--cyan-primary))] mb-4"
+            className="
+              mb-4
+              h-10
+              w-10
+              sm:h-12
+              sm:w-12
+              animate-spin
+              text-[hsl(var(--cyan-primary))]
+              motion-reduce:animate-none
+            "
             aria-hidden="true"
           />
 
-          <p className="text-lg text-[hsl(var(--text-secondary))] font-['Inter']">
+          <p
+            className="
+              text-center
+              text-base
+              sm:text-lg
+              font-['Inter']
+              text-[hsl(var(--text-secondary))]
+            "
+          >
             Carregando permissões...
           </p>
         </div>
@@ -160,77 +310,254 @@ const ModuleSelection = () => {
     );
   }
 
-  const displayModuleKeys = Object.keys(MODULE_CONFIG).filter((modKey) =>
-    canAccessModule(modKey)
-  );
+  const displayModuleKeys =
+    Object.keys(MODULE_CONFIG).filter((modKey) =>
+      canAccessModule(modKey)
+    );
 
   return (
     <>
       <Helmet>
         <title>Seleção de Módulos</title>
+
         <meta
           name="description"
           content="Escolha o módulo que deseja acessar."
         />
       </Helmet>
 
-      <div className="min-h-screen bg-gradient-to-br from-[hsl(var(--cyan-primary))] via-[hsl(var(--dark-bg))] to-[hsl(var(--dark-bg))] flex flex-col items-center justify-center p-4 text-white relative overflow-hidden">
-
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[hsl(var(--cyan-primary))]/10 rounded-full blur-3xl animate-pulse-custom"></div>
+      <div
+        className="
+          relative
+          flex
+          min-h-screen
+          flex-col
+          items-center
+          justify-center
+          overflow-hidden
+          bg-gradient-to-br
+          from-[hsl(var(--cyan-primary))]
+          via-[hsl(var(--dark-bg))]
+          to-[hsl(var(--dark-bg))]
+          p-4
+          text-white
+          sm:p-6
+        "
+      >
+        <div
+          className="
+            pointer-events-none
+            absolute
+            inset-0
+            overflow-hidden
+          "
+          aria-hidden="true"
+        >
+          <div
+            className="
+              absolute
+              left-1/4
+              top-1/4
+              h-72
+              w-72
+              rounded-full
+              bg-[hsl(var(--cyan-primary))]/10
+              blur-3xl
+              animate-pulse-custom
+              motion-reduce:animate-none
+              sm:h-96
+              sm:w-96
+            "
+          />
 
           <div
-            className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[hsl(var(--cyan-primary))]/10 rounded-full blur-3xl animate-pulse-custom"
-            style={{ animationDelay: '1s' }}
-          ></div>
+            className="
+              absolute
+              bottom-1/4
+              right-1/4
+              h-72
+              w-72
+              rounded-full
+              bg-[hsl(var(--cyan-primary))]/10
+              blur-3xl
+              animate-pulse-custom
+              motion-reduce:animate-none
+              sm:h-96
+              sm:w-96
+            "
+            style={{
+              animationDelay: '1s'
+            }}
+          />
         </div>
 
         <Button
+          type="button"
           variant="ghost"
           onClick={signOut}
-          className="absolute top-4 right-4 text-[hsl(var(--destructive))] hover:text-[hsl(var(--destructive))]/80 hover:bg-[hsl(var(--destructive))]/10 focus-ring z-10"
+          className="
+            absolute
+            right-4
+            top-4
+            z-10
+            min-h-11
+            rounded-full
+            px-4
+            text-[hsl(var(--destructive))]
+            transition-[background-color,color,box-shadow,transform]
+            duration-200
+            ease-out
+            hover:bg-[hsl(var(--destructive))]/10
+            hover:text-[hsl(var(--destructive))]/80
+            hover:-translate-y-px
+            focus-visible:ring-[hsl(var(--destructive))]
+            motion-reduce:transition-none
+            motion-reduce:transform-none
+          "
+          aria-label="Sair do sistema"
         >
-          <LogOut className="w-4 h-4 mr-2" aria-hidden="true" />
+          <LogOut
+            className="mr-2 h-4 w-4"
+            aria-hidden="true"
+          />
+
           Sair
         </Button>
 
-        <div className="text-center mb-12 mt-12 z-10 px-4">
+        <div
+          className="
+            z-10
+            mb-10
+            mt-14
+            max-w-3xl
+            px-4
+            text-center
+            sm:mb-12
+            sm:mt-12
+          "
+        >
           <motion.div
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ duration: 0.6, type: 'spring' }}
-            className="inline-flex items-center justify-center w-20 h-20 bg-[hsl(var(--cyan-primary))]/20 rounded-2xl mb-6 animate-glow"
+            initial={{
+              scale: 0,
+              rotate: -20
+            }}
+            animate={{
+              scale: 1,
+              rotate: 0
+            }}
+            transition={{
+              duration: 0.5,
+              type: 'spring',
+              stiffness: 180,
+              damping: 16
+            }}
+            className="
+              mb-6
+              inline-flex
+              h-20
+              w-20
+              items-center
+              justify-center
+              rounded-2xl
+              bg-[hsl(var(--cyan-primary))]/20
+              animate-glow
+              motion-reduce:animate-none
+            "
+            aria-hidden="true"
           >
             <Zap
-              className="w-12 h-12 text-[hsl(var(--cyan-primary))]"
-              aria-hidden="true"
+              className="
+                h-11
+                w-11
+                sm:h-12
+                sm:w-12
+                text-[hsl(var(--cyan-primary))]
+              "
             />
           </motion.div>
 
           <motion.h1
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-            className="text-4xl md:text-5xl font-extrabold text-gradient-cyan mb-3 font-['Poppins']"
+            initial={{
+              opacity: 0,
+              y: -20
+            }}
+            animate={{
+              opacity: 1,
+              y: 0
+            }}
+            transition={{
+              delay: 0.15,
+              duration: 0.5
+            }}
+            className="
+              mb-3
+              text-3xl
+              font-extrabold
+              text-gradient-cyan
+              font-['Poppins']
+              sm:text-4xl
+              md:text-5xl
+            "
           >
             Selecione um Módulo
           </motion.h1>
 
           <motion.p
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.6 }}
-            className="text-lg text-[hsl(var(--text-secondary))] font-['Inter'] max-w-2xl mx-auto"
+            initial={{
+              opacity: 0,
+              y: -10
+            }}
+            animate={{
+              opacity: 1,
+              y: 0
+            }}
+            transition={{
+              delay: 0.3,
+              duration: 0.5
+            }}
+            className="
+              mx-auto
+              max-w-2xl
+              text-base
+              leading-relaxed
+              text-[hsl(var(--text-secondary))]
+              font-['Inter']
+              sm:text-lg
+            "
           >
             Escolha o sistema que deseja gerenciar
           </motion.p>
 
           {isAdmin && (
             <motion.span
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.6, duration: 0.4 }}
-              className="inline-block mt-4 px-4 py-2 bg-[hsl(var(--cyan-primary))]/20 border border-[hsl(var(--cyan-primary))]/50 rounded-full text-xs text-[hsl(var(--cyan-primary))] uppercase tracking-widest font-bold font-['Inter']"
+              initial={{
+                opacity: 0,
+                scale: 0.9
+              }}
+              animate={{
+                opacity: 1,
+                scale: 1
+              }}
+              transition={{
+                delay: 0.45,
+                duration: 0.35
+              }}
+              className="
+                mt-4
+                inline-block
+                rounded-full
+                border
+                border-[hsl(var(--cyan-primary))]/50
+                bg-[hsl(var(--cyan-primary))]/20
+                px-4
+                py-2
+                text-xs
+                font-bold
+                uppercase
+                tracking-widest
+                text-[hsl(var(--cyan-primary))]
+                font-['Inter']
+              "
             >
               Modo Administrador
             </motion.span>
@@ -239,43 +566,113 @@ const ModuleSelection = () => {
 
         {displayModuleKeys.length === 0 ? (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="card-base p-8 max-w-lg text-center flex flex-col items-center z-10"
+            initial={{
+              opacity: 0,
+              y: 20
+            }}
+            animate={{
+              opacity: 1,
+              y: 0
+            }}
+            className="
+              z-10
+              flex
+              w-full
+              max-w-lg
+              flex-col
+              items-center
+              rounded-2xl
+              card-base
+              p-6
+              text-center
+              sm:p-8
+            "
+            role="alert"
           >
             <AlertCircle
-              className="w-16 h-16 text-[hsl(var(--destructive))] mb-4"
+              className="
+                mb-4
+                h-14
+                w-14
+                sm:h-16
+                sm:w-16
+                text-[hsl(var(--destructive))]
+              "
               aria-hidden="true"
             />
 
-            <h2 className="text-2xl font-bold text-white mb-3 font-['Poppins']">
+            <h2
+              className="
+                mb-3
+                text-2xl
+                font-bold
+                text-white
+                font-['Poppins']
+              "
+            >
               Acesso Restrito
             </h2>
 
-            <p className="text-[hsl(var(--text-secondary))] mb-6 font-['Inter']">
-              Nenhum módulo foi liberado para o seu perfil. Por favor, contate o administrador do sistema para configurar seus acessos.
+            <p
+              className="
+                mb-6
+                font-['Inter']
+                leading-relaxed
+                text-[hsl(var(--text-secondary))]
+              "
+            >
+              Nenhum módulo foi liberado para o seu perfil.
+              Por favor, contate o administrador do sistema
+              para configurar seus acessos.
             </p>
 
-            <Button onClick={signOut} className="btn-destructive">
+            <Button
+              type="button"
+              onClick={signOut}
+              className="
+                min-h-11
+                px-6
+                btn-destructive
+              "
+            >
               Voltar ao Login
             </Button>
           </motion.div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 w-full max-w-7xl z-10 px-4">
-            {displayModuleKeys.map((modKey, index) => {
-              const modConfig = MODULE_CONFIG[modKey];
+          <div
+            className="
+              z-10
+              grid
+              w-full
+              max-w-7xl
+              grid-cols-1
+              gap-6
+              px-2
+              sm:px-4
+              md:grid-cols-2
+              md:gap-8
+              lg:grid-cols-3
+            "
+          >
+            {displayModuleKeys.map(
+              (modKey, index) => {
+                const modConfig =
+                  MODULE_CONFIG[modKey];
 
-              if (!modConfig) return null;
+                if (!modConfig) {
+                  return null;
+                }
 
-              return (
-                <ModuleCard
-                  key={modKey}
-                  {...modConfig}
-                  onNavigate={handleNavigation}
-                  index={index}
-                />
-              );
-            })}
+                return (
+                  <ModuleCard
+                    key={modKey}
+                    {...modConfig}
+                    onNavigate={handleNavigation}
+                    index={index}
+                  />
+                );
+              }
+            )}
           </div>
         )}
       </div>
