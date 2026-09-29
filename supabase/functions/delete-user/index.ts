@@ -9,6 +9,16 @@ Deno.serve(async (req) => {
 
   try {
     const { userId } = await req.json();
+    const { userId } = await req.json();
+
+    if (!userId) {
+    return new Response(JSON.stringify({ error: 'User ID is required' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400,
+  });
+}
+
+const admin = await getAdminContext(req);
     const admin = await getAdminContext(req);
 
     if (!admin.ok) {
