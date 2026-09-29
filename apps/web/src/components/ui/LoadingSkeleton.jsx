@@ -5,12 +5,25 @@ export default function LoadingSkeleton({ className, ...props }) {
   return (
     <div
       className={cn(
-        "animate-pulse bg-muted/50 rounded-md relative overflow-hidden",
+        'relative overflow-hidden rounded-md bg-muted/50',
         className
       )}
+      aria-hidden="true"
       {...props}
     >
-      <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+      <div
+        className="
+          absolute
+          inset-0
+          -translate-x-full
+          bg-gradient-to-r
+          from-transparent
+          via-white/10
+          to-transparent
+          animate-shimmer
+          motion-reduce:animate-none
+        "
+      />
     </div>
   );
 }
