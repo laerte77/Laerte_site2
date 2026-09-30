@@ -1,99 +1,73 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Menu, Home, Bell, ChevronLeft, Search, X, LogOut } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
-import DividerLine from '@/components/ui/DividerLine';
-import UserMenu from '@/components/UserMenu';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
+import React,{useState}from'react';
+import{Link,useNavigate}from'react-router-dom';
+import{Menu,Home,Bell,ChevronLeft,Search,X,LogOut}from'lucide-react';
+import{Button}from'@/components/ui/button';
+import{Input}from'@/components/ui/input';
+import{cn}from'@/lib/utils';
+import DividerLine from'@/components/ui/DividerLine';
+import UserMenu from'@/components/UserMenu';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
 
-const Header = ({ toggleSidebar, isSidebarOpen }) => {
-  const navigate = useNavigate();
-  const { signOut } = useAuth();
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
+const Header=({toggleSidebar,isSidebarOpen})=>{
+ const navigate=useNavigate();
+ const{signOut}=useAuth();
+ const[isSearchOpen,setIsSearchOpen]=useState(false);
+ const handleLogout=async()=>{await signOut();navigate('/login')};
 
-  const handleLogout = async () => {
-    await signOut();
-    navigate('/login');
-  };
+ return <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-[hsl(var(--neon-entretenimento))]/20 bg-card/60 px-4 backdrop-blur-md md:px-6 animate-fade-in motion-reduce:animate-none">
+  <div className="flex min-w-0 items-center gap-1 md:gap-3">
+   <Button type="button" variant="ghost" size="icon" onClick={toggleSidebar} className="z-50 lg:hidden text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] hover:bg-[hsl(var(--neon-entretenimento))]/10 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none" aria-label={isSidebarOpen?'Fechar menu lateral':'Abrir menu lateral'} aria-expanded={isSidebarOpen}>
+    {isSidebarOpen?<X className="h-6 w-6" aria-hidden="true"/>:<Menu className="h-6 w-6" aria-hidden="true"/>}
+   </Button>
 
-  return (
-    <header className="flex h-16 items-center justify-between border-b border-[hsl(var(--neon-entretenimento))]/20 bg-card/50 backdrop-blur-sm px-4 md:px-6 sticky top-0 z-30 transition-all duration-300 animate-fade-in">
-      <div className="flex items-center gap-2 md:gap-4">
-        <Button variant="ghost" size="icon" onClick={toggleSidebar} className="lg:hidden text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] z-50 hover-scale">
-          {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </Button>
-        
-        <Button variant="ghost" size="icon" onClick={() => navigate('/modules')} className="hidden md:flex text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] hover-scale" title="Voltar">
-            <ChevronLeft className="h-5 w-5" />
-        </Button>
+   <Button type="button" variant="ghost" size="icon" onClick={()=>navigate('/modules')} className="hidden text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] hover:bg-[hsl(var(--neon-entretenimento))]/10 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none md:flex" title="Voltar" aria-label="Voltar para os módulos">
+    <ChevronLeft className="h-5 w-5" aria-hidden="true"/>
+   </Button>
 
-        <Button variant="ghost" size="icon" onClick={() => navigate('/modules')} className="text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] bg-[hsl(var(--neon-entretenimento))]/10 hover-scale transition-colors duration-300" title="Home dos Módulos">
-            <Home className="h-5 w-5 text-[hsl(var(--neon-entretenimento))]" />
-        </Button>
+   <Button type="button" variant="ghost" size="icon" onClick={()=>navigate('/modules')} className="text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] hover:bg-[hsl(var(--neon-entretenimento))]/10 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none" title="Home dos Módulos" aria-label="Ir para a seleção de módulos">
+    <Home className="h-5 w-5 text-[hsl(var(--neon-entretenimento))]" aria-hidden="true"/>
+   </Button>
 
-        <DividerLine moduleName="entretenimento" vertical className="mx-2 h-8 opacity-40 hidden md:block" />
+   <DividerLine moduleName="entretenimento" vertical className="mx-2 hidden h-8 opacity-40 md:block"/>
 
-        <Link to="/entretenimento/dashboard/home" className={cn("flex items-center gap-2 group", isSearchOpen ? "hidden md:flex" : "flex")}>
-          <div className="flex flex-col">
-             <span className="text-lg font-bold text-[hsl(var(--neon-entretenimento))] tracking-tight group-hover:opacity-80 transition-colors">Entretenimento</span>
-          </div>
-        </Link>
-      </div>
+   <Link to="/entretenimento/dashboard/home" className={cn("min-w-0 items-center gap-2 rounded-md transition-[opacity,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-entretenimento))] focus-visible:ring-offset-2 motion-reduce:transition-none",isSearchOpen?"hidden md:flex":"flex")} aria-label="Ir para o painel Entretenimento">
+    <span className="truncate text-lg font-bold tracking-tight text-[hsl(var(--neon-entretenimento))] transition-opacity duration-200 hover:opacity-80 motion-reduce:transition-none">Entretenimento</span>
+   </Link>
+  </div>
 
-      {isSearchOpen && (
-          <div className="flex flex-1 items-center gap-2 md:hidden absolute inset-0 bg-background px-4 z-40 animate-in fade-in slide-in-from-top-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-             <Input
-              autoFocus
-              type="search"
-              placeholder="Pesquisar..."
-              className="w-full bg-transparent border-none focus-visible:ring-0 placeholder:text-muted-foreground/70 h-14 text-foreground"
-              onBlur={() => setIsSearchOpen(false)}
-            />
-            <Button variant="ghost" size="sm" onClick={() => setIsSearchOpen(false)}>
-                <X className="h-5 w-5" />
-            </Button>
-          </div>
-      )}
+  {isSearchOpen&&<div className="absolute inset-0 z-40 flex items-center gap-2 bg-background/95 px-4 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200 motion-reduce:animate-none md:hidden">
+   <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"/>
+   <Input autoFocus type="search" placeholder="Pesquisar..." className="h-12 w-full border-none bg-transparent text-foreground focus-visible:ring-0 placeholder:text-muted-foreground/70" aria-label="Pesquisar no módulo Entretenimento" onBlur={()=>setIsSearchOpen(false)}/>
+   <Button type="button" variant="ghost" size="icon" onClick={()=>setIsSearchOpen(false)} aria-label="Fechar pesquisa">
+    <X className="h-5 w-5" aria-hidden="true"/>
+   </Button>
+  </div>}
 
-      <div className="hidden md:flex flex-1 max-w-md mx-4 animate-fade-in">
-        <div className="relative w-full">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Pesquisar..."
-            className="w-full bg-input border-border pl-9 focus-visible:ring-[hsl(var(--neon-entretenimento))] placeholder:text-muted-foreground/70 glow-entretenimento transition-all"
-          />
-        </div>
-      </div>
+  <div className="mx-4 hidden max-w-md flex-1 md:flex">
+   <div className="relative w-full animate-fade-in motion-reduce:animate-none">
+    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true"/>
+    <Input type="search" placeholder="Pesquisar..." className="w-full bg-input/50 border-border pl-9 focus-visible:ring-[hsl(var(--neon-entretenimento))] placeholder:text-muted-foreground/70 glow-entretenimento" aria-label="Pesquisar no módulo Entretenimento"/>
+   </div>
+  </div>
 
-      <div className={cn("flex items-center gap-1 md:gap-2", isSearchOpen ? "hidden md:flex" : "flex")}>
-        <Button variant="ghost" size="icon" onClick={() => setIsSearchOpen(true)} className="md:hidden text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] hover-scale">
-            <Search className="h-5 w-5" />
-        </Button>
+  <div className={cn("flex items-center gap-1 md:gap-2",isSearchOpen?"hidden md:flex":"flex")}>
+   <Button type="button" variant="ghost" size="icon" onClick={()=>setIsSearchOpen(true)} className="text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] hover:bg-[hsl(var(--neon-entretenimento))]/10 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none md:hidden" aria-label="Abrir pesquisa">
+    <Search className="h-5 w-5" aria-hidden="true"/>
+   </Button>
 
-        <Button variant="ghost" size="icon" title="Notificações" className="text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] hover:bg-[hsl(var(--neon-entretenimento))]/10 relative hover-scale transition-colors">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-[hsl(var(--neon-entretenimento))] border-2 border-background animate-pulse"></span>
-        </Button>
+   <Button type="button" variant="ghost" size="icon" title="Notificações" className="relative text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] hover:bg-[hsl(var(--neon-entretenimento))]/10 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none" aria-label="Notificações">
+    <Bell className="h-5 w-5" aria-hidden="true"/>
+    <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-background bg-[hsl(var(--neon-entretenimento))] animate-pulse motion-reduce:animate-none" aria-hidden="true"/>
+   </Button>
 
-        <DividerLine moduleName="entretenimento" vertical className="mx-2 h-8 opacity-40 hidden md:block" />
+   <DividerLine moduleName="entretenimento" vertical className="mx-2 hidden h-8 opacity-40 md:block"/>
+   <UserMenu moduleColor="neon-entretenimento"/>
 
-        <UserMenu moduleColor="neon-entretenimento" />
-
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleLogout}
-          className="ml-2 hidden sm:flex text-[hsl(var(--neon-entretenimento))] border-[hsl(var(--neon-entretenimento))]/50 hover:bg-[hsl(var(--neon-entretenimento))]/10 hover:border-[hsl(var(--neon-entretenimento))] hover:shadow-[0_0_15px_hsl(var(--neon-entretenimento)/0.4)] transition-all duration-300"
-        >
-          <LogOut className="h-4 w-4 mr-2" /> LOG-OFF
-        </Button>
-      </div>
-    </header>
-  );
+   <Button type="button" variant="outline" size="sm" onClick={handleLogout} className="ml-2 hidden min-h-9 gap-2 border-[hsl(var(--neon-entretenimento))]/50 text-[hsl(var(--neon-entretenimento))] transition-[background-color,border-color,color,box-shadow,transform] duration-200 hover:bg-[hsl(var(--neon-entretenimento))]/10 hover:border-[hsl(var(--neon-entretenimento))] hover:shadow-[0_0_15px_hsl(var(--neon-entretenimento)/0.4)] hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none sm:flex">
+    <LogOut className="h-4 w-4" aria-hidden="true"/>LOG-OFF
+   </Button>
+  </div>
+ </header>
 };
 
 export default Header;
