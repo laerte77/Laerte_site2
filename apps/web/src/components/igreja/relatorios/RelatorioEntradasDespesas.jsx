@@ -144,16 +144,13 @@ const RelatorioEntradasDespesasPDF=()=>{
      *{box-sizing:border-box}
      html,body,#root{margin:0!important;padding:0!important;background:#fff!important;color:#1e293b!important}
      body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;font-family:Arial,Helvetica,sans-serif}
-     
      .report-container{width:100%;background:#fff}
      .print-hidden{display:flex}
      .page{width:190mm;min-height:280mm;margin:0 auto;position:relative;background:#fff}
      .page-one{page-break-after:always}
-     
      .control-bar{background:#f1f5f9;border-bottom:1px solid #e2e8f0;padding:12px 16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
      .control-title{font-size:14px;color:#64748b}
      .control-actions{display:flex;gap:8px}
-     
      .report-header{text-align:center;padding-top:1mm}
      .header-brand{position:relative;min-height:25mm}
      .header-logo{position:absolute;left:0;top:-2mm;width:29mm;height:25mm;object-fit:contain}
@@ -161,7 +158,6 @@ const RelatorioEntradasDespesasPDF=()=>{
      .header-city{margin-top:2px;color:#1e293b;font-size:9px;font-weight:700}
      .main-title{margin-top:4mm;background:#1e3a8a;color:#fff;border-radius:4px;padding:6px 10px;font-size:10px;font-weight:800;text-transform:uppercase}
      .period{margin-top:2.5mm;font-size:9px;font-weight:700;color:#1e3a8a}
-     
      .section{margin-top:4mm}
      .section-title{height:9mm;display:flex;align-items:center;gap:7px;border-radius:4px;padding:0 10px;margin-bottom:2mm}
      .section-title h3{margin:0;font-size:11px;font-weight:800}
@@ -171,7 +167,6 @@ const RelatorioEntradasDespesasPDF=()=>{
      .other-title{background:#fef3c7;color:#c2410c;border-left:4px solid #f59e0b}
      .expense-title{background:#fee2e2;color:#dc2626;border-left:4px solid #ef4444}
      .summary-title{background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb}
-     
      table{width:100%;border-collapse:collapse;font-size:8.1px;table-layout:fixed}
      th{font-weight:800;text-align:left;padding:4px 5px;border:1px solid #cbd5e1;line-height:1.05}
      td{padding:3.5px 5px;border:1px solid #cbd5e1;line-height:1.05;vertical-align:middle}
@@ -184,20 +179,15 @@ const RelatorioEntradasDespesasPDF=()=>{
      .table-description{width:auto}
      .table-type{width:20%}
      .table-value{width:20%;text-align:right}
-     .table-status{width:13%;text-align:center}
      .bold{font-weight:800}
-     
      tfoot td{font-weight:800;padding:5px}
      .offer-total td{background:#ecfdf5;color:#047857;border-color:#a7f3d0}
      .tithe-total td{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
      .other-total td{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
      .expense-total td{background:#fef2f2;color:#dc2626;border-color:#fecaca}
-     
      .empty-message{padding:8px 10px;border:1px dashed #cbd5e1;border-radius:4px;color:#64748b;font-size:7.5px;font-style:italic;text-align:center}
-     
      .second-page{padding-top:1mm}
      .second-page .section:first-child{margin-top:0}
-     
      .summary-box{border:1px solid #bfdbfe;border-radius:6px;overflow:hidden}
      .summary-row{display:grid;grid-template-columns:1fr 34%;align-items:center;min-height:13mm;padding:5px 9px;border-bottom:1px solid #dbeafe}
      .summary-row:last-child{border-bottom:0}
@@ -209,24 +199,19 @@ const RelatorioEntradasDespesasPDF=()=>{
      .balance-row{background:#eff6ff;color:#1d4ed8}
      .cash-row{background:#f1f5f9;color:#1e3a8a}
      .summary-icon{width:18px;height:18px;vertical-align:middle;margin-right:7px;float:left;margin-top:1px}
-     
      .signature-area{margin-top:5mm;border:1px solid #bfdbfe;border-radius:5px;height:27mm;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:5mm}
      .signature-line{width:62mm;border-top:1px solid #0f172a;margin-bottom:2mm}
      .signature-label{font-size:8px;font-weight:700;color:#1e3a8a}
-     
      .report-footer{position:absolute;left:0;right:0;bottom:0;border-top:1px solid #cbd5e1;padding-top:3mm;display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:8px;color:#64748b;font-size:6.3px}
      .footer-center{text-align:center;font-weight:800;color:#1e3a8a}
      .footer-right{text-align:right}
-     
      .screen-only-note{text-align:center;color:#94a3b8;font-size:7px;margin-top:4mm}
-     
      .loading-screen,.error-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#fff;color:#111827;font-family:Arial,Helvetica,sans-serif}
      .loading-screen p{font-size:15px;margin-top:15px}
      .spinner{width:42px;height:42px;border:4px solid #e5e7eb;border-top-color:#1e3a8a;border-radius:50%;animation:spin .8s linear infinite}
      .error-title{font-size:20px;color:#dc2626;font-weight:700;margin-bottom:8px}
      .error-screen p{color:#475569;margin:0 0 16px}
      @keyframes spin{to{transform:rotate(360deg)}}
-     
      @media print{
       .print-hidden{display:none!important}
       .page{margin:0;width:190mm;min-height:280mm}
@@ -247,7 +232,6 @@ const RelatorioEntradasDespesasPDF=()=>{
      </div>
     </div>
 
-    {/* PÁGINA 1 */}
     <div className="page page-one">
 
      <header className="report-header">
@@ -261,7 +245,6 @@ const RelatorioEntradasDespesasPDF=()=>{
       <div className="period">Período: {periodLabel}</div>
      </header>
 
-     {/* OFERTAS */}
      <section className="section">
       <SectionTitle icon={HandCoins} title="Ofertas" color="offer-title"/>
 
@@ -288,7 +271,6 @@ const RelatorioEntradasDespesasPDF=()=>{
       :<EmptyMessage>Nenhum registro de oferta encontrado para este período.</EmptyMessage>}
      </section>
 
-     {/* DÍZIMOS */}
      <section className="section">
       <SectionTitle icon={Coins} title="Dízimos" color="tithe-title"/>
 
@@ -318,10 +300,8 @@ const RelatorioEntradasDespesasPDF=()=>{
      <div className="screen-only-note print-hidden">Página 1 de 2</div>
     </div>
 
-    {/* PÁGINA 2 */}
     <div className="page second-page">
 
-     {/* OUTRAS ENTRADAS */}
      <section className="section">
       <SectionTitle icon={WalletCards} title="Outras Entradas" color="other-title"/>
 
@@ -349,7 +329,6 @@ const RelatorioEntradasDespesasPDF=()=>{
       :<EmptyMessage>Nenhum outro registro de entrada encontrado para este período.</EmptyMessage>}
      </section>
 
-     {/* DESPESAS */}
      <section className="section">
       <SectionTitle icon={Receipt} title="Despesas" color="expense-title"/>
 
@@ -376,11 +355,11 @@ const RelatorioEntradasDespesasPDF=()=>{
       :<EmptyMessage>Nenhum registro de despesa encontrado para este período.</EmptyMessage>}
      </section>
 
-     {/* RESUMO */}
      <section className="section">
       <SectionTitle icon={BarChart3} title="Resumo do Período" color="summary-title"/>
 
       <div className="summary-box">
+
        <div className="summary-row entry-row">
         <div>
          <BarChart3 className="summary-icon"/>
@@ -414,17 +393,16 @@ const RelatorioEntradasDespesasPDF=()=>{
         </div>
         <div className="summary-value">{formatCurrency(totals.saldoGeral)}</div>
        </div>
+
       </div>
      </section>
 
-     {/* ASSINATURA */}
      <div className="signature-area">
       <PenLine className="summary-icon" style={{float:'none',margin:'0 0 3mm',color:'#1e3a8a'}}/>
       <div className="signature-line"></div>
       <div className="signature-label">Tesoureiro (a)</div>
      </div>
 
-     {/* RODAPÉ ÚNICO DO RELATÓRIO */}
      <footer className="report-footer">
       <div>Relatório emitido pelo sistema da Tesouraria.</div>
       <div className="footer-center">TESOURARIA</div>
