@@ -1,5 +1,5 @@
 import React,{useEffect,useState,useContext}from'react';
-import{Routes,Route,Navigate,useNavigate}from'react-router-dom';
+import{Routes,Route,Navigate,useNavigate,useLocation}from'react-router-dom';
 import Sidebar from'@/components/igreja/Sidebar';
 import Header from'@/components/igreja/Header';
 import DashboardHome from'@/components/igreja/IgrejaDashboardHome';
@@ -27,12 +27,13 @@ import{cn}from'@/lib/utils';
 import{Loader2}from'lucide-react';
 
 const IgrejaDashboard=()=>{
- const navigate=useNavigate(),{session,loading}=useAuth(),{isMobile}=useContext(DeviceContext);
+ const navigate=useNavigate(),location=useLocation(),{session,loading}=useAuth(),{isMobile}=useContext(DeviceContext);
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
 
  useModuleAccessGuard('igreja:tesouraria');
  useEffect(()=>{if(!loading&&!session)navigate('/login')},[session,loading,navigate]);
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
+ useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
 
  if(loading)return <div className="flex h-screen flex-col items-center justify-center text-foreground" role="status" aria-live="polite"><Loader2 className="mb-4 h-10 w-10 animate-spin text-[hsl(var(--neon-gold))] motion-reduce:animate-none" aria-hidden="true"/><p>Carregando Módulo...</p></div>;
 
@@ -40,7 +41,7 @@ const IgrejaDashboard=()=>{
   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile} activeModule="tesouraria"/>
 
   <div className={cn('flex h-screen flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
-   <Header toggleSidebar={()=>setSidebarOpen(prev=>!prev)} submodule="Tesouraria"/>
+   <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} submodule="Tesouraria"/>
 
    <main className="relative w-full flex-1 overflow-y-auto bg-transparent p-4 md:p-6 lg:p-8 [&_.neon-card]:neon-border-gold [&_.neon-card]:neon-hover-gold">
     <Routes>
