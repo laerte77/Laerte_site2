@@ -1,86 +1,131 @@
-import React,{useEffect,useState,useMemo,useCallback}from'react';
-import{useSearchParams}from'react-router-dom';
-import{supabase}from'@/lib/customSupabaseClient';
-import{Helmet}from'react-helmet';
+import React,{useState,useEffect,useCallback,useRef}from'react';
+import{Calendar,Filter,FileDown,Printer,Eye,AlertCircle,Loader2}from'lucide-react';
+import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
+import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
+import{Input}from'@/components/ui/input';
+import{Label}from'@/components/ui/label';
 import{Button}from'@/components/ui/button';
-import{Printer,X,FileText,PenLine}from'lucide-react';
+import{DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger}from'@/components/ui/dropdown-menu';
+import{useToast}from'@/components/ui/use-toast';
+import{supabase}from'@/lib/customSupabaseClient';
+import{ScrollArea}from'@/components/ui/scroll-area';
+import{Alert,AlertDescription,AlertTitle}from'@/components/ui/alert';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
+import{cn}from'@/lib/utils';
 
-const LOGO_URL='https://horizons-cdn.hostinger.com/23ae9372-1ce3-488a-9be5-00d3fa6b6d54/612e5784f3faca006483ae69c11fa425.png';
+const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const availableYears=Array.from({length:6},(_,i)=>new Date().getFullYear()-i);
+const formatCurrency=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 
 export default function RelatorioEntradasDespesas(){
- const[sp]=useSearchParams(),[data,setData]=useState({ofertas:[],dizimos:[],outras:[],despesas:[]}),[all,setAll]=useState({entradas:0,despesas:0}),[loading,setLoading]=useState(true),[error,setError]=useState(null),[date,setDate]=useState('');
- const type=sp.get('filterType'),year=sp.get('year'),month=sp.get('month'),startDate=sp.get('startDate'),endDate=sp.get('endDate'),print=sp.get('print')==='true';
- const money=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),dateBR=v=>new Date(v).toLocaleDateString('pt-BR',{timeZone:'UTC'});
- const period=useMemo(()=>{
-  if(type==='mensal'&&year&&month)return`${['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][+month]||''}/${year}`;
-  if(startDate&&endDate)return`${dateBR(startDate)} a ${dateBR(endDate)}`;
-  return'Período selecionado';
- },[type,year,month,startDate,endDate]);
- const load=useCallback(async()=>{
-  setLoading(true);setError(null);let start,end;
-  if(type==='mensal'&&year&&month){start=new Date(Date.UTC(+year,+month,1));end=new Date(Date.UTC(+year,+month+1,0,23,59,59))}
-  else if(type==='periodo'&&startDate&&endDate){start=new Date(`${startDate}T00:00:00Z`);end=new Date(`${endDate}T23:59:59Z`)}
-  else{setError('Parâmetros inválidos para geração do relatório.');setLoading(false);return}
+ const{toast}=useToast(),{user}=useAuth();
+ const mounted=useRef(false),abortRef=useRef(null),cache=useRef(new Map());
+ const[filterType,setFilterType]=useState('mensal');
+ const[filters,setFilters]=useState({year:new Date().getFullYear(),month:new Date().getMonth(),startDate:new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().split('T')[0],endDate:new Date().toISOString().split('T')[0]});
+ const[totals,setTotals]=useState(null),[loading,setLoading]=useState(false),[error,setError]=useState(null);
+
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;abortRef.current?.abort()}},[]);
+ const change=useCallback((k,v)=>setFilters(p=>({...p,[k]:v})),[]);
+ const changeType=useCallback(v=>{setFilterType(v);setTotals(null);setError(null)},[]);
+
+ const fetchTotals=useCallback(async()=>{
+  if(!user)return;
+  abortRef.current?.abort();abortRef.current=new AbortController();
+  const signal=abortRef.current.signal;
+  setLoading(true);setError(null);
+  const key=JSON.stringify({filterType,filters,userId:user.id});
+  if(cache.current.has(key)){if(mounted.current){setTotals(cache.current.get(key));setLoading(false)}return}
   try{
-   const[a,b,c,d]=await Promise.all([
-    supabase.from('igreja_entradas').select('*, igreja_dizimistas(nome)').gte('data',start.toISOString()).lte('data',end.toISOString()).order('data',{ascending:true}),
-    supabase.from('igreja_despesas').select('*').gte('data',start.toISOString()).lte('data',end.toISOString()).order('data',{ascending:true}),
-    supabase.from('igreja_entradas').select('valor'),
-    supabase.from('igreja_despesas').select('valor')
+   let start,end;
+   if(filterType==='mensal'){
+    if(filters.year==='all'){start='2000-01-01T00:00:00Z';end='2100-12-31T23:59:59Z'}
+    else if(filters.month==='all'){start=new Date(Date.UTC(filters.year,0,1)).toISOString();end=new Date(Date.UTC(filters.year,11,31,23,59,59)).toISOString()}
+    else{start=new Date(Date.UTC(filters.year,filters.month,1)).toISOString();end=new Date(Date.UTC(filters.year,filters.month+1,0,23,59,59)).toISOString()}
+   }else{
+    if(!filters.startDate||!filters.endDate)throw new Error('Datas inválidas');
+    start=`${filters.startDate}T00:00:00Z`;end=`${filters.endDate}T23:59:59Z`;
+   }
+   const[a,b]=await Promise.all([
+    supabase.from('igreja_entradas').select('valor').gte('data',start).lte('data',end).eq('user_id',user.id).abortSignal(signal),
+    supabase.from('igreja_despesas').select('valor').gte('data',start).lte('data',end).eq('user_id',user.id).abortSignal(signal)
    ]);
+   if(signal.aborted)return;
    if(a.error)throw a.error;if(b.error)throw b.error;
-   const e=a.data||[];
-   setData({
-    ofertas:e.filter(x=>(x.tipo_entrada||'').toUpperCase()==='OFERTA'),
-    dizimos:e.filter(x=>['DÍZIMO','DIZIMO'].includes((x.tipo_entrada||'').toUpperCase())),
-    outras:e.filter(x=>!['OFERTA','DÍZIMO','DIZIMO'].includes((x.tipo_entrada||'').toUpperCase())),
-    despesas:b.data||[]
-   });
-   setAll({entradas:(c.data||[]).reduce((s,x)=>s+(x.valor||0),0),despesas:(d.data||[]).reduce((s,x)=>s+(x.valor||0),0)});
-  }catch(e){console.error(e);setError('Não foi possível carregar os dados do relatório. Tente novamente.')}
-  finally{setLoading(false);setDate(new Date().toLocaleString('pt-BR'))}
- },[type,year,month,startDate,endDate]);
- useEffect(()=>{load()},[load]);
- useEffect(()=>{if(!loading&&!error&&print){const t=setTimeout(()=>window.print(),700);return()=>clearTimeout(t)}},[loading,error,print]);
- const totals=useMemo(()=>{
-  const sum=a=>a.reduce((s,x)=>s+(x.valor||0),0),ofertas=sum(data.ofertas),dizimos=sum(data.dizimos),outras=sum(data.outras),despesas=sum(data.despesas),entradas=ofertas+dizimos+outras;
-  return{ofertas,dizimos,outras,despesas,entradas,saldo:entradas-despesas,caixa:all.entradas-all.despesas};
- },[data,all]);
- const Section=({title,cls,children})=><section className="section"><div className={`section-title ${cls}`}><FileText className="section-icon"/><h3>{title}</h3></div>{children}</section>;
- const Empty=({children})=><div className="empty">{children}</div>;
- const Table=({head,rows,total,totalCls})=><table><thead className={totalCls}><tr>{head.map((h,i)=><th key={i} className={i===head.length-1?'right':''}>{h}</th>)}</tr></thead><tbody>{rows.map((r,i)=><tr key={i}>{r.map((c,j)=><td key={j} className={j===r.length-1?'right':''}>{c}</td>)}</tr>)}</tbody>{total&&<tfoot><tr className={totalCls}><td colSpan={head.length-1}>{total[0]}</td><td className="right">{total[1]}</td></tr></tfoot>}</table>;
+   const result={entradas:(a.data||[]).reduce((s,x)=>s+Number(x.valor||0),0),despesas:(b.data||[]).reduce((s,x)=>s+Number(x.valor||0),0)};
+   result.saldo=result.entradas-result.despesas;
+   cache.current.set(key,result);
+   if(mounted.current)setTotals(result);
+  }catch(e){
+   if(e.name==='AbortError')return;
+   console.error(e);
+   if(mounted.current){setError(e.message||'Erro desconhecido');toast({title:'Erro ao buscar dados',description:e.message,variant:'destructive'})}
+  }finally{if(mounted.current&&!signal.aborted)setLoading(false)}
+ },[filterType,filters,user,toast]);
 
- if(loading)return<div className="loading"><div className="spinner"/><p>Gerando relatório...</p></div>;
- if(error)return<div className="error"><b>⚠️ Erro</b><p>{error}</p><Button onClick={()=>window.close()} variant="outline">Fechar</Button></div>;
+ const generateReportUrl=useCallback(print=>{
+  const{year,month,startDate,endDate}=filters;
+  let q=`?filterType=${filterType}`;
+  if(filterType==='mensal')q+=`&year=${year}&month=${month}`;
+  else if(filterType==='periodo'){if(!startDate||!endDate)return null;q+=`&startDate=${startDate}&endDate=${endDate}`}
+  else return null;
+  if(print)q+='&print=true';
+  return`${window.location.origin}/igreja/relatorios/entradas-despesas-pdf${q}`;
+ },[filterType,filters]);
 
- return<>
-  <Helmet><title>Relatório de Entradas e Despesas</title><style>{`
-@page{size:A4 portrait;margin:8mm 9mm 9mm}*{box-sizing:border-box}html,body,#root{margin:0!important;padding:0!important;background:#fff!important;color:#1e293b!important}body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;font-family:Arial,Helvetica,sans-serif}.wrap{width:100%;background:#fff}.hidden-print{display:flex}.page{width:190mm;min-height:280mm;margin:0 auto;position:relative;background:#fff}.p1{page-break-after:always}.bar{background:#f1f5f9;border-bottom:1px solid #e2e8f0;padding:12px 16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}.bar div{font-size:14px;color:#64748b}.actions{display:flex;gap:8px}.head{text-align:center;padding-top:1mm}.brand{position:relative;min-height:25mm}.logo{position:absolute;left:0;top:-2mm;width:29mm;height:25mm;object-fit:contain}.brand h1{margin:0;color:#1e3a8a;font-size:17px;font-weight:800;line-height:1.15;text-transform:uppercase}.city{margin-top:2px;font-size:9px;font-weight:700}.main-title{margin-top:4mm;background:#1e3a8a;color:#fff;border-radius:4px;padding:6px 10px;font-size:10px;font-weight:800;text-transform:uppercase}.period{margin-top:2.5mm;font-size:9px;font-weight:700;color:#1e3a8a}.section{margin-top:4mm}.p2 .section:first-child{margin-top:0}.section-title{height:9mm;display:flex;align-items:center;gap:7px;border-radius:4px;padding:0 10px;margin-bottom:2mm}.section-title h3{margin:0;font-size:11px;font-weight:800}.section-icon{width:16px;height:16px;stroke-width:2}.offer{background:#dcfce7;color:#047857;border-left:4px solid #10b981}.tithe{background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb}.other{background:#fef3c7;color:#c2410c;border-left:4px solid #f59e0b}.expense{background:#fee2e2;color:#dc2626;border-left:4px solid #ef4444}.summary-title{background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb}table{width:100%;border-collapse:collapse;font-size:8.1px;table-layout:fixed}th{font-weight:800;text-align:left;padding:4px 5px;border:1px solid #cbd5e1;line-height:1.05}td{padding:3.5px 5px;border:1px solid #cbd5e1;line-height:1.05;vertical-align:middle}.right{text-align:right}.offer-head th,.offer-total td{background:#ecfdf5;color:#047857;border-color:#a7f3d0}.tithe-head th,.tithe-total td{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}.other-head th,.other-total td{background:#fff7ed;color:#c2410c;border-color:#fed7aa}.expense-head th,.expense-total td{background:#fef2f2;color:#dc2626;border-color:#fecaca}tbody tr:nth-child(even){background:#f8fafc}.bold{font-weight:800}.empty{padding:8px 10px;border:1px dashed #cbd5e1;border-radius:4px;color:#64748b;font-size:7.5px;font-style:italic;text-align:center}.summary{border:1px solid #bfdbfe;border-radius:6px;overflow:hidden}.row{display:grid;grid-template-columns:1fr 34%;align-items:center;min-height:13mm;padding:5px 9px;border-bottom:1px solid #dbeafe}.row:last-child{border:0}.label{font-size:8.5px;font-weight:700}.sub{display:block;font-size:6.5px;color:#64748b;margin-top:1px}.value{text-align:right;font-size:11px;font-weight:800}.entry{background:#ecfdf5;color:#047857}.exit{background:#fef2f2;color:#dc2626}.balance{background:#eff6ff;color:#1d4ed8}.cash{background:#f1f5f9;color:#1e3a8a}.sum-icon{width:17px;height:17px;float:left;margin:1px 7px 0 0}.sign{margin-top:5mm;border:1px solid #bfdbfe;border-radius:5px;height:27mm;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:5mm}.line{width:62mm;border-top:1px solid #0f172a;margin-bottom:2mm}.sign-label{font-size:8px;font-weight:700;color:#1e3a8a}.footer{position:absolute;left:0;right:0;bottom:0;border-top:1px solid #cbd5e1;padding-top:3mm;display:grid;grid-template-columns:1fr auto 1fr;gap:8px;color:#64748b;font-size:6.3px}.footer-center{text-align:center;font-weight:800;color:#1e3a8a}.footer-right{text-align:right}.screen-note{text-align:center;color:#94a3b8;font-size:7px;margin-top:4mm}.loading,.error{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#fff;font-family:Arial}.spinner{width:42px;height:42px;border:4px solid #e5e7eb;border-top-color:#1e3a8a;border-radius:50%;animation:spin .8s linear infinite}.loading p{margin-top:15px}.error b{font-size:20px;color:#dc2626}.error p{color:#475569}@keyframes spin{to{transform:rotate(360deg)}}@media print{.hidden-print{display:none!important}.page{margin:0;width:190mm;min-height:280mm}.p1{page-break-after:always}.screen-note{display:none}}
-   `}</style></Helmet>
+ const action=useCallback(type=>{
+  const url=generateReportUrl(type==='print');
+  if(!url){toast({title:'Seleção de Período Inválida',description:'Verifique as datas selecionadas.',variant:'destructive'});return}
+  window.open(url,'_blank');
+ },[generateReportUrl,toast]);
 
-  <div className="wrap">
-   <div className="hidden-print bar"><div>Pré-visualização de Impressão</div><div className="actions"><Button onClick={()=>window.print()} className="bg-blue-600 text-white"><Printer className="w-4 h-4 mr-2"/>Imprimir</Button><Button onClick={()=>window.close()} variant="outline"><X className="w-4 h-4 mr-2"/>Fechar</Button></div></div>
-
-   <div className="page p1">
-    <header className="head"><div className="brand"><img src={LOGO_URL} className="logo" alt="Logo"/><h1>Igreja Assembleia de Deus Ministério Plantar</h1><div className="city">Lerolândia</div></div><div className="main-title">Relatório Financeiro de Entradas e Despesas</div><div className="period">Período: {period}</div></header>
-    <Section title="Ofertas" cls="offer">{data.ofertas.length?<Table head={['Data','Descrição / Ofertante','Valor']} total={['TOTAL OFERTAS',money(totals.ofertas)]} totalCls="offer-head" rows={data.ofertas.map(x=>[dateBR(x.data),<b>{x.ofertante||'OFERTA GERAL'}</b>,money(x.valor)])}/>:<Empty>Nenhum registro de oferta encontrado para este período.</Empty>}</Section>
-    <Section title="Dízimos" cls="tithe">{data.dizimos.length?<Table head={['Data','Dizimista','Valor']} total={['TOTAL DÍZIMOS',money(totals.dizimos)]} totalCls="tithe-head" rows={data.dizimos.map(x=>[dateBR(x.data),<b>{x.igreja_dizimistas?.nome||'NÃO IDENTIFICADO'}</b>,money(x.valor)])}/>:<Empty>Nenhum registro de dízimo encontrado para este período.</Empty>}</Section>
-    <div className="hidden-print screen-note">Página 1 de 2</div>
-   </div>
-
-   <div className="page p2">
-    <Section title="Outras Entradas" cls="other">{data.outras.length?<Table head={['Data','Tipo','Descrição / Origem','Valor']} total={['TOTAL OUTRAS ENTRADAS',money(totals.outras)]} totalCls="other-head" rows={data.outras.map(x=>[dateBR(x.data),<b>{x.tipo_entrada||'-'}</b>,x.igreja_dizimistas?.nome||x.ofertante||'—',money(x.valor)])}/>:<Empty>Nenhum outro registro de entrada encontrado para este período.</Empty>}</Section>
-    <Section title="Despesas" cls="expense">{data.despesas.length?<Table head={['Data','Descrição da Despesa','Valor']} total={['TOTAL DESPESAS',money(totals.despesas)]} totalCls="expense-head" rows={data.despesas.map(x=>[dateBR(x.data),<b>{x.despesa||'-'}</b>,money(x.valor)])}/>:<Empty>Nenhum registro de despesa encontrado para este período.</Empty>}</Section>
-    <Section title="Resumo do Período" cls="summary-title"><div className="summary">
-     <div className="row entry"><div><FileText className="sum-icon"/><span className="label">Total de Entradas</span><span className="sub">Ofertas + Dízimos + Outras</span></div><div className="value">{money(totals.entradas)}</div></div>
-     <div className="row exit"><div><FileText className="sum-icon"/><span className="label">Total de Saídas</span><span className="sub">Despesas</span></div><div className="value">{money(totals.despesas)}</div></div>
-     <div className="row balance"><div><FileText className="sum-icon"/><span className="label">Saldo do Período</span></div><div className="value">{money(totals.saldo)}</div></div>
-     <div className="row cash"><div><FileText className="sum-icon"/><span className="label">Saldo Atual em Caixa (Geral)</span></div><div className="value">{money(totals.caixa)}</div></div>
-    </div></Section>
-    <div className="sign"><PenLine className="sum-icon" style={{float:'none',margin:'0 0 3mm',color:'#1e3a8a'}}/><div className="line"/><div className="sign-label">Tesoureiro (a)</div></div>
-    <footer className="footer"><div>Relatório emitido pelo sistema da Tesouraria.</div><div className="footer-center">TESOURARIA</div><div className="footer-right">Data de emissão: {date}</div></footer>
-    <div className="hidden-print screen-note">Página 2 de 2</div>
+ return<div className="min-h-screen space-y-6 bg-gradient-to-br from-black to-gray-900 p-4 text-gray-100">
+  <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+   <div><h2 className="text-3xl font-bold text-white">Relatório de Entradas e Despesas</h2><p className="text-gray-400">Visualize um resumo financeiro consolidado.</p></div>
+   <div className="flex flex-wrap items-center gap-2">
+    <Button onClick={fetchTotals} disabled={loading} className="min-w-[120px] bg-yellow-600 text-white hover:bg-yellow-700">{loading?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<Eye className="mr-2 h-4 w-4"/>}{loading?'Calculando...':'Visualizar'}</Button>
+    <DropdownMenu>
+     <DropdownMenuTrigger asChild><Button variant="outline" className="border-yellow-500 text-yellow-500 hover:bg-yellow-500/10 hover:text-yellow-400"><FileDown className="mr-2 h-4 w-4"/>Gerar Relatório</Button></DropdownMenuTrigger>
+     <DropdownMenuContent className="z-50 border-gray-700 bg-gray-800 text-gray-100">
+      <DropdownMenuItem onSelect={()=>action('view')} className="cursor-pointer hover:bg-gray-700"><FileDown className="mr-2 h-4 w-4"/>Gerar PDF</DropdownMenuItem>
+      <DropdownMenuItem onSelect={()=>action('print')} className="cursor-pointer hover:bg-gray-700"><Printer className="mr-2 h-4 w-4"/>Imprimir</DropdownMenuItem>
+     </DropdownMenuContent>
+    </DropdownMenu>
    </div>
   </div>
- </>
+
+  <Card className="border-gray-800 bg-gray-900/50 shadow-md backdrop-blur-sm">
+   <CardHeader className="border-b border-gray-800 pb-3"><CardTitle className="flex items-center text-lg text-white"><Filter className="mr-2 h-5 w-5 text-yellow-500"/>Filtros</CardTitle></CardHeader>
+   <CardContent>
+    <div className="flex flex-col space-y-4 pt-4">
+     <div className="w-full md:w-1/3">
+      <Label className="mb-2 block text-gray-400">Tipo de Filtro</Label>
+      <Select value={filterType} onValueChange={changeType} disabled={loading}>
+       <SelectTrigger className="border-gray-700 bg-gray-800 text-gray-100"><SelectValue/></SelectTrigger>
+       <SelectContent className="border-gray-700 bg-gray-800 text-gray-100"><SelectItem value="mensal">Por Mês/Ano</SelectItem><SelectItem value="periodo">Por Período Personalizado</SelectItem></SelectContent>
+      </Select>
+     </div>
+
+     <div className="p-1">
+      <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3',filterType!=='mensal'&&'hidden')}>
+       <div><Label className="mb-2 block text-gray-400">Ano</Label><Select value={String(filters.year)} onValueChange={v=>change('year',v==='all'?'all':Number(v))} disabled={loading}><SelectTrigger className="border-gray-700 bg-gray-800 text-gray-100"><Calendar className="mr-2 h-4 w-4"/><SelectValue/></SelectTrigger><SelectContent className="border-gray-700 bg-gray-800 text-gray-100"><ScrollArea className="h-[200px]"><SelectItem value="all">Todos</SelectItem>{availableYears.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
+       <div><Label className="mb-2 block text-gray-400">Mês</Label><Select value={String(filters.month)} onValueChange={v=>change('month',v==='all'?'all':Number(v))} disabled={loading}><SelectTrigger className="border-gray-700 bg-gray-800 text-gray-100"><Calendar className="mr-2 h-4 w-4"/><SelectValue/></SelectTrigger><SelectContent className="border-gray-700 bg-gray-800 text-gray-100"><ScrollArea className="h-[200px]"><SelectItem value="all">Todos</SelectItem>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
+      </div>
+
+      <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3',filterType!=='periodo'&&'hidden')}>
+       <div><Label className="mb-2 block text-gray-400">Data de Início</Label><Input type="date" value={filters.startDate} onChange={e=>change('startDate',e.target.value)} className="border-gray-700 bg-gray-800 text-gray-100" disabled={loading}/></div>
+       <div><Label className="mb-2 block text-gray-400">Data de Fim</Label><Input type="date" value={filters.endDate} onChange={e=>change('endDate',e.target.value)} className="border-gray-700 bg-gray-800 text-gray-100" disabled={loading}/></div>
+      </div>
+     </div>
+    </div>
+   </CardContent>
+  </Card>
+
+  {error&&<Alert variant="destructive" className="border-red-900 bg-red-900/50 text-red-100"><AlertCircle className="h-4 w-4"/><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+
+  {totals&&!loading&&<div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+   <Card className="border-l-4 border-l-green-500 bg-gray-900 shadow-lg"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-400">Total Entradas</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold text-white">{formatCurrency(totals.entradas)}</p></CardContent></Card>
+   <Card className="border-l-4 border-l-red-500 bg-gray-900 shadow-lg"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-400">Total Despesas</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold text-white">{formatCurrency(totals.despesas)}</p></CardContent></Card>
+   <Card className={cn('border-l-4 bg-gray-900 shadow-lg',totals.saldo>=0?'border-l-blue-500':'border-l-orange-500')}><CardHeader className="pb-2"><CardTitle className={cn('text-sm font-medium',totals.saldo>=0?'text-blue-400':'text-orange-400')}>Saldo</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold text-white">{formatCurrency(totals.saldo)}</p></CardContent></Card>
+  </div>}
+ </div>;
 }
