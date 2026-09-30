@@ -38,9 +38,7 @@ import{cn}from'@/lib/utils';
 import{Loader2}from'lucide-react';
 
 const LmImpressoesDashboard=()=>{
- const navigate=useNavigate(),{toast}=useToast();
- const{session,loading,canAccessModule}=useAuth();
- const{isMobile}=useContext(DeviceContext);
+ const navigate=useNavigate(),{toast}=useToast(),{session,loading,canAccessModule}=useAuth(),{isMobile}=useContext(DeviceContext);
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
 
  useModuleAccessGuard('lm-impressoes');
@@ -63,7 +61,7 @@ const LmImpressoesDashboard=()=>{
   <Helmet><title>LM Impressões | Sistema de Gestão</title><meta name="description" content="Dashboard de Gestão LM Impressões"/></Helmet>
   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
 
-  <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-64':'ml-20'))}>
+  <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
    <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
    <main className="flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5 [&_.neon-card]:neon-border-cyan [&_.neon-card]:neon-hover-cyan">
     <div className="w-full">
@@ -102,7 +100,7 @@ const LmImpressoesDashboard=()=>{
 
   {isMobile&&isSidebarOpen&&<div className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm" onClick={()=>setSidebarOpen(false)} aria-hidden="true"/>}
   <Toaster/>
- </div>
+ </div>;
 };
 
 export default LmImpressoesDashboard;
