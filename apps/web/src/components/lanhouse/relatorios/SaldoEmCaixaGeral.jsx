@@ -1,108 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Banknote, Loader2, AlertCircle } from 'lucide-react';
-import { getAccessibleDataQuery } from '@/lib/dataAccessUtils';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
-import NeonBorder from '@/components/ui/NeonBorder';
-import AnimatedCounter from '@/components/ui/AnimatedCounter';
+import React,{useEffect,useState}from'react';
+import{motion}from'framer-motion';
+import{Banknote,Loader2,AlertCircle}from'lucide-react';
+import{getAccessibleDataQuery}from'@/lib/dataAccessUtils';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
+import NeonBorder from'@/components/ui/NeonBorder';
+import AnimatedCounter from'@/components/ui/AnimatedCounter';
 
-const SaldoEmCaixaGeral = ({ selectedMonth, selectedYear }) => {
-    const { user, isAdmin } = useAuth();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [saldo, setSaldo] = useState(0);
+const SaldoEmCaixaGeral=({selectedMonth,selectedYear})=>{
+ const{user,isAdmin}=useAuth();
+ const[loading,setLoading]=useState(true),[error,setError]=useState(null),[saldo,setSaldo]=useState(0);
 
-    useEffect(() => {
-        const fetchAllData = async () => {
-            if (!user) return;
-            setLoading(true);
-            setError(null);
-            try {
-                // Fetch ALL records WITHOUT date filtering
-                const [servicosRes, despesasRes, dizimosRes] = await Promise.all([
-                    getAccessibleDataQuery(user.id, isAdmin, 'lm_lanc_servicos', 'valor'),
-                    getAccessibleDataQuery(user.id, isAdmin, 'lm_lanc_despesas', 'valor'),
-                    getAccessibleDataQuery(user.id, isAdmin, 'lm_dizimos_ofertas', 'valor')
-                ]);
+ useEffect(()=>{
+  const fetchAllData=async()=>{
+   if(!user)return;
+   setLoading(true);setError(null);
+   try{
+    const[servicosRes,despesasRes,dizimosRes]=await Promise.all([
+     getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_servicos','valor'),
+     getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_despesas','valor'),
+     getAccessibleDataQuery(user.id,isAdmin,'lm_dizimos_ofertas','valor')
+    ]);
+    if(servicosRes.error)throw new Error(`Serviços: ${servicosRes.error.message}`);
+    if(despesasRes.error)throw new Error(`Despesas: ${despesasRes.error.message}`);
+    if(dizimosRes.error)throw new Error(`Dízimos/Ofertas: ${dizimosRes.error.message}`);
+    const soma=a=>(a||[]).reduce((acc,curr)=>acc+parseFloat(curr.valor||0),0);
+    setSaldo(soma(servicosRes.data)-soma(despesasRes.data)-soma(dizimosRes.data));
+   }catch(err){
+    console.error('Error fetching accumulated balance:',err);
+    setError(err.message);
+   }finally{setLoading(false);}
+  };
+  fetchAllData();
+ },[user,isAdmin]);
 
-                if (servicosRes.error) throw new Error(`Serviços: ${servicosRes.error.message}`);
-                if (despesasRes.error) throw new Error(`Despesas: ${despesasRes.error.message}`);
-                if (dizimosRes.error) throw new Error(`Dízimos/Ofertas: ${dizimosRes.error.message}`);
+ const isPositive=saldo>=0;
+ const colorClass=isPositive?'from-blue-500 to-cyan-400':'from-red-500 to-red-400';
+ const valueColorClass=isPositive?'text-blue-500':'text-red-500';
 
-                const totalEntradas = (servicosRes.data || []).reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
-                const totalDespesas = (despesasRes.data || []).reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
-                const totalDizimosOfertas = (dizimosRes.data || []).reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
+ if(loading&&saldo===0)return <NeonBorder neonColor="lanhouse" className="h-full"><div className="flex h-full min-h-[140px] items-center justify-center rounded-xl p-6" role="status" aria-live="polite"><Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--neon-lanhouse))] motion-reduce:animate-none"/></div></NeonBorder>;
 
-                // Formula: TODAS AS ENTRADAS - TODAS AS SAÍDAS - DÍZIMOS - OFERTAS = SALDO ACUMULADO TOTAL
-                const saldoCalculado = totalEntradas - totalDespesas - totalDizimosOfertas;
-                setSaldo(saldoCalculado);
-            } catch (err) {
-                console.error("Error fetching accumulated balance:", err);
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        };
+ if(error)return <NeonBorder neonColor="lanhouse" className="h-full"><div className="flex h-full min-h-[140px] items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/5 p-6" role="alert"><AlertCircle className="h-8 w-8 shrink-0 text-red-500"/><div className="flex flex-col"><p className="mb-1 text-sm font-semibold uppercase tracking-wider text-red-500">Erro ao carregar saldo</p><p className="text-xs text-red-500/80">{error}</p></div></div></NeonBorder>;
 
-        // Component will only fetch on mount or if user changes, ignoring selectedMonth/Year
-        fetchAllData();
-    }, [user, isAdmin]);
-
-    const isPositive = saldo >= 0;
-    // Cyan/Blue styling as requested to match Lucro Operacional
-    const colorClass = isPositive ? "from-blue-500 to-cyan-400" : "from-red-500 to-red-400";
-    const valueColorClass = isPositive ? "text-blue-500" : "text-red-500";
-
-    if (loading && saldo === 0) {
-        return (
-            <NeonBorder neonColor="lanhouse" className="h-full">
-                <div className="p-6 flex items-center justify-center h-full min-h-[140px] rounded-xl">
-                    <Loader2 className="w-8 h-8 animate-spin text-[hsl(var(--neon-lanhouse))]" />
-                </div>
-            </NeonBorder>
-        );
-    }
-
-    if (error) {
-        return (
-            <NeonBorder neonColor="lanhouse" className="h-full">
-                <div className="p-6 flex items-center gap-3 h-full min-h-[140px] rounded-xl border-red-500/30 bg-red-500/5">
-                    <AlertCircle className="w-8 h-8 text-red-500 shrink-0" />
-                    <div className="flex flex-col">
-                        <p className="text-sm font-semibold text-red-500 uppercase tracking-wider mb-1">Erro ao carregar saldo</p>
-                        <p className="text-xs text-red-500/80">{error}</p>
-                    </div>
-                </div>
-            </NeonBorder>
-        );
-    }
-
-    return (
-        <NeonBorder neonColor="lanhouse" className="h-full">
-            <motion.div 
-                whileHover={{ y: -4 }}
-                className="p-6 relative overflow-hidden flex flex-col justify-center h-full min-h-[140px] transition-all duration-300"
-            >
-                <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full opacity-10 bg-gradient-to-br blur-2xl pointer-events-none" style={{ backgroundImage: `var(--${colorClass})` }} />
-                <div className="flex items-center gap-4">
-                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center bg-gradient-to-br ${colorClass} shadow-lg shrink-0`}>
-                        {/* Kept the icon green as explicitly requested */}
-                        <Banknote className="w-8 h-8 text-emerald-300 drop-shadow-sm" />
-                    </div>
-                    <div className="flex flex-col">
-                        <p className="text-[14px] md:text-[16px] text-muted-foreground font-semibold uppercase tracking-wider mb-0.5 leading-tight">Saldo em Caixa Geral</p>
-                        <p className={`text-[32px] md:text-[40px] font-bold tracking-tight leading-none ${valueColorClass}`}>
-                            <AnimatedCounter 
-                                value={saldo} 
-                                format={(v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                            />
-                        </p>
-                        <p className="text-[12px] md:text-[14px] text-muted-foreground mt-1 font-medium">Acumulado (Todos os períodos)</p>
-                    </div>
-                </div>
-            </motion.div>
-        </NeonBorder>
-    );
+ return <NeonBorder neonColor="lanhouse" className="h-full">
+  <motion.div whileHover={{y:-4}} className="relative flex h-full min-h-[140px] flex-col justify-center overflow-hidden p-5 md:p-6">
+   <div className={`pointer-events-none absolute -right-6 -top-6 h-32 w-32 rounded-full bg-gradient-to-br ${colorClass} opacity-10 blur-2xl`}/>
+   <div className="flex items-center gap-3 md:gap-4">
+    <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${colorClass} shadow-lg md:h-16 md:w-16`}><Banknote className="h-7 w-7 text-emerald-300 drop-shadow-sm md:h-8 md:w-8"/></div>
+    <div className="min-w-0 flex flex-col">
+     <p className="mb-0.5 text-[13px] font-semibold uppercase leading-tight tracking-wider text-muted-foreground md:text-[16px]">Saldo em Caixa Geral</p>
+     <p className={`text-[28px] font-bold leading-none tracking-tight md:text-[40px] ${valueColorClass}`}><AnimatedCounter value={saldo} format={v=>`R$ ${v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}`}/></p>
+     <p className="mt-1 text-[11px] font-medium text-muted-foreground md:text-[14px]">Acumulado (Todos os períodos)</p>
+    </div>
+   </div>
+  </motion.div>
+ </NeonBorder>
 };
 
 export default SaldoEmCaixaGeral;
