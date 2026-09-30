@@ -41,9 +41,7 @@ import{cn}from'@/lib/utils';
 import{Loader2}from'lucide-react';
 
 const PessoalDashboard=()=>{
- const navigate=useNavigate(),{toast}=useToast();
- const{session,loading,isAdmin,canAccessModule}=useAuth();
- const{isMobile}=useContext(DeviceContext);
+ const navigate=useNavigate(),{toast}=useToast(),{session,loading,isAdmin,canAccessModule}=useAuth(),{isMobile}=useContext(DeviceContext);
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
 
  useModuleAccessGuard('pessoal');
@@ -55,7 +53,7 @@ const PessoalDashboard=()=>{
   }
  },[session,loading,navigate,toast,canAccessModule]);
 
- useEffect(()=>{setSidebarOpen(!isMobile)},[isMobile]);
+ useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
 
  if(loading||(!session&&!loading))return <div className="flex h-screen flex-col items-center justify-center text-foreground" role="status" aria-live="polite"><Loader2 className="mb-4 h-10 w-10 animate-spin text-[hsl(var(--neon-blue))] motion-reduce:animate-none"/><p>Carregando Módulo...</p></div>;
 
@@ -64,8 +62,8 @@ const PessoalDashboard=()=>{
  return <div className="flex min-h-screen w-full bg-gradient-professional" style={{'--primary':'var(--neon-blue)','--ring':'var(--neon-blue)'}}>
   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
 
-  <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-64':'ml-20'))}>
-   <Header toggleSidebar={()=>setSidebarOpen(prev=>!prev)} isSidebarOpen={isSidebarOpen}/>
+  <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
+   <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
 
    <main className="relative flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5 [&_.neon-card]:neon-border-blue [&_.neon-card]:neon-hover-blue">
     <Routes>
@@ -106,7 +104,7 @@ const PessoalDashboard=()=>{
 
   {isMobile&&isSidebarOpen&&<div onClick={()=>setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" aria-hidden="true"/>}
   <Toaster/>
- </div>
+ </div>;
 };
 
 export default PessoalDashboard;
