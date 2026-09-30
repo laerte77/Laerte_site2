@@ -7,414 +7,109 @@ import{Printer,X,HandCoins,Coins,WalletCards,Receipt,BarChart3,PenLine}from'luci
 
 const LOGO_URL='https://horizons-cdn.hostinger.com/23ae9372-1ce3-488a-9be5-00d3fa6b6d54/612e5784f3faca006483ae69c11fa425.png';
 
-const RelatorioEntradasDespesasPDF=()=>{
- const[searchParams]=useSearchParams();
- const[data,setData]=useState({ofertas:[],dizimos:[],outras:[],despesas:[]});
- const[allTimeTotals,setAllTimeTotals]=useState({entradas:0,despesas:0});
- const[loading,setLoading]=useState(true);
- const[error,setError]=useState(null);
- const[currentDateTime,setCurrentDateTime]=useState('');
-
- const filterType=searchParams.get('filterType');
- const year=searchParams.get('year');
- const month=searchParams.get('month');
- const startDate=searchParams.get('startDate');
- const endDate=searchParams.get('endDate');
- const shouldPrint=searchParams.get('print')==='true';
-
- const formatCurrency=value=>(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
- const formatDate=value=>new Date(value).toLocaleDateString('pt-BR',{timeZone:'UTC'});
-
- const periodLabel=useMemo(()=>{
-  if(filterType==='mensal'&&year&&month){
-   const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-   return`${meses[Number(month)]||''}/${year}`;
-  }
-  if(startDate&&endDate)return`${formatDate(startDate)} a ${formatDate(endDate)}`;
+export default function RelatorioEntradasDespesas(){
+ const[sp]=useSearchParams(),[data,setData]=useState({ofertas:[],dizimos:[],outras:[],despesas:[]}),[all,setAll]=useState({entradas:0,despesas:0}),[loading,setLoading]=useState(true),[error,setError]=useState(null),[date,setDate]=useState('');
+ const type=sp.get('filterType'),year=sp.get('year'),month=sp.get('month'),startDate=sp.get('startDate'),endDate=sp.get('endDate'),print=sp.get('print')==='true';
+ const money=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),dateBR=v=>new Date(v).toLocaleDateString('pt-BR',{timeZone:'UTC'});
+ const period=useMemo(()=>{
+  if(type==='mensal'&&year&&month)return`${['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][+month]||''}/${year}`;
+  if(startDate&&endDate)return`${dateBR(startDate)} a ${dateBR(endDate)}`;
   return'Período selecionado';
- },[filterType,year,month,startDate,endDate]);
+ },[type,year,month,startDate,endDate]);
 
- const fetchData=useCallback(async()=>{
-  setLoading(true);
-  setError(null);
-  let start,end;
-
-  if(filterType==='mensal'&&year&&month){
-   start=new Date(Date.UTC(parseInt(year),parseInt(month),1));
-   end=new Date(Date.UTC(parseInt(year),parseInt(month)+1,0,23,59,59));
-  }else if(filterType==='periodo'&&startDate&&endDate){
-   start=new Date(`${startDate}T00:00:00Z`);
-   end=new Date(`${endDate}T23:59:59Z`);
-  }else{
-   setLoading(false);
-   setError('Parâmetros inválidos para geração do relatório.');
-   return;
-  }
-
+ const load=useCallback(async()=>{
+  setLoading(true);setError(null);let start,end;
+  if(type==='mensal'&&year&&month){start=new Date(Date.UTC(+year,+month,1));end=new Date(Date.UTC(+year,+month+1,0,23,59,59))}
+  else if(type==='periodo'&&startDate&&endDate){start=new Date(`${startDate}T00:00:00Z`);end=new Date(`${endDate}T23:59:59Z`)}
+  else{setError('Parâmetros inválidos para geração do relatório.');setLoading(false);return}
   try{
-   const[entradasRes,despesasRes,allEntradasRes,allDespesasRes]=await Promise.all([
+   const[a,b,c,d]=await Promise.all([
     supabase.from('igreja_entradas').select('*, igreja_dizimistas(nome)').gte('data',start.toISOString()).lte('data',end.toISOString()).order('data',{ascending:true}),
     supabase.from('igreja_despesas').select('*').gte('data',start.toISOString()).lte('data',end.toISOString()).order('data',{ascending:true}),
     supabase.from('igreja_entradas').select('valor'),
     supabase.from('igreja_despesas').select('valor')
    ]);
-
-   if(entradasRes.error)throw entradasRes.error;
-   if(despesasRes.error)throw despesasRes.error;
-
-   const entradas=entradasRes.data||[];
-
+   if(a.error)throw a.error;if(b.error)throw b.error;
+   const e=a.data||[];
    setData({
-    ofertas:entradas.filter(e=>(e.tipo_entrada||'').toUpperCase()==='OFERTA'),
-    dizimos:entradas.filter(e=>{
-     const t=(e.tipo_entrada||'').toUpperCase();
-     return t==='DÍZIMO'||t==='DIZIMO';
-    }),
-    outras:entradas.filter(e=>{
-     const t=(e.tipo_entrada||'').toUpperCase();
-     return t!=='OFERTA'&&t!=='DÍZIMO'&&t!=='DIZIMO';
-    }),
-    despesas:despesasRes.data||[]
+    ofertas:e.filter(x=>(x.tipo_entrada||'').toUpperCase()==='OFERTA'),
+    dizimos:e.filter(x=>['DÍZIMO','DIZIMO'].includes((x.tipo_entrada||'').toUpperCase())),
+    outras:e.filter(x=>!['OFERTA','DÍZIMO','DIZIMO'].includes((x.tipo_entrada||'').toUpperCase())),
+    despesas:b.data||[]
    });
-
-   setAllTimeTotals({
-    entradas:(allEntradasRes.data||[]).reduce((a,c)=>a+(c.valor||0),0),
-    despesas:(allDespesasRes.data||[]).reduce((a,c)=>a+(c.valor||0),0)
+   setAll({
+    entradas:(c.data||[]).reduce((s,x)=>s+(x.valor||0),0),
+    despesas:(d.data||[]).reduce((s,x)=>s+(x.valor||0),0)
    });
-  }catch(err){
-   console.error('Erro ao buscar dados para o relatório:',err);
-   setError('Não foi possível carregar os dados do relatório. Tente novamente.');
-  }finally{
-   setLoading(false);
-   setCurrentDateTime(new Date().toLocaleString('pt-BR'));
-  }
- },[filterType,year,month,startDate,endDate]);
+  }catch(e){console.error(e);setError('Não foi possível carregar os dados do relatório. Tente novamente.')}
+  finally{setLoading(false);setDate(new Date().toLocaleString('pt-BR'))}
+ },[type,year,month,startDate,endDate]);
 
- useEffect(()=>{fetchData()},[fetchData]);
-
- useEffect(()=>{
-  if(!loading&&!error&&shouldPrint){
-   const timer=setTimeout(()=>window.print(),700);
-   return()=>clearTimeout(timer);
-  }
- },[loading,error,shouldPrint]);
+ useEffect(()=>{load()},[load]);
+ useEffect(()=>{if(!loading&&!error&&print){const t=setTimeout(()=>window.print(),700);return()=>clearTimeout(t)}},[loading,error,print]);
 
  const totals=useMemo(()=>{
-  const totalOfertas=data.ofertas.reduce((a,i)=>a+(i.valor||0),0);
-  const totalDizimos=data.dizimos.reduce((a,i)=>a+(i.valor||0),0);
-  const totalOutras=data.outras.reduce((a,i)=>a+(i.valor||0),0);
-  const totalDespesas=data.despesas.reduce((a,i)=>a+(i.valor||0),0);
-  const totalEntradasPeriodo=totalOfertas+totalDizimos+totalOutras;
-  const saldoPeriodo=totalEntradasPeriodo-totalDespesas;
-  const saldoGeral=allTimeTotals.entradas-allTimeTotals.despesas;
+  const sum=a=>a.reduce((s,x)=>s+(x.valor||0),0),o=sum(data.ofertas),d=sum(data.dizimos),ou=sum(data.outras),de=sum(data.despesas),ent=o+d+ou;
+  return{ofertas:o,dizimos:d,outras:ou,despesas:de,entradas:ent,saldo:ent-de,caixa:all.entradas-all.despesas};
+ },[data,all]);
 
-  return{totalOfertas,totalDizimos,totalOutras,totalDespesas,totalEntradasPeriodo,saldoPeriodo,saldoGeral};
- },[data,allTimeTotals]);
+ const Section=({icon:I,title,cls,children})=><section className="section"><div className={`section-title ${cls}`}><I className="section-icon"/><h3>{title}</h3></div>{children}</section>;
+ const Empty=({children})=><div className="empty">{children}</div>;
+ const Table=({head,rows,total,totalCls})=><table><thead className={totalCls}><tr>{head.map((h,i)=><th key={i} className={i===head.length-1?'right':''}>{h}</th>)}</tr></thead><tbody>{rows.map((r,i)=><tr key={i}>{r.map((c,j)=><td key={j} className={j===r.length-1?'right':''}>{c}</td>)}</tr>)}</tbody>{total&&<tfoot><tr className={totalCls}><td colSpan={head.length-1}>{total[0]}</td><td className="right">{total[1]}</td></tr></tfoot>}</table>;
 
- const SectionTitle=({icon:Icon,title,color})=>(
-  <div className={`section-title ${color}`}>
-   <Icon className="section-icon"/>
-   <h3>{title}</h3>
-  </div>
- );
+ if(loading)return <div className="loading"><div className="spinner"/><p>Gerando relatório...</p></div>;
+ if(error)return <div className="error"><b>⚠️ Erro</b><p>{error}</p><Button onClick={()=>window.close()} variant="outline">Fechar</Button></div>;
 
- const EmptyMessage=({children})=><div className="empty-message">{children}</div>;
+ return <>
+  <Helmet><title>Relatório de Entradas e Despesas</title><style>{`
+   @page{size:A4 portrait;margin:8mm 9mm 9mm}*{box-sizing:border-box}html,body,#root{margin:0!important;padding:0!important;background:#fff!important;color:#1e293b!important}body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;font-family:Arial,Helvetica,sans-serif}.wrap{width:100%;background:#fff}.hidden-print{display:flex}.page{width:190mm;min-height:280mm;margin:0 auto;position:relative;background:#fff}.p1{page-break-after:always}.bar{background:#f1f5f9;border-bottom:1px solid #e2e8f0;padding:12px 16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}.bar div{font-size:14px;color:#64748b}.actions{display:flex;gap:8px}.head{text-align:center;padding-top:1mm}.brand{position:relative;min-height:25mm}.logo{position:absolute;left:0;top:-2mm;width:29mm;height:25mm;object-fit:contain}.brand h1{margin:0;color:#1e3a8a;font-size:17px;font-weight:800;line-height:1.15;text-transform:uppercase}.city{margin-top:2px;font-size:9px;font-weight:700}.main-title{margin-top:4mm;background:#1e3a8a;color:#fff;border-radius:4px;padding:6px 10px;font-size:10px;font-weight:800;text-transform:uppercase}.period{margin-top:2.5mm;font-size:9px;font-weight:700;color:#1e3a8a}.section{margin-top:4mm}.p2 .section:first-child{margin-top:0}.section-title{height:9mm;display:flex;align-items:center;gap:7px;border-radius:4px;padding:0 10px;margin-bottom:2mm}.section-title h3{margin:0;font-size:11px;font-weight:800}.section-icon{width:17px;height:17px;stroke-width:2.2}.offer{background:#dcfce7;color:#047857;border-left:4px solid #10b981}.tithe{background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb}.other{background:#fef3c7;color:#c2410c;border-left:4px solid #f59e0b}.expense{background:#fee2e2;color:#dc2626;border-left:4px solid #ef4444}.summary-title{background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb}table{width:100%;border-collapse:collapse;font-size:8.1px;table-layout:fixed}th{font-weight:800;text-align:left;padding:4px 5px;border:1px solid #cbd5e1;line-height:1.05}td{padding:3.5px 5px;border:1px solid #cbd5e1;line-height:1.05;vertical-align:middle}.right{text-align:right}thead.offer-head th,.offer-total td{background:#ecfdf5;color:#047857;border-color:#a7f3d0}thead.tithe-head th,.tithe-total td{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}thead.other-head th,.other-total td{background:#fff7ed;color:#c2410c;border-color:#fed7aa}thead.expense-head th,.expense-total td{background:#fef2f2;color:#dc2626;border-color:#fecaca}tbody tr:nth-child(even){background:#f8fafc}.bold{font-weight:800}.empty{padding:8px 10px;border:1px dashed #cbd5e1;border-radius:4px;color:#64748b;font-size:7.5px;font-style:italic;text-align:center}.summary{border:1px solid #bfdbfe;border-radius:6px;overflow:hidden}.row{display:grid;grid-template-columns:1fr 34%;align-items:center;min-height:13mm;padding:5px 9px;border-bottom:1px solid #dbeafe}.row:last-child{border:0}.label{font-size:8.5px;font-weight:700}.sub{display:block;font-size:6.5px;color:#64748b;margin-top:1px}.value{text-align:right;font-size:11px;font-weight:800}.entry{background:#ecfdf5;color:#047857}.exit{background:#fef2f2;color:#dc2626}.balance{background:#eff6ff;color:#1d4ed8}.cash{background:#f1f5f9;color:#1e3a8a}.sum-icon{width:18px;height:18px;float:left;margin:1px 7px 0 0}.sign{margin-top:5mm;border:1px solid #bfdbfe;border-radius:5px;height:27mm;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:5mm}.line{width:62mm;border-top:1px solid #0f172a;margin-bottom:2mm}.sign-label{font-size:8px;font-weight:700;color:#1e3a8a}.footer{position:absolute;left:0;right:0;bottom:0;border-top:1px solid #cbd5e1;padding-top:3mm;display:grid;grid-template-columns:1fr auto 1fr;gap:8px;color:#64748b;font-size:6.3px}.footer-center{text-align:center;font-weight:800;color:#1e3a8a}.footer-right{text-align:right}.screen-note{text-align:center;color:#94a3b8;font-size:7px;margin-top:4mm}.loading,.error{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#fff;font-family:Arial}.spinner{width:42px;height:42px;border:4px solid #e5e7eb;border-top-color:#1e3a8a;border-radius:50%;animation:spin .8s linear infinite}.loading p{margin-top:15px}.error b{font-size:20px;color:#dc2626}.error p{color:#475569}@keyframes spin{to{transform:rotate(360deg)}}@media print{.hidden-print{display:none!important}.page{margin:0;width:190mm;min-height:280mm}.p1{page-break-after:always}.screen-note{display:none}}
+  `}</style></Helmet>
 
- if(loading)return(
-  <div className="loading-screen">
-   <div className="spinner"/>
-   <p>Gerando relatório...</p>
-  </div>
- );
+  <div className="wrap">
+   <div className="hidden-print bar"><div>Pré-visualização de Impressão</div><div className="actions"><Button onClick={()=>window.print()} className="bg-blue-600 text-white"><Printer className="w-4 h-4 mr-2"/>Imprimir</Button><Button onClick={()=>window.close()} variant="outline"><X className="w-4 h-4 mr-2"/>Fechar</Button></div></div>
 
- if(error)return(
-  <div className="error-screen">
-   <div className="error-title">⚠️ Erro</div>
-   <p>{error}</p>
-   <Button onClick={()=>window.close()} variant="outline">Fechar</Button>
-  </div>
- );
+   <div className="page p1">
+    <header className="head">
+     <div className="brand"><img src={LOGO_URL} className="logo" alt="Logo"/><h1>Igreja Assembleia de Deus Ministério Plantar</h1><div className="city">Lerolândia</div></div>
+     <div className="main-title">Relatório Financeiro de Entradas e Despesas</div>
+     <div className="period">Período: {period}</div>
+    </header>
 
- return(
-  <>
-   <Helmet>
-    <title>Relatório de Entradas e Despesas</title>
-    <style>{`
-     @page{size:A4 portrait;margin:8mm 9mm 9mm}
-     *{box-sizing:border-box}
-     html,body,#root{margin:0!important;padding:0!important;background:#fff!important;color:#1e293b!important}
-     body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;font-family:Arial,Helvetica,sans-serif}
-     .report-container{width:100%;background:#fff}
-     .print-hidden{display:flex}
-     .page{width:190mm;min-height:280mm;margin:0 auto;position:relative;background:#fff}
-     .page-one{page-break-after:always}
-     .control-bar{background:#f1f5f9;border-bottom:1px solid #e2e8f0;padding:12px 16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
-     .control-title{font-size:14px;color:#64748b}
-     .control-actions{display:flex;gap:8px}
-     .report-header{text-align:center;padding-top:1mm}
-     .header-brand{position:relative;min-height:25mm}
-     .header-logo{position:absolute;left:0;top:-2mm;width:29mm;height:25mm;object-fit:contain}
-     .header-title{margin:0;color:#1e3a8a;font-size:17px;font-weight:800;line-height:1.15;text-transform:uppercase}
-     .header-city{margin-top:2px;color:#1e293b;font-size:9px;font-weight:700}
-     .main-title{margin-top:4mm;background:#1e3a8a;color:#fff;border-radius:4px;padding:6px 10px;font-size:10px;font-weight:800;text-transform:uppercase}
-     .period{margin-top:2.5mm;font-size:9px;font-weight:700;color:#1e3a8a}
-     .section{margin-top:4mm}
-     .section-title{height:9mm;display:flex;align-items:center;gap:7px;border-radius:4px;padding:0 10px;margin-bottom:2mm}
-     .section-title h3{margin:0;font-size:11px;font-weight:800}
-     .section-icon{width:17px;height:17px;stroke-width:2.2;flex:0 0 auto}
-     .offer-title{background:#dcfce7;color:#047857;border-left:4px solid #10b981}
-     .tithe-title{background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb}
-     .other-title{background:#fef3c7;color:#c2410c;border-left:4px solid #f59e0b}
-     .expense-title{background:#fee2e2;color:#dc2626;border-left:4px solid #ef4444}
-     .summary-title{background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb}
-     table{width:100%;border-collapse:collapse;font-size:8.1px;table-layout:fixed}
-     th{font-weight:800;text-align:left;padding:4px 5px;border:1px solid #cbd5e1;line-height:1.05}
-     td{padding:3.5px 5px;border:1px solid #cbd5e1;line-height:1.05;vertical-align:middle}
-     thead.offer-head th{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
-     thead.tithe-head th{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
-     thead.other-head th{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
-     thead.expense-head th{background:#fef2f2;color:#991b1b;border-color:#fecaca}
-     tbody tr:nth-child(even){background:#f8fafc}
-     .table-date{width:18%}
-     .table-description{width:auto}
-     .table-type{width:20%}
-     .table-value{width:20%;text-align:right}
-     .bold{font-weight:800}
-     tfoot td{font-weight:800;padding:5px}
-     .offer-total td{background:#ecfdf5;color:#047857;border-color:#a7f3d0}
-     .tithe-total td{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
-     .other-total td{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
-     .expense-total td{background:#fef2f2;color:#dc2626;border-color:#fecaca}
-     .empty-message{padding:8px 10px;border:1px dashed #cbd5e1;border-radius:4px;color:#64748b;font-size:7.5px;font-style:italic;text-align:center}
-     .second-page{padding-top:1mm}
-     .second-page .section:first-child{margin-top:0}
-     .summary-box{border:1px solid #bfdbfe;border-radius:6px;overflow:hidden}
-     .summary-row{display:grid;grid-template-columns:1fr 34%;align-items:center;min-height:13mm;padding:5px 9px;border-bottom:1px solid #dbeafe}
-     .summary-row:last-child{border-bottom:0}
-     .summary-label{font-size:8.5px;font-weight:700;color:#334155}
-     .summary-sub{display:block;font-size:6.5px;font-weight:500;color:#64748b;margin-top:1px}
-     .summary-value{text-align:right;font-size:11px;font-weight:800}
-     .entry-row{background:#ecfdf5;color:#047857}
-     .exit-row{background:#fef2f2;color:#dc2626}
-     .balance-row{background:#eff6ff;color:#1d4ed8}
-     .cash-row{background:#f1f5f9;color:#1e3a8a}
-     .summary-icon{width:18px;height:18px;vertical-align:middle;margin-right:7px;float:left;margin-top:1px}
-     .signature-area{margin-top:5mm;border:1px solid #bfdbfe;border-radius:5px;height:27mm;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:5mm}
-     .signature-line{width:62mm;border-top:1px solid #0f172a;margin-bottom:2mm}
-     .signature-label{font-size:8px;font-weight:700;color:#1e3a8a}
-     .report-footer{position:absolute;left:0;right:0;bottom:0;border-top:1px solid #cbd5e1;padding-top:3mm;display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:8px;color:#64748b;font-size:6.3px}
-     .footer-center{text-align:center;font-weight:800;color:#1e3a8a}
-     .footer-right{text-align:right}
-     .screen-only-note{text-align:center;color:#94a3b8;font-size:7px;margin-top:4mm}
-     .loading-screen,.error-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#fff;color:#111827;font-family:Arial,Helvetica,sans-serif}
-     .loading-screen p{font-size:15px;margin-top:15px}
-     .spinner{width:42px;height:42px;border:4px solid #e5e7eb;border-top-color:#1e3a8a;border-radius:50%;animation:spin .8s linear infinite}
-     .error-title{font-size:20px;color:#dc2626;font-weight:700;margin-bottom:8px}
-     .error-screen p{color:#475569;margin:0 0 16px}
-     @keyframes spin{to{transform:rotate(360deg)}}
-     @media print{
-      .print-hidden{display:none!important}
-      .page{margin:0;width:190mm;min-height:280mm}
-      .page-one{page-break-after:always}
-      .screen-only-note{display:none}
-      .report-container{width:100%}
-     }
-    `}</style>
-   </Helmet>
+    <Section icon={HandCoins} title="Ofertas" cls="offer">
+     {data.ofertas.length?<Table head={['Data','Descrição / Ofertante','Valor']} total={['TOTAL OFERTAS',money(totals.ofertas)]} totalCls="offer-head" rows={data.ofertas.map(x=>[dateBR(x.data),<b>{x.ofertante||'OFERTA GERAL'}</b>,money(x.valor)])}/>:<Empty>Nenhum registro de oferta encontrado para este período.</Empty>}
+    </Section>
 
-   <div className="report-container">
+    <Section icon={Coins} title="Dízimos" cls="tithe">
+     {data.dizimos.length?<Table head={['Data','Dizimista','Valor']} total={['TOTAL DÍZIMOS',money(totals.dizimos)]} totalCls="tithe-head" rows={data.dizimos.map(x=>[dateBR(x.data),<b>{x.igreja_dizimistas?.nome||'NÃO IDENTIFICADO'}</b>,money(x.valor)])}/>:<Empty>Nenhum registro de dízimo encontrado para este período.</Empty>}
+    </Section>
 
-    <div className="print-hidden control-bar">
-     <div className="control-title">Pré-visualização de Impressão</div>
-     <div className="control-actions">
-      <Button onClick={()=>window.print()} className="bg-blue-600 hover:bg-blue-700 text-white"><Printer className="w-4 h-4 mr-2"/>Imprimir</Button>
-      <Button onClick={()=>window.close()} variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-200"><X className="w-4 h-4 mr-2"/>Fechar</Button>
-     </div>
-    </div>
-
-    <div className="page page-one">
-
-     <header className="report-header">
-      <div className="header-brand">
-       <img src={LOGO_URL} alt="Logo Ministério Plantar" className="header-logo"/>
-       <h1 className="header-title">Igreja Assembleia de Deus Ministério Plantar</h1>
-       <div className="header-city">Lerolândia</div>
-      </div>
-
-      <div className="main-title">Relatório Financeiro de Entradas e Despesas</div>
-      <div className="period">Período: {periodLabel}</div>
-     </header>
-
-     <section className="section">
-      <SectionTitle icon={HandCoins} title="Ofertas" color="offer-title"/>
-
-      {data.ofertas.length?
-       <table>
-        <colgroup><col className="table-date"/><col/><col className="table-value"/></colgroup>
-        <thead className="offer-head">
-         <tr><th>Data</th><th>Descrição / Ofertante</th><th className="table-value">Valor</th></tr>
-        </thead>
-        <tbody>
-         {data.ofertas.map(item=><tr key={item.id}>
-          <td>{formatDate(item.data)}</td>
-          <td className="bold">{item.ofertante||'OFERTA GERAL'}</td>
-          <td className="table-value">{formatCurrency(item.valor)}</td>
-         </tr>)}
-        </tbody>
-        <tfoot>
-         <tr className="offer-total">
-          <td colSpan="2" style={{textAlign:'right'}}>TOTAL OFERTAS</td>
-          <td className="table-value">{formatCurrency(totals.totalOfertas)}</td>
-         </tr>
-        </tfoot>
-       </table>
-      :<EmptyMessage>Nenhum registro de oferta encontrado para este período.</EmptyMessage>}
-     </section>
-
-     <section className="section">
-      <SectionTitle icon={Coins} title="Dízimos" color="tithe-title"/>
-
-      {data.dizimos.length?
-       <table>
-        <colgroup><col className="table-date"/><col/><col className="table-value"/></colgroup>
-        <thead className="tithe-head">
-         <tr><th>Data</th><th>Dizimista</th><th className="table-value">Valor</th></tr>
-        </thead>
-        <tbody>
-         {data.dizimos.map(item=><tr key={item.id}>
-          <td>{formatDate(item.data)}</td>
-          <td className="bold">{item.igreja_dizimistas?.nome||'NÃO IDENTIFICADO'}</td>
-          <td className="table-value">{formatCurrency(item.valor)}</td>
-         </tr>)}
-        </tbody>
-        <tfoot>
-         <tr className="tithe-total">
-          <td colSpan="2" style={{textAlign:'right'}}>TOTAL DÍZIMOS</td>
-          <td className="table-value">{formatCurrency(totals.totalDizimos)}</td>
-         </tr>
-        </tfoot>
-       </table>
-      :<EmptyMessage>Nenhum registro de dízimo encontrado para este período.</EmptyMessage>}
-     </section>
-
-     <div className="screen-only-note print-hidden">Página 1 de 2</div>
-    </div>
-
-    <div className="page second-page">
-
-     <section className="section">
-      <SectionTitle icon={WalletCards} title="Outras Entradas" color="other-title"/>
-
-      {data.outras.length?
-       <table>
-        <colgroup><col className="table-date"/><col className="table-type"/><col/><col className="table-value"/></colgroup>
-        <thead className="other-head">
-         <tr><th>Data</th><th>Tipo</th><th>Descrição / Origem</th><th className="table-value">Valor</th></tr>
-        </thead>
-        <tbody>
-         {data.outras.map(item=><tr key={item.id}>
-          <td>{formatDate(item.data)}</td>
-          <td className="bold">{item.tipo_entrada||'-'}</td>
-          <td>{item.igreja_dizimistas?.nome||item.ofertante||'—'}</td>
-          <td className="table-value">{formatCurrency(item.valor)}</td>
-         </tr>)}
-        </tbody>
-        <tfoot>
-         <tr className="other-total">
-          <td colSpan="3" style={{textAlign:'right'}}>TOTAL OUTRAS ENTRADAS</td>
-          <td className="table-value">{formatCurrency(totals.totalOutras)}</td>
-         </tr>
-        </tfoot>
-       </table>
-      :<EmptyMessage>Nenhum outro registro de entrada encontrado para este período.</EmptyMessage>}
-     </section>
-
-     <section className="section">
-      <SectionTitle icon={Receipt} title="Despesas" color="expense-title"/>
-
-      {data.despesas.length?
-       <table>
-        <colgroup><col className="table-date"/><col/><col className="table-value"/></colgroup>
-        <thead className="expense-head">
-         <tr><th>Data</th><th>Descrição da Despesa</th><th className="table-value">Valor</th></tr>
-        </thead>
-        <tbody>
-         {data.despesas.map(item=><tr key={item.id}>
-          <td>{formatDate(item.data)}</td>
-          <td className="bold">{item.despesa||'-'}</td>
-          <td className="table-value">{formatCurrency(item.valor)}</td>
-         </tr>)}
-        </tbody>
-        <tfoot>
-         <tr className="expense-total">
-          <td colSpan="2" style={{textAlign:'right'}}>TOTAL DESPESAS</td>
-          <td className="table-value">{formatCurrency(totals.totalDespesas)}</td>
-         </tr>
-        </tfoot>
-       </table>
-      :<EmptyMessage>Nenhum registro de despesa encontrado para este período.</EmptyMessage>}
-     </section>
-
-     <section className="section">
-      <SectionTitle icon={BarChart3} title="Resumo do Período" color="summary-title"/>
-
-      <div className="summary-box">
-
-       <div className="summary-row entry-row">
-        <div>
-         <BarChart3 className="summary-icon"/>
-         <span className="summary-label">Total de Entradas</span>
-         <span className="summary-sub">Ofertas + Dízimos + Outras</span>
-        </div>
-        <div className="summary-value">{formatCurrency(totals.totalEntradasPeriodo)}</div>
-       </div>
-
-       <div className="summary-row exit-row">
-        <div>
-         <Receipt className="summary-icon"/>
-         <span className="summary-label">Total de Saídas</span>
-         <span className="summary-sub">Despesas</span>
-        </div>
-        <div className="summary-value">{formatCurrency(totals.totalDespesas)}</div>
-       </div>
-
-       <div className="summary-row balance-row">
-        <div>
-         <BarChart3 className="summary-icon"/>
-         <span className="summary-label">Saldo do Período</span>
-        </div>
-        <div className="summary-value">{formatCurrency(totals.saldoPeriodo)}</div>
-       </div>
-
-       <div className="summary-row cash-row">
-        <div>
-         <WalletCards className="summary-icon"/>
-         <span className="summary-label">Saldo Atual em Caixa (Geral)</span>
-        </div>
-        <div className="summary-value">{formatCurrency(totals.saldoGeral)}</div>
-       </div>
-
-      </div>
-     </section>
-
-     <div className="signature-area">
-      <PenLine className="summary-icon" style={{float:'none',margin:'0 0 3mm',color:'#1e3a8a'}}/>
-      <div className="signature-line"></div>
-      <div className="signature-label">Tesoureiro (a)</div>
-     </div>
-
-     <footer className="report-footer">
-      <div>Relatório emitido pelo sistema da Tesouraria.</div>
-      <div className="footer-center">TESOURARIA</div>
-      <div className="footer-right">Data de emissão: {currentDateTime}</div>
-     </footer>
-
-     <div className="screen-only-note print-hidden">Página 2 de 2</div>
-    </div>
-
+    <div className="hidden-print screen-note">Página 1 de 2</div>
    </div>
-  </>
- );
-};
 
-export default RelatorioEntradasDespesasPDF;
+   <div className="page p2">
+    <Section icon={WalletCards} title="Outras Entradas" cls="other">
+     {data.outras.length?<Table head={['Data','Tipo','Descrição / Origem','Valor']} total={['TOTAL OUTRAS ENTRADAS',money(totals.outras)]} totalCls="other-head" rows={data.outras.map(x=>[dateBR(x.data),<b>{x.tipo_entrada||'-'}</b>,x.igreja_dizimistas?.nome||x.ofertante||'—',money(x.valor)])}/>:<Empty>Nenhum outro registro de entrada encontrado para este período.</Empty>}
+    </Section>
+
+    <Section icon={Receipt} title="Despesas" cls="expense">
+     {data.despesas.length?<Table head={['Data','Descrição da Despesa','Valor']} total={['TOTAL DESPESAS',money(totals.despesas)]} totalCls="expense-head" rows={data.despesas.map(x=>[dateBR(x.data),<b>{x.despesa||'-'}</b>,money(x.valor)])}/>:<Empty>Nenhum registro de despesa encontrado para este período.</Empty>}
+    </Section>
+
+    <Section icon={BarChart3} title="Resumo do Período" cls="summary-title">
+     <div className="summary">
+      <div className="row entry"><div><BarChart3 className="sum-icon"/><span className="label">Total de Entradas</span><span className="sub">Ofertas + Dízimos + Outras</span></div><div className="value">{money(totals.entradas)}</div></div>
+      <div className="row exit"><div><Receipt className="sum-icon"/><span className="label">Total de Saídas</span><span className="sub">Despesas</span></div><div className="value">{money(totals.despesas)}</div></div>
+      <div className="row balance"><div><BarChart3 className="sum-icon"/><span className="label">Saldo do Período</span></div><div className="value">{money(totals.saldo)}</div></div>
+      <div className="row cash"><div><WalletCards className="sum-icon"/><span className="label">Saldo Atual em Caixa (Geral)</span></div><div className="value">{money(totals.caixa)}</div></div>
+     </div>
+    </Section>
+
+    <div className="sign"><PenLine className="sum-icon" style={{float:'none',margin:'0 0 3mm',color:'#1e3a8a'}}/><div className="line"/><div className="sign-label">Tesoureiro (a)</div></div>
+
+    <footer className="footer"><div>Relatório emitido pelo sistema da Tesouraria.</div><div className="footer-center">TESOURARIA</div><div className="footer-right">Data de emissão: {date}</div></footer>
+
+    <div className="hidden-print screen-note">Página 2 de 2</div>
+   </div>
+  </div>
+ </>
+}
