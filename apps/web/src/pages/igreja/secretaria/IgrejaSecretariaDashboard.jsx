@@ -26,11 +26,13 @@ import{Button}from'@/components/ui/button';
 const IgrejaSecretariaDashboard=()=>{
  const navigate=useNavigate(),location=useLocation(),{session,loading,canAccessModule}=useAuth(),{isMobile}=useContext(DeviceContext);
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
+
  useModuleAccessGuard('igreja:secretaria');
  const hasSecretariaAccess=canAccessModule('igreja:secretaria');
 
  useEffect(()=>{if(!loading&&!session)navigate('/login')},[session,loading,navigate]);
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
+ useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
 
  const routes=useMemo(()=>(
   <Routes>
@@ -58,15 +60,18 @@ const IgrejaSecretariaDashboard=()=>{
  return <SecretariaSharedDataProvider>
   <div className="flex min-h-screen w-full overflow-hidden bg-gradient-professional" style={{'--primary':'var(--neon-gold)','--ring':'var(--neon-gold)'}}>
    <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile} activeModule="secretaria"/>
+
    <div className={cn('flex h-screen flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
-    <Header toggleSidebar={()=>setSidebarOpen(prev=>!prev)} submodule="Secretaria"/>
+    <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} submodule="Secretaria"/>
+
     <main className="relative w-full flex-1 overflow-y-auto bg-transparent p-4 md:p-6 lg:p-8 [&_.neon-card]:neon-border-gold [&_.neon-card]:neon-hover-gold">
      {location.pathname==='/igreja/secretaria'?<DashboardHome/>:routes}
     </main>
    </div>
+
    {isMobile&&isSidebarOpen&&<div onClick={()=>setSidebarOpen(false)} className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm" aria-hidden="true"/>}
   </div>
- </SecretariaSharedDataProvider>
+ </SecretariaSharedDataProvider>;
 };
 
 export default IgrejaSecretariaDashboard;
