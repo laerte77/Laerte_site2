@@ -1,41 +1,39 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Menu, Home, ChevronLeft, X, Scissors } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import DividerLine from '@/components/ui/DividerLine';
-import UserMenu from '@/components/UserMenu';
+import React from'react';
+import{useNavigate}from'react-router-dom';
+import{Menu,Home,ChevronLeft,X,Scissors}from'lucide-react';
+import{Button}from'@/components/ui/button';
+import DividerLine from'@/components/ui/DividerLine';
+import UserMenu from'@/components/UserMenu';
 
-const Header = ({ toggleSidebar, isSidebarOpen }) => {
-  const navigate = useNavigate();
+const Header=({toggleSidebar,isSidebarOpen})=>{
+ const navigate=useNavigate();
 
-  return (
-    <header className="flex h-16 items-center justify-between border-b border-[hsl(var(--neon-barbearia))]/20 bg-black/80 backdrop-blur-sm px-4 md:px-6 sticky top-0 z-30 transition-all duration-300 animate-fade-in">
-      <div className="flex items-center gap-2 md:gap-4">
-        <Button variant="ghost" size="icon" onClick={toggleSidebar} className="lg:hidden text-[hsl(var(--neon-barbearia))] hover:bg-[hsl(var(--neon-barbearia))]/10 z-50 hover-scale">
-          {isSidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </Button>
-        
-        <Button variant="ghost" size="icon" onClick={() => navigate('/modules')} className="hidden md:flex text-muted-foreground hover:text-[hsl(var(--neon-barbearia))] hover:bg-[hsl(var(--neon-barbearia))]/10 hover-scale" title="Voltar">
-            <ChevronLeft className="h-5 w-5" />
-        </Button>
-        
-        <Button variant="ghost" size="icon" onClick={() => navigate('/modules')} className="text-muted-foreground hover:text-[hsl(var(--neon-barbearia))] bg-[hsl(var(--neon-barbearia))]/10 hover:bg-[hsl(var(--neon-barbearia))]/20 hover-scale transition-colors duration-300" title="Home">
-            <Home className="h-5 w-5 text-[hsl(var(--neon-barbearia))]" />
-        </Button>
+ return <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-[hsl(var(--neon-barbearia))]/20 bg-black/80 px-4 backdrop-blur-md md:px-6 animate-fade-in motion-reduce:animate-none">
+  <div className="flex min-w-0 items-center gap-1 md:gap-3">
+   <Button type="button" variant="ghost" size="icon" onClick={toggleSidebar} className="z-50 text-[hsl(var(--neon-barbearia))] hover:bg-[hsl(var(--neon-barbearia))]/10 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none lg:hidden" aria-label={isSidebarOpen?'Fechar menu lateral':'Abrir menu lateral'} aria-expanded={isSidebarOpen}>
+    {isSidebarOpen?<X className="h-6 w-6" aria-hidden="true"/>:<Menu className="h-6 w-6" aria-hidden="true"/>}
+   </Button>
 
-        <DividerLine moduleName="barbearia" vertical className="mx-2 h-8 opacity-40 hidden md:block" />
+   <Button type="button" variant="ghost" size="icon" onClick={()=>navigate('/modules')} className="hidden text-muted-foreground hover:text-[hsl(var(--neon-barbearia))] hover:bg-[hsl(var(--neon-barbearia))]/10 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none md:flex" title="Voltar" aria-label="Voltar para os módulos">
+    <ChevronLeft className="h-5 w-5" aria-hidden="true"/>
+   </Button>
 
-        <div className="flex items-center gap-2 group hidden sm:flex cursor-pointer" onClick={() => navigate('/barbearia/dashboard/home')}>
-          <Scissors className="h-5 w-5 text-[hsl(var(--neon-barbearia))]" />
-          <span className="text-lg font-bold text-[hsl(var(--neon-barbearia))] tracking-wider uppercase group-hover:opacity-80 transition-opacity">Brothers</span>
-        </div>
-      </div>
+   <Button type="button" variant="ghost" size="icon" onClick={()=>navigate('/modules')} className="text-muted-foreground hover:text-[hsl(var(--neon-barbearia))] hover:bg-[hsl(var(--neon-barbearia))]/20 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none" title="Home" aria-label="Ir para a seleção de módulos">
+    <Home className="h-5 w-5 text-[hsl(var(--neon-barbearia))]" aria-hidden="true"/>
+   </Button>
 
-      <div className="flex items-center gap-2">
-        <UserMenu moduleColor="neon-barbearia" />
-      </div>
-    </header>
-  );
+   <DividerLine moduleName="barbearia" vertical className="mx-2 hidden h-8 opacity-40 md:block"/>
+
+   <button type="button" onClick={()=>navigate('/barbearia/dashboard/home')} className="hidden items-center gap-2 rounded-md sm:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-barbearia))] focus-visible:ring-offset-2">
+    <Scissors className="h-5 w-5 text-[hsl(var(--neon-barbearia))]" aria-hidden="true"/>
+    <span className="text-lg font-bold uppercase tracking-wider text-[hsl(var(--neon-barbearia))]">Brothers</span>
+   </button>
+  </div>
+
+  <div className="flex items-center gap-2">
+   <UserMenu moduleColor="neon-barbearia"/>
+  </div>
+ </header>
 };
 
 export default Header;
