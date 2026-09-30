@@ -15,6 +15,7 @@ import jsPDF from'jspdf';
 import autoTable from'jspdf-autotable';
 
 const LOGO_URL='https://horizons-cdn.hostinger.com/23ae9372-1ce3-488a-9be5-00d3fa6b6d54/20edc9a8be1c027e0ddf5f8071ef876e.png';
+const BLUE=[30,58,138],CYAN=[14,165,233],LIGHT=[239,246,255],LINE=[203,213,225],TEXT=[30,41,59],MUTED=[100,116,139];
 
 const getInitials=name=>{
  if(!name)return'D';
@@ -35,7 +36,8 @@ const getBase64Image=url=>new Promise(resolve=>{
  const img=new Image();img.crossOrigin='Anonymous';img.src=url;
  img.onload=()=>{
   const c=document.createElement('canvas');c.width=img.width;c.height=img.height;
-  c.getContext('2d').drawImage(img,0,0);resolve(c.toDataURL('image/png'));
+  c.getContext('2d').drawImage(img,0,0);
+  resolve({data:c.toDataURL('image/png'),width:img.width,height:img.height});
  };
  img.onerror=()=>resolve(null);
 });
@@ -119,7 +121,86 @@ const ConsultaDirigentesConjunto=()=>{
   exportToExcel(data,'Dirigentes_por_Conjunto','Dirigentes');
  };
 
+ const drawPdfHeader=(doc,logoData,pageTitle,subtitle='')=>{
+  if(logoData?.data){
+   const ratio=logoData.height/logoData.width;
+   const w=12,h=w*ratio;
+   doc.addImage(logoData.data,'PNG',10,10,w,h);
+  }
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...BLUE);
+  doc.text('IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR',105,11,{align:'center'});
+
+  doc.setFontSize(7);
+  doc.setTextColor(...MUTED);
+  doc.text('LEROLÂNDIA',105,16,{align:'center'});
+
+  doc.setFontSize(6);
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(...BLUE);
+  doc.text('SECRETARIA',200,10,{align:'right'});
+  doc.text('RELATÓRIO DE CONJUNTOS',200,14,{align:'right'});
+
+  doc.setFillColor(...BLUE);
+  doc.roundedRect(10,21,190,9,2,2,'F');
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(8);
+  doc.setTextColor(255,255,255);
+  doc.text(pageTitle.toUpperCase(),105,27,{align:'center'});
+
+  if(subtitle){
+   doc.setFont('helvetica','normal');
+   doc.setFontSize(5.5);
+   doc.setTextColor(...MUTED);
+   doc.text(subtitle,105,34,{align:'center'});
+  }
+ };
+
+ const drawPdfFooter=(doc)=>{
+  const pageHeight=doc.internal.pageSize.height;
+  doc.setDrawColor(...LINE);
+  doc.setLineWidth(.3);
+  doc.line(10,pageHeight-13,200,pageHeight-13);
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(5.2);
+  doc.setTextColor(...MUTED);
+  doc.text('Relatório emitido eletronicamente pelo sistema da Secretaria.',10,pageHeight-8);
+
+  doc.text('IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR - LEROLÂNDIA',105,pageHeight-8,{align:'center'});
+  doc.text(`Data de emissão: ${new Date().toLocaleDateString('pt-BR')}`,200,pageHeight-8,{align:'right'});
+ };
+
  const handleGeneratePDF=async()=>{
+  if(!totalDirigentes){
+   toast({title:'Sem dados',description:'Não há dirigentes para gerar PDF.',variant:'destructive'});
+   return;
+  }
+
+  const doc=new jsPDF('p','mm','a4');
+  let logoData=null;
+
+  try{logoData=await getBase64Image(LOGO_URL)}catch{}
+
+  const statusText=filterStatus==='todos'?'Todos os Status':filterStatus==='ATIVO'?'Ativos':'Inativos';
+  const conjuntoNome=filterConjunto==='todos'?'Todos os Conjuntos':conjuntosBase.find(c=>String(c.id)===filterConjunto)?.nome_conjunto||'';
+  const subtitle=`Documento emitido pelo sistema da Secretaria • Status: ${statusText}${conjuntoNome&&filterConjunto!=='todos'?` • Conjunto: ${conjuntoNome}`:''}`;
+
+  drawPdfHeader(doc,logoData,'RELATÓRIO DE DIRIGENTES POR CONJUNTO',subtitle);
+
+  let y=40;
+
+  if(searchTerm.trim()){
+   doc.setFont('helvetica','normal');
+   doc.setFontSize(6.5);
+   doc.setTextColor(...MUTED);
+   doc.text(`Busca aplicada: ${searchTerm.trim()}`,105,y,{align:'center'});
+   y+=6;
+  }
+
   const body=conjuntos.flatMap(c=>c.dirigentes.map(d=>[
    c.nome_conjunto,
    d.nome_completo,
@@ -127,98 +208,66 @@ const ConsultaDirigentesConjunto=()=>{
    d.status||'ATIVO'
   ]));
 
-  if(!body.length){
-   toast({title:'Sem dados',description:'Não há dirigentes para exportar.',variant:'destructive'});
-   return;
-  }
-
-  const doc=new jsPDF('p','mm','a4');
-
-  try{
-   const logo=await getBase64Image(LOGO_URL);
-   if(logo)doc.addImage(logo,'PNG',15,10,22,22);
-  }catch{}
-
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(14);
-  doc.setTextColor(30,58,138);
-  doc.text('IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR',105,16,{align:'center'});
-
-  doc.setFontSize(10);
-  doc.setTextColor(71,85,105);
-  doc.text('LEROLÂNDIA',105,23,{align:'center'});
-
-  doc.setFontSize(15);
-  doc.setTextColor(30,58,138);
-  doc.text('RELATÓRIO DE DIRIGENTES POR CONJUNTO',105,34,{align:'center'});
-
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(9);
-  doc.setTextColor(71,85,105);
-
-  const statusText=filterStatus==='todos'?'Todos os Status':filterStatus==='ATIVO'?'Ativos':'Inativos';
-  doc.text(`Status: ${statusText}`,105,42,{align:'center'});
-
-  if(searchTerm.trim())doc.text(`Busca: ${searchTerm.trim()}`,105,48,{align:'center'});
-  if(filterConjunto!=='todos'){
-   const nome=conjuntosBase.find(c=>String(c.id)===filterConjunto)?.nome_conjunto||'';
-   if(nome)doc.text(`Conjunto: ${nome}`,105,54,{align:'center'});
-  }
-
-  const startY=filterConjunto!=='todos'||searchTerm.trim()?61:54;
-
   autoTable(doc,{
    head:[['CONJUNTO','DIRIGENTE','FUNÇÃO/CARGO','STATUS']],
    body,
-   startY,
+   startY:y,
    theme:'grid',
    styles:{
     font:'helvetica',
-    fontSize:9,
-    cellPadding:3.2,
-    textColor:[30,41,59],
-    lineColor:[203,213,225],
-    lineWidth:.2
+    fontSize:7.2,
+    cellPadding:2.3,
+    textColor:TEXT,
+    lineColor:LINE,
+    lineWidth:.2,
+    overflow:'linebreak'
    },
    headStyles:{
     fillColor:[37,99,235],
     textColor:[255,255,255],
     fontStyle:'bold',
-    halign:'left'
+    fontSize:7.2,
+    halign:'left',
+    cellPadding:2.5
    },
    alternateRowStyles:{fillColor:[248,250,252]},
    columnStyles:{
-    0:{cellWidth:43},
-    1:{cellWidth:57},
-    2:{cellWidth:55},
-    3:{cellWidth:25,halign:'center'}
+    0:{cellWidth:45},
+    1:{cellWidth:65},
+    2:{cellWidth:52},
+    3:{cellWidth:28,halign:'center'}
    },
-   margin:{left:10,right:10,top:15,bottom:20},
-   didDrawPage:data=>{
-    const pageHeight=doc.internal.pageSize.height;
-    doc.setFontSize(7);
-    doc.setTextColor(100,116,139);
-    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`,10,pageHeight-8);
-    doc.text(`Página ${data.pageNumber}`,200,pageHeight-8,{align:'right'});
+   margin:{left:10,right:10,top:42,bottom:20},
+   pageBreak:'auto',
+   didDrawPage:()=>{
+    drawPdfHeader(doc,logoData,'RELATÓRIO DE DIRIGENTES POR CONJUNTO',subtitle);
+    drawPdfFooter(doc);
    }
   });
 
-  let y=(doc.lastAutoTable?.finalY||startY)+10;
-  if(y>270){doc.addPage();y=20}
+  let summaryY=(doc.lastAutoTable?.finalY||y)+10;
 
-  doc.setFillColor(239,246,255);
-  doc.roundedRect(10,y,190,23,3,3,'F');
+  if(summaryY>265){
+   doc.addPage();
+   drawPdfHeader(doc,logoData,'RELATÓRIO DE DIRIGENTES POR CONJUNTO',subtitle);
+   summaryY=42;
+  }
+
+  doc.setFillColor(...LIGHT);
+  doc.roundedRect(10,summaryY,190,24,2.5,2.5,'F');
 
   doc.setFont('helvetica','bold');
-  doc.setFontSize(9);
-  doc.setTextColor(30,58,138);
-  doc.text('RESUMO',15,y+7);
+  doc.setFontSize(6.5);
+  doc.setTextColor(...BLUE);
+  doc.text('RESUMO',15,summaryY+7);
 
   doc.setFont('helvetica','normal');
-  doc.setTextColor(30,41,59);
-  doc.text(`Conjuntos com dirigentes: ${totalConjuntos}`,15,y+15);
-  doc.text(`Total de dirigentes: ${totalDirigentes}`,105,y+15);
+  doc.setFontSize(6.5);
+  doc.setTextColor(...TEXT);
+  doc.text(`Conjuntos com dirigentes: ${totalConjuntos}`,15,summaryY+15);
+  doc.text(`Total de dirigentes: ${totalDirigentes}`,105,summaryY+15);
 
+  drawPdfFooter(doc);
   doc.save('Dirigentes_por_Conjunto.pdf');
  };
 
@@ -233,16 +282,22 @@ const ConsultaDirigentesConjunto=()=>{
     @page{size:A4 portrait;margin:10mm}
     body{background:#fff!important;color:#111827!important}
     #root{background:#fff!important}
-    .screen-report,.no-print{display:none!important}
+    .screen-report{display:none!important}
     .print-report{display:block!important}
     .print-report *{color:#111827!important}
-    .print-report .report-header{border-bottom:2px solid #1e3a8a;padding-bottom:12px;margin-bottom:18px;text-align:center}
-    .print-report .report-logo{width:72px;height:72px;object-fit:contain;margin:0 auto 7px}
-    .print-report table{width:100%;border-collapse:collapse;font-size:9.5px}
-    .print-report th{background:#2563eb!important;color:#fff!important;padding:6px;border:1px solid #1d4ed8;text-align:left}
-    .print-report td{padding:6px;border:1px solid #cbd5e1}
-    .print-report tr:nth-child(even) td{background:#f8fafc!important}
-    .print-report .summary{margin-top:16px;padding:10px;border:1px solid #bfdbfe;background:#eff6ff!important;display:flex;justify-content:space-between;font-size:10px;font-weight:700}
+    .print-report .report-header{position:relative;border-bottom:0;padding-bottom:0;margin-bottom:16px;text-align:center}
+    .print-report .report-logo{position:absolute;left:0;top:0;width:38px;height:38px;object-fit:contain}
+    .print-report .inst{font-size:16px;font-weight:800;color:#1e3a8a!important}
+    .print-report .city{font-size:8px;font-weight:700;color:#475569!important;margin-top:3px}
+    .print-report .dept{position:absolute;right:0;top:0;font-size:6px;font-weight:700;color:#1e3a8a!important;text-align:right}
+    .print-report .title-bar{margin-top:9px;background:#1e3a8a!important;color:#fff!important;border-radius:4px;padding:6px;font-size:9px;font-weight:800}
+    .print-report .subtitle{font-size:5.5px;color:#64748b!important;margin-top:4px}
+    .print-report table{width:100%;border-collapse:collapse;font-size:8px;margin-top:10px}
+    .print-report th{background:#2563eb!important;color:#fff!important;padding:5px;border:1px solid #1d4ed8}
+    .print-report td{padding:5px;border:1px solid #cbd5e1}
+    .print-report tbody tr:nth-child(even) td{background:#f8fafc!important}
+    .print-report .summary{margin-top:14px;padding:9px;border-radius:5px;background:#eff6ff!important;border:1px solid #dbeafe;display:flex;justify-content:space-between;font-size:8px;font-weight:700}
+    .print-report .footer{position:fixed;left:10mm;right:10mm;bottom:5mm;border-top:1px solid #cbd5e1;padding-top:4px;font-size:5.5px;color:#64748b!important;display:flex;justify-content:space-between}
    }
   `}</style>
 
@@ -270,6 +325,10 @@ const ConsultaDirigentesConjunto=()=>{
        </SelectContent>
       </Select>
 
+      <Button variant="outline" size="sm" onClick={()=>setShowFilters(v=>!v)}>
+       <Filter className="mr-2 h-4 w-4"/>{showFilters?'Ocultar Filtros':'Filtros'}{showFilters?<ChevronUp className="ml-2 h-4 w-4"/>:<ChevronDown className="ml-2 h-4 w-4"/>}
+      </Button>
+
       <Button variant="outline" size="sm" onClick={handleExportExcel} className="border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10">
        <Download className="mr-2 h-4 w-4"/>Excel
       </Button>
@@ -284,18 +343,12 @@ const ConsultaDirigentesConjunto=()=>{
      </div>
     </div>
 
-    <Card className="border-border bg-card shadow-lg">
-     <CardHeader className="border-b border-border pb-3">
-      <CardTitle className="flex items-center justify-between text-base">
-       <div className="flex items-center font-bold"><Filter className="mr-2 h-4 w-4 text-primary"/>Filtros Avançados</div>
-       <Button variant="ghost" size="sm" onClick={()=>setShowFilters(!showFilters)} className="h-8 w-8 p-0">
-        {showFilters?<ChevronUp className="h-4 w-4"/>:<ChevronDown className="h-4 w-4"/>}
-       </Button>
-      </CardTitle>
-     </CardHeader>
-
-     <AnimatePresence>
-      {showFilters&&<motion.div initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}}>
+    <AnimatePresence>
+     {showFilters&&<motion.div initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}}>
+      <Card className="border-border bg-card shadow-lg">
+       <CardHeader className="border-b border-border pb-3">
+        <CardTitle className="flex items-center text-base"><Filter className="mr-2 h-4 w-4 text-primary"/>Filtros Avançados</CardTitle>
+       </CardHeader>
        <CardContent className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 md:grid-cols-3">
         <div className="relative">
          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
@@ -315,11 +368,11 @@ const ConsultaDirigentesConjunto=()=>{
          {totalDirigentes} {totalDirigentes===1?'dirigente encontrado':'dirigentes encontrados'}
         </div>
        </CardContent>
-      </motion.div>}
-     </AnimatePresence>
-    </Card>
+      </Card>
+     </motion.div>}
+    </AnimatePresence>
 
-    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
      <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Dirigentes</p><p className="mt-1 text-2xl font-bold">{totalDirigentes}</p></CardContent></Card>
      <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Conjuntos</p><p className="mt-1 text-2xl font-bold">{totalConjuntos}</p></CardContent></Card>
      <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p><p className="mt-1 text-2xl font-bold text-blue-500">{filterStatus==='todos'?'Todos':filterStatus}</p></CardContent></Card>
@@ -343,9 +396,7 @@ const ConsultaDirigentesConjunto=()=>{
            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10"><Users className="h-4 w-4 text-primary"/></div>
            <span className="truncate text-base font-bold">{conjunto.nome_conjunto}</span>
           </div>
-          <Badge variant="outline" className="shrink-0 border-primary/30 text-primary">
-           {conjunto.dirigentes.length} {conjunto.dirigentes.length===1?'Dirigente':'Dirigentes'}
-          </Badge>
+          <Badge variant="outline" className="shrink-0 border-primary/30 text-primary">{conjunto.dirigentes.length} {conjunto.dirigentes.length===1?'Dirigente':'Dirigentes'}</Badge>
          </CardTitle>
         </CardHeader>
 
@@ -356,10 +407,7 @@ const ConsultaDirigentesConjunto=()=>{
 
           return <motion.div key={d.id} whileHover={{scale:1.005}} className={`cursor-pointer rounded-xl border p-3 transition-colors ${inactive?'border-red-500/30 bg-red-500/5':'border-border bg-background/40 hover:border-primary/40 hover:bg-primary/5'}`} onClick={()=>setSelectedDirigente({...d,_conjunto:conjunto})}>
            <div className="flex items-start gap-3">
-            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${inactive?'border-red-500/30 bg-red-500/10 text-red-500':'border-primary/20 bg-primary/10 text-primary'}`}>
-             {getInitials(d.nome_completo)}
-            </div>
-
+            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${inactive?'border-red-500/30 bg-red-500/10 text-red-500':'border-primary/20 bg-primary/10 text-primary'}`}>{getInitials(d.nome_completo)}</div>
             <div className="min-w-0 flex-1">
              <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -391,21 +439,18 @@ const ConsultaDirigentesConjunto=()=>{
   <div className="print-report">
    <div className="report-header">
     <img src={LOGO_URL} alt="Logo" className="report-logo"/>
-    <div style={{fontSize:'18px',fontWeight:800,color:'#1e3a8a'}}>IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR</div>
-    <div style={{fontSize:'12px',fontWeight:700,color:'#475569',marginTop:'3px'}}>LEROLÂNDIA</div>
-    <div style={{fontSize:'18px',fontWeight:800,color:'#1e3a8a',marginTop:'10px'}}>RELATÓRIO DE DIRIGENTES POR CONJUNTO</div>
-    <div style={{fontSize:'10px',color:'#475569',marginTop:'5px'}}>
-     Status: {filterStatus==='todos'?'Todos os Status':filterStatus==='ATIVO'?'Ativos':'Inativos'}
-     {searchTerm.trim()?` • Busca: ${searchTerm.trim()}`:''}
-    </div>
+    <div className="dept">SECRETARIA<br/>RELATÓRIO DE CONJUNTOS</div>
+    <div className="inst">IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR</div>
+    <div className="city">LEROLÂNDIA</div>
+    <div className="title-bar">RELATÓRIO DE DIRIGENTES POR CONJUNTO</div>
+    <div className="subtitle">Documento emitido pelo sistema da Secretaria</div>
+    <div className="subtitle">Status: {filterStatus==='todos'?'Todos os Status':filterStatus==='ATIVO'?'Ativos':'Inativos'}</div>
    </div>
 
    <table>
-    <thead>
-     <tr><th>CONJUNTO</th><th>DIRIGENTE</th><th>FUNÇÃO/CARGO</th><th>STATUS</th></tr>
-    </thead>
+    <thead><tr><th>CONJUNTO</th><th>DIRIGENTE</th><th>FUNÇÃO/CARGO</th><th>STATUS</th></tr></thead>
     <tbody>
-     {conjuntos.flatMap(c=>c.dirigentes.map((d,index)=>
+     {conjuntos.flatMap(c=>c.dirigentes.map(d=>
       <tr key={`${c.id}-${d.id}`}>
        <td>{c.nome_conjunto}</td>
        <td>{d.nome_completo}</td>
@@ -419,7 +464,12 @@ const ConsultaDirigentesConjunto=()=>{
    <div className="summary">
     <span>Conjuntos com dirigentes: {totalConjuntos}</span>
     <span>Total de dirigentes: {totalDirigentes}</span>
-    <span>Gerado em: {new Date().toLocaleString('pt-BR')}</span>
+   </div>
+
+   <div className="footer">
+    <span>Relatório emitido eletronicamente pelo sistema da Secretaria.</span>
+    <span>IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR - LEROLÂNDIA</span>
+    <span>Data de emissão: {new Date().toLocaleDateString('pt-BR')}</span>
    </div>
   </div>
 
