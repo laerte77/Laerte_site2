@@ -1,5 +1,5 @@
 import React,{useState,useEffect,useContext}from'react';
-import{Routes,Route}from'react-router-dom';
+import{Routes,Route,Navigate,useLocation}from'react-router-dom';
 import Sidebar from'@/components/barbearia/Sidebar.jsx';
 import Header from'@/components/barbearia/Header.jsx';
 import BarbeariaDashboard from'@/components/barbearia/BarbeariaDashboard.jsx';
@@ -25,10 +25,12 @@ import{useModuleAccessGuard}from'@/hooks/useModuleAccessGuard';
 import{cn}from'@/lib/utils';
 
 const BarbeariaBrothersDashboard=()=>{
- const{isMobile}=useContext(DeviceContext);
+ const{isMobile}=useContext(DeviceContext),location=useLocation();
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
+
  useModuleAccessGuard('barbearia');
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
+ useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
 
  return <div className="flex h-screen overflow-hidden bg-gradient-professional font-sans text-[#A9A9A9]" style={{'--primary':'var(--neon-gold)','--ring':'var(--neon-gold)'}}>
   <Helmet><title>Barbearia Brothers</title></Helmet>
@@ -57,6 +59,7 @@ const BarbeariaBrothersDashboard=()=>{
       <Route path="consultas/assinaturas" element={<ConsultaAssinaturasAtivas/>}/>
       <Route path="consultas/debitos" element={<ConsultaClientesDebito/>}/>
       <Route path="debug/database-test" element={<BarbeariaDatabaseTest/>}/>
+      <Route path="*" element={<Navigate to="/barbearia/dashboard" replace/>}/>
      </Routes>
     </div>
    </main>
