@@ -1,347 +1,442 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Filter, FileDown, Printer, Eye, AlertCircle, Loader2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { cn } from '@/lib/utils';
+import React,{useEffect,useState,useMemo,useCallback}from'react';
+import{useSearchParams}from'react-router-dom';
+import{supabase}from'@/lib/customSupabaseClient';
+import{Helmet}from'react-helmet';
+import{Button}from'@/components/ui/button';
+import{Printer,X,HandCoins,Coins,WalletCards,Receipt,BarChart3,PenLine}from'lucide-react';
 
-const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-const availableYears = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i);
+const LOGO_URL='https://horizons-cdn.hostinger.com/23ae9372-1ce3-488a-9be5-00d3fa6b6d54/612e5784f3faca006483ae69c11fa425.png';
 
-const formatCurrency = (value) => (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const RelatorioEntradasDespesasPDF=()=>{
+ const[searchParams]=useSearchParams();
+ const[data,setData]=useState({ofertas:[],dizimos:[],outras:[],despesas:[]});
+ const[allTimeTotals,setAllTimeTotals]=useState({entradas:0,despesas:0});
+ const[loading,setLoading]=useState(true);
+ const[error,setError]=useState(null);
+ const[currentDateTime,setCurrentDateTime]=useState('');
 
-const RelatorioEntradasDespesas = () => {
-  const { toast } = useToast();
-  const { user } = useAuth();
-  
-  // Refs for cleanup and race condition prevention
-  const isMounted = useRef(false);
-  const abortControllerRef = useRef(null);
-  const resultCache = useRef(new Map());
+ const filterType=searchParams.get('filterType');
+ const year=searchParams.get('year');
+ const month=searchParams.get('month');
+ const startDate=searchParams.get('startDate');
+ const endDate=searchParams.get('endDate');
+ const shouldPrint=searchParams.get('print')==='true';
 
-  // State
-  const [filterType, setFilterType] = useState('mensal');
-  const [filters, setFilters] = useState({
-    year: new Date().getFullYear(),
-    month: new Date().getMonth(),
-    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
-  });
-  
-  const [totals, setTotals] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+ const formatCurrency=value=>(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+ const formatDate=value=>new Date(value).toLocaleDateString('pt-BR',{timeZone:'UTC'});
 
-  // Setup mount ref
-  useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+ const periodLabel=useMemo(()=>{
+  if(filterType==='mensal'&&year&&month){
+   const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+   return`${meses[Number(month)]||''}/${year}`;
+  }
+  if(startDate&&endDate)return`${formatDate(startDate)} a ${formatDate(endDate)}`;
+  return'Período selecionado';
+ },[filterType,year,month,startDate,endDate]);
 
-  // Handlers wrapped in useCallback to prevent re-renders
-  const handleFilterChange = useCallback((key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-  }, []);
+ const fetchData=useCallback(async()=>{
+  setLoading(true);
+  setError(null);
+  let start,end;
 
-  const handleFilterTypeChange = useCallback((value) => {
-    setFilterType(value);
-    setTotals(null);
-    setError(null);
-  }, []);
+  if(filterType==='mensal'&&year&&month){
+   start=new Date(Date.UTC(parseInt(year),parseInt(month),1));
+   end=new Date(Date.UTC(parseInt(year),parseInt(month)+1,0,23,59,59));
+  }else if(filterType==='periodo'&&startDate&&endDate){
+   start=new Date(`${startDate}T00:00:00Z`);
+   end=new Date(`${endDate}T23:59:59Z`);
+  }else{
+   setLoading(false);
+   setError('Parâmetros inválidos para geração do relatório.');
+   return;
+  }
 
-  // Optimized Fetch Logic
-  const fetchTotals = useCallback(async () => {
-    if (!user) return;
+  try{
+   const[entradasRes,despesasRes,allEntradasRes,allDespesasRes]=await Promise.all([
+    supabase.from('igreja_entradas').select('*, igreja_dizimistas(nome)').gte('data',start.toISOString()).lte('data',end.toISOString()).order('data',{ascending:true}),
+    supabase.from('igreja_despesas').select('*').gte('data',start.toISOString()).lte('data',end.toISOString()).order('data',{ascending:true}),
+    supabase.from('igreja_entradas').select('valor'),
+    supabase.from('igreja_despesas').select('valor')
+   ]);
 
-    // Cancel any pending requests
-    if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+   if(entradasRes.error)throw entradasRes.error;
+   if(despesasRes.error)throw despesasRes.error;
 
-    setLoading(true);
-    setError(null);
+   const entradas=entradasRes.data||[];
 
-    // Create a cache key
-    const cacheKey = JSON.stringify({ filterType, filters, userId: user.id });
+   setData({
+    ofertas:entradas.filter(e=>(e.tipo_entrada||'').toUpperCase()==='OFERTA'),
+    dizimos:entradas.filter(e=>{
+     const t=(e.tipo_entrada||'').toUpperCase();
+     return t==='DÍZIMO'||t==='DIZIMO';
+    }),
+    outras:entradas.filter(e=>{
+     const t=(e.tipo_entrada||'').toUpperCase();
+     return t!=='OFERTA'&&t!=='DÍZIMO'&&t!=='DIZIMO';
+    }),
+    despesas:despesasRes.data||[]
+   });
 
-    // Check cache
-    if (resultCache.current.has(cacheKey)) {
-        if (isMounted.current) {
-            setTotals(resultCache.current.get(cacheKey));
-            setLoading(false);
-        }
-        return;
-    }
+   setAllTimeTotals({
+    entradas:(allEntradasRes.data||[]).reduce((a,c)=>a+(c.valor||0),0),
+    despesas:(allDespesasRes.data||[]).reduce((a,c)=>a+(c.valor||0),0)
+   });
+  }catch(err){
+   console.error('Erro ao buscar dados para o relatório:',err);
+   setError('Não foi possível carregar os dados do relatório. Tente novamente.');
+  }finally{
+   setLoading(false);
+   setCurrentDateTime(new Date().toLocaleString('pt-BR'));
+  }
+ },[filterType,year,month,startDate,endDate]);
 
-    let start, end;
-    try {
-      if (filterType === 'mensal') {
-        if (filters.year === 'all') {
-           start = '2000-01-01T00:00:00Z';
-           end = '2100-12-31T23:59:59Z';
-        } else if (filters.month === 'all') {
-           start = new Date(Date.UTC(filters.year, 0, 1)).toISOString();
-           end = new Date(Date.UTC(filters.year, 11, 31, 23, 59, 59)).toISOString();
-        } else {
-           start = new Date(Date.UTC(filters.year, filters.month, 1)).toISOString();
-           end = new Date(Date.UTC(filters.year, filters.month + 1, 0, 23, 59, 59)).toISOString();
-        }
-      } else {
-        if (!filters.startDate || !filters.endDate) throw new Error("Datas inválidas");
-        start = new Date(filters.startDate + 'T00:00:00Z').toISOString();
-        end = new Date(filters.endDate + 'T23:59:59Z').toISOString();
-      }
-      
-      // Parallel requests
-      const [entradasRes, despesasRes] = await Promise.all([
-        supabase.from('igreja_entradas')
-            .select('valor')
-            .gte('data', start)
-            .lte('data', end)
-            .eq('user_id', user.id)
-            .abortSignal(signal),
-        supabase.from('igreja_despesas')
-            .select('valor')
-            .gte('data', start)
-            .lte('data', end)
-            .eq('user_id', user.id)
-            .abortSignal(signal),
-      ]);
-      
-      if (signal.aborted) return;
-      if (entradasRes.error) throw entradasRes.error;
-      if (despesasRes.error) throw despesasRes.error;
-      
-      // Calculate totals efficiently
-      const totalEntradas = entradasRes.data?.reduce((acc, curr) => acc + Number(curr.valor || 0), 0) || 0;
-      const totalDespesas = despesasRes.data?.reduce((acc, curr) => acc + Number(curr.valor || 0), 0) || 0;
-      
-      const result = {
-        entradas: totalEntradas,
-        despesas: totalDespesas,
-        saldo: totalEntradas - totalDespesas,
-      };
+ useEffect(()=>{fetchData()},[fetchData]);
 
-      // Update Cache
-      resultCache.current.set(cacheKey, result);
-      
-      if (isMounted.current) {
-        setTotals(result);
-      }
+ useEffect(()=>{
+  if(!loading&&!error&&shouldPrint){
+   const timer=setTimeout(()=>window.print(),700);
+   return()=>clearTimeout(timer);
+  }
+ },[loading,error,shouldPrint]);
 
-    } catch (error) {
-      if (error.name === 'AbortError') return;
-      console.error(error);
-      if (isMounted.current) {
-        setError(error.message || 'Erro desconhecido');
-        toast({ title: 'Erro ao buscar dados', description: error.message, variant: 'destructive' });
-      }
-    } finally {
-      if (isMounted.current && !signal.aborted) {
-        setLoading(false);
-      }
-    }
-  }, [filterType, filters, user, toast]);
+ const totals=useMemo(()=>{
+  const totalOfertas=data.ofertas.reduce((a,i)=>a+(i.valor||0),0);
+  const totalDizimos=data.dizimos.reduce((a,i)=>a+(i.valor||0),0);
+  const totalOutras=data.outras.reduce((a,i)=>a+(i.valor||0),0);
+  const totalDespesas=data.despesas.reduce((a,i)=>a+(i.valor||0),0);
+  const totalEntradasPeriodo=totalOfertas+totalDizimos+totalOutras;
+  const saldoPeriodo=totalEntradasPeriodo-totalDespesas;
+  const saldoGeral=allTimeTotals.entradas-allTimeTotals.despesas;
 
-  const generateReportUrl = (print = false) => {
-    const { year, month, startDate, endDate } = filters;
-    let queryParams = `?filterType=${filterType}`;
-    
-    if (filterType === 'mensal') {
-      queryParams += `&year=${year}&month=${month}`;
-    } else if (filterType === 'periodo') {
-      if (!startDate || !endDate) return null;
-      queryParams += `&startDate=${startDate}&endDate=${endDate}`;
-    } else {
-      return null;
-    }
-    
-    if (print) {
-        queryParams += `&print=true`;
-    }
-    
-    return `${window.location.origin}/igreja/relatorios/entradas-despesas-pdf${queryParams}`;
-  };
+  return{totalOfertas,totalDizimos,totalOutras,totalDespesas,totalEntradasPeriodo,saldoPeriodo,saldoGeral};
+ },[data,allTimeTotals]);
 
-  const handleAction = (action) => {
-    const url = generateReportUrl(action === 'print');
-    if (!url) {
-      toast({ title: 'Seleção de Período Inválida', description: 'Verifique as datas selecionadas.', variant: 'destructive' });
-      return;
-    }
-    window.open(url, '_blank');
-  };
+ const SectionTitle=({icon:Icon,title,color})=>(
+  <div className={`section-title ${color}`}>
+   <Icon className="section-icon"/>
+   <h3>{title}</h3>
+  </div>
+ );
 
-  return (
-    <div className="bg-gradient-to-br from-black to-gray-900 min-h-screen text-gray-100 p-4 space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold text-white">
-            Relatório de Entradas e Despesas
-          </h2>
-          <p className="text-gray-400">Visualize um resumo financeiro consolidado.</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-            <Button 
-                onClick={fetchTotals} 
-                disabled={loading}
-                className="min-w-[120px] bg-yellow-600 hover:bg-yellow-700 text-white"
-            >
-                {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Eye className="w-4 h-4 mr-2" />}
-                {loading ? 'Calculando...' : 'Visualizar'}
-            </Button>
-            
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="text-yellow-500 border-yellow-500 hover:bg-yellow-500/10 hover:text-yellow-400">
-                        <FileDown className="w-4 h-4 mr-2" /> Gerar Relatório
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="bg-gray-800 border-gray-700 text-gray-100 z-50">
-                    <DropdownMenuItem onSelect={() => handleAction('view')} className="cursor-pointer hover:bg-gray-700">
-                        <FileDown className="w-4 h-4 mr-2" />Gerar PDF
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => handleAction('print')} className="cursor-pointer hover:bg-gray-700">
-                        <Printer className="w-4 h-4 mr-2" />Imprimir
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-        </div>
-      </div>
-      
-      <Card className="bg-gray-900/50 backdrop-blur-sm border-gray-800 shadow-md">
-        <CardHeader className="pb-3 border-b border-gray-800">
-          <CardTitle className="flex items-center text-lg text-white"><Filter className="w-5 h-5 mr-2 text-yellow-500" /> Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
-           <div className="flex flex-col space-y-4 pt-4">
-                <div className="w-full md:w-1/3">
-                    <Label className="mb-2 block text-gray-400">Tipo de Filtro</Label>
-                    <Select value={filterType} onValueChange={handleFilterTypeChange} disabled={loading}>
-                        <SelectTrigger className="bg-gray-800 border-gray-700 text-gray-100">
-                        <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-800 border-gray-700 text-gray-100">
-                        <SelectItem value="mensal">Por Mês/Ano</SelectItem>
-                        <SelectItem value="periodo">Por Período Personalizado</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
+ const EmptyMessage=({children})=><div className="empty-message">{children}</div>;
 
-                <div className="p-1">
-                    <div className={cn("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-in slide-in-from-left-2 duration-300", filterType !== 'mensal' && "hidden")}>
-                        <div>
-                            <Label className="mb-2 block text-gray-400">Ano</Label>
-                            <Select 
-                                value={String(filters.year)} 
-                                onValueChange={v => handleFilterChange('year', v === 'all' ? 'all' : Number(v))}
-                                disabled={loading}
-                            >
-                                <SelectTrigger className="bg-gray-800 border-gray-700 text-gray-100"><Calendar className="w-4 h-4 mr-2" /><SelectValue /></SelectTrigger>
-                                <SelectContent className="bg-gray-800 border-gray-700 text-gray-100">
-                                    <ScrollArea className="h-[200px]">
-                                        <SelectItem value="all">Todos</SelectItem>
-                                        {availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-                                    </ScrollArea>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
-                            <Label className="mb-2 block text-gray-400">Mês</Label>
-                            <Select 
-                                value={String(filters.month)} 
-                                onValueChange={v => handleFilterChange('month', v === 'all' ? 'all' : Number(v))}
-                                disabled={loading}
-                            >
-                                <SelectTrigger className="bg-gray-800 border-gray-700 text-gray-100"><Calendar className="w-4 h-4 mr-2" /><SelectValue /></SelectTrigger>
-                                <SelectContent className="bg-gray-800 border-gray-700 text-gray-100">
-                                    <ScrollArea className="h-[200px]">
-                                        <SelectItem value="all">Todos</SelectItem>
-                                        {meses.map((m, i) => <SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
-                                    </ScrollArea>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
+ if(loading)return(
+  <div className="loading-screen">
+   <div className="spinner"/>
+   <p>Gerando relatório...</p>
+  </div>
+ );
 
-                    <div className={cn("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-in slide-in-from-right-2 duration-300", filterType !== 'periodo' && "hidden")}>
-                        <div>
-                            <Label className="mb-2 block text-gray-400">Data de Início</Label>
-                            <Input 
-                                type="date" 
-                                value={filters.startDate} 
-                                onChange={e => handleFilterChange('startDate', e.target.value)} 
-                                className="bg-gray-800 border-gray-700 text-gray-100"
-                                disabled={loading}
-                            />
-                        </div>
-                        <div>
-                            <Label className="mb-2 block text-gray-400">Data de Fim</Label>
-                            <Input 
-                                type="date" 
-                                value={filters.endDate} 
-                                onChange={e => handleFilterChange('endDate', e.target.value)} 
-                                className="bg-gray-800 border-gray-700 text-gray-100"
-                                disabled={loading}
-                            />
-                        </div>
-                    </div>
-                </div>
-           </div>
-        </CardContent>
-      </Card>
+ if(error)return(
+  <div className="error-screen">
+   <div className="error-title">⚠️ Erro</div>
+   <p>{error}</p>
+   <Button onClick={()=>window.close()} variant="outline">Fechar</Button>
+  </div>
+ );
 
-      {error && (
-        <Alert variant="destructive" className="animate-in fade-in zoom-in duration-300 bg-red-900/50 border-red-900 text-red-100">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erro</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+ return(
+  <>
+   <Helmet>
+    <title>Relatório de Entradas e Despesas</title>
+    <style>{`
+     @page{size:A4 portrait;margin:8mm 9mm 9mm}
+     *{box-sizing:border-box}
+     html,body,#root{margin:0!important;padding:0!important;background:#fff!important;color:#1e293b!important}
+     body{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;font-family:Arial,Helvetica,sans-serif}
+     
+     .report-container{width:100%;background:#fff}
+     .print-hidden{display:flex}
+     .page{width:190mm;min-height:280mm;margin:0 auto;position:relative;background:#fff}
+     .page-one{page-break-after:always}
+     
+     .control-bar{background:#f1f5f9;border-bottom:1px solid #e2e8f0;padding:12px 16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+     .control-title{font-size:14px;color:#64748b}
+     .control-actions{display:flex;gap:8px}
+     
+     .report-header{text-align:center;padding-top:1mm}
+     .header-brand{position:relative;min-height:25mm}
+     .header-logo{position:absolute;left:0;top:-2mm;width:29mm;height:25mm;object-fit:contain}
+     .header-title{margin:0;color:#1e3a8a;font-size:17px;font-weight:800;line-height:1.15;text-transform:uppercase}
+     .header-city{margin-top:2px;color:#1e293b;font-size:9px;font-weight:700}
+     .main-title{margin-top:4mm;background:#1e3a8a;color:#fff;border-radius:4px;padding:6px 10px;font-size:10px;font-weight:800;text-transform:uppercase}
+     .period{margin-top:2.5mm;font-size:9px;font-weight:700;color:#1e3a8a}
+     
+     .section{margin-top:4mm}
+     .section-title{height:9mm;display:flex;align-items:center;gap:7px;border-radius:4px;padding:0 10px;margin-bottom:2mm}
+     .section-title h3{margin:0;font-size:11px;font-weight:800}
+     .section-icon{width:17px;height:17px;stroke-width:2.2;flex:0 0 auto}
+     .offer-title{background:#dcfce7;color:#047857;border-left:4px solid #10b981}
+     .tithe-title{background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb}
+     .other-title{background:#fef3c7;color:#c2410c;border-left:4px solid #f59e0b}
+     .expense-title{background:#fee2e2;color:#dc2626;border-left:4px solid #ef4444}
+     .summary-title{background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb}
+     
+     table{width:100%;border-collapse:collapse;font-size:8.1px;table-layout:fixed}
+     th{font-weight:800;text-align:left;padding:4px 5px;border:1px solid #cbd5e1;line-height:1.05}
+     td{padding:3.5px 5px;border:1px solid #cbd5e1;line-height:1.05;vertical-align:middle}
+     thead.offer-head th{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+     thead.tithe-head th{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+     thead.other-head th{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+     thead.expense-head th{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+     tbody tr:nth-child(even){background:#f8fafc}
+     .table-date{width:18%}
+     .table-description{width:auto}
+     .table-type{width:20%}
+     .table-value{width:20%;text-align:right}
+     .table-status{width:13%;text-align:center}
+     .bold{font-weight:800}
+     
+     tfoot td{font-weight:800;padding:5px}
+     .offer-total td{background:#ecfdf5;color:#047857;border-color:#a7f3d0}
+     .tithe-total td{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+     .other-total td{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+     .expense-total td{background:#fef2f2;color:#dc2626;border-color:#fecaca}
+     
+     .empty-message{padding:8px 10px;border:1px dashed #cbd5e1;border-radius:4px;color:#64748b;font-size:7.5px;font-style:italic;text-align:center}
+     
+     .second-page{padding-top:1mm}
+     .second-page .section:first-child{margin-top:0}
+     
+     .summary-box{border:1px solid #bfdbfe;border-radius:6px;overflow:hidden}
+     .summary-row{display:grid;grid-template-columns:1fr 34%;align-items:center;min-height:13mm;padding:5px 9px;border-bottom:1px solid #dbeafe}
+     .summary-row:last-child{border-bottom:0}
+     .summary-label{font-size:8.5px;font-weight:700;color:#334155}
+     .summary-sub{display:block;font-size:6.5px;font-weight:500;color:#64748b;margin-top:1px}
+     .summary-value{text-align:right;font-size:11px;font-weight:800}
+     .entry-row{background:#ecfdf5;color:#047857}
+     .exit-row{background:#fef2f2;color:#dc2626}
+     .balance-row{background:#eff6ff;color:#1d4ed8}
+     .cash-row{background:#f1f5f9;color:#1e3a8a}
+     .summary-icon{width:18px;height:18px;vertical-align:middle;margin-right:7px;float:left;margin-top:1px}
+     
+     .signature-area{margin-top:5mm;border:1px solid #bfdbfe;border-radius:5px;height:27mm;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:5mm}
+     .signature-line{width:62mm;border-top:1px solid #0f172a;margin-bottom:2mm}
+     .signature-label{font-size:8px;font-weight:700;color:#1e3a8a}
+     
+     .report-footer{position:absolute;left:0;right:0;bottom:0;border-top:1px solid #cbd5e1;padding-top:3mm;display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:8px;color:#64748b;font-size:6.3px}
+     .footer-center{text-align:center;font-weight:800;color:#1e3a8a}
+     .footer-right{text-align:right}
+     
+     .screen-only-note{text-align:center;color:#94a3b8;font-size:7px;margin-top:4mm}
+     
+     .loading-screen,.error-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#fff;color:#111827;font-family:Arial,Helvetica,sans-serif}
+     .loading-screen p{font-size:15px;margin-top:15px}
+     .spinner{width:42px;height:42px;border:4px solid #e5e7eb;border-top-color:#1e3a8a;border-radius:50%;animation:spin .8s linear infinite}
+     .error-title{font-size:20px;color:#dc2626;font-weight:700;margin-bottom:8px}
+     .error-screen p{color:#475569;margin:0 0 16px}
+     @keyframes spin{to{transform:rotate(360deg)}}
+     
+     @media print{
+      .print-hidden{display:none!important}
+      .page{margin:0;width:190mm;min-height:280mm}
+      .page-one{page-break-after:always}
+      .screen-only-note{display:none}
+      .report-container{width:100%}
+     }
+    `}</style>
+   </Helmet>
 
-      <AnimatePresence mode="wait">
-        {totals && !loading && (
-            <motion.div
-              key="totals-cards"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-              className="grid grid-cols-1 md:grid-cols-3 gap-4"
-            >
-            <Card className="bg-gray-900 border-l-4 border-l-green-500 shadow-lg">
-                <CardHeader className="pb-2"><CardTitle className="text-gray-400 text-sm font-medium">Total Entradas</CardTitle></CardHeader>
-                <CardContent><p className="text-3xl font-bold tracking-tight text-white">{formatCurrency(totals.entradas)}</p></CardContent>
-            </Card>
-            <Card className="bg-gray-900 border-l-4 border-l-red-500 shadow-lg">
-                <CardHeader className="pb-2"><CardTitle className="text-gray-400 text-sm font-medium">Total Despesas</CardTitle></CardHeader>
-                <CardContent><p className="text-3xl font-bold tracking-tight text-white">{formatCurrency(totals.despesas)}</p></CardContent>
-            </Card>
-            <Card className={`bg-gray-900 border-l-4 shadow-lg ${totals.saldo >= 0 ? 'border-l-blue-500' : 'border-l-orange-500'}`}>
-                <CardHeader className="pb-2"><CardTitle className={`text-sm font-medium ${totals.saldo >= 0 ? 'text-blue-400' : 'text-orange-400'}`}>Saldo</CardTitle></CardHeader>
-                <CardContent><p className="text-3xl font-bold tracking-tight text-white">{formatCurrency(totals.saldo)}</p></CardContent>
-            </Card>
-            </motion.div>
-        )}
-      </AnimatePresence>
+   <div className="report-container">
+
+    <div className="print-hidden control-bar">
+     <div className="control-title">Pré-visualização de Impressão</div>
+     <div className="control-actions">
+      <Button onClick={()=>window.print()} className="bg-blue-600 hover:bg-blue-700 text-white"><Printer className="w-4 h-4 mr-2"/>Imprimir</Button>
+      <Button onClick={()=>window.close()} variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-200"><X className="w-4 h-4 mr-2"/>Fechar</Button>
+     </div>
     </div>
-  );
+
+    {/* PÁGINA 1 */}
+    <div className="page page-one">
+
+     <header className="report-header">
+      <div className="header-brand">
+       <img src={LOGO_URL} alt="Logo Ministério Plantar" className="header-logo"/>
+       <h1 className="header-title">Igreja Assembleia de Deus Ministério Plantar</h1>
+       <div className="header-city">Lerolândia</div>
+      </div>
+
+      <div className="main-title">Relatório Financeiro de Entradas e Despesas</div>
+      <div className="period">Período: {periodLabel}</div>
+     </header>
+
+     {/* OFERTAS */}
+     <section className="section">
+      <SectionTitle icon={HandCoins} title="Ofertas" color="offer-title"/>
+
+      {data.ofertas.length?
+       <table>
+        <colgroup><col className="table-date"/><col/><col className="table-value"/></colgroup>
+        <thead className="offer-head">
+         <tr><th>Data</th><th>Descrição / Ofertante</th><th className="table-value">Valor</th></tr>
+        </thead>
+        <tbody>
+         {data.ofertas.map(item=><tr key={item.id}>
+          <td>{formatDate(item.data)}</td>
+          <td className="bold">{item.ofertante||'OFERTA GERAL'}</td>
+          <td className="table-value">{formatCurrency(item.valor)}</td>
+         </tr>)}
+        </tbody>
+        <tfoot>
+         <tr className="offer-total">
+          <td colSpan="2" style={{textAlign:'right'}}>TOTAL OFERTAS</td>
+          <td className="table-value">{formatCurrency(totals.totalOfertas)}</td>
+         </tr>
+        </tfoot>
+       </table>
+      :<EmptyMessage>Nenhum registro de oferta encontrado para este período.</EmptyMessage>}
+     </section>
+
+     {/* DÍZIMOS */}
+     <section className="section">
+      <SectionTitle icon={Coins} title="Dízimos" color="tithe-title"/>
+
+      {data.dizimos.length?
+       <table>
+        <colgroup><col className="table-date"/><col/><col className="table-value"/></colgroup>
+        <thead className="tithe-head">
+         <tr><th>Data</th><th>Dizimista</th><th className="table-value">Valor</th></tr>
+        </thead>
+        <tbody>
+         {data.dizimos.map(item=><tr key={item.id}>
+          <td>{formatDate(item.data)}</td>
+          <td className="bold">{item.igreja_dizimistas?.nome||'NÃO IDENTIFICADO'}</td>
+          <td className="table-value">{formatCurrency(item.valor)}</td>
+         </tr>)}
+        </tbody>
+        <tfoot>
+         <tr className="tithe-total">
+          <td colSpan="2" style={{textAlign:'right'}}>TOTAL DÍZIMOS</td>
+          <td className="table-value">{formatCurrency(totals.totalDizimos)}</td>
+         </tr>
+        </tfoot>
+       </table>
+      :<EmptyMessage>Nenhum registro de dízimo encontrado para este período.</EmptyMessage>}
+     </section>
+
+     <div className="screen-only-note print-hidden">Página 1 de 2</div>
+    </div>
+
+    {/* PÁGINA 2 */}
+    <div className="page second-page">
+
+     {/* OUTRAS ENTRADAS */}
+     <section className="section">
+      <SectionTitle icon={WalletCards} title="Outras Entradas" color="other-title"/>
+
+      {data.outras.length?
+       <table>
+        <colgroup><col className="table-date"/><col className="table-type"/><col/><col className="table-value"/></colgroup>
+        <thead className="other-head">
+         <tr><th>Data</th><th>Tipo</th><th>Descrição / Origem</th><th className="table-value">Valor</th></tr>
+        </thead>
+        <tbody>
+         {data.outras.map(item=><tr key={item.id}>
+          <td>{formatDate(item.data)}</td>
+          <td className="bold">{item.tipo_entrada||'-'}</td>
+          <td>{item.igreja_dizimistas?.nome||item.ofertante||'—'}</td>
+          <td className="table-value">{formatCurrency(item.valor)}</td>
+         </tr>)}
+        </tbody>
+        <tfoot>
+         <tr className="other-total">
+          <td colSpan="3" style={{textAlign:'right'}}>TOTAL OUTRAS ENTRADAS</td>
+          <td className="table-value">{formatCurrency(totals.totalOutras)}</td>
+         </tr>
+        </tfoot>
+       </table>
+      :<EmptyMessage>Nenhum outro registro de entrada encontrado para este período.</EmptyMessage>}
+     </section>
+
+     {/* DESPESAS */}
+     <section className="section">
+      <SectionTitle icon={Receipt} title="Despesas" color="expense-title"/>
+
+      {data.despesas.length?
+       <table>
+        <colgroup><col className="table-date"/><col/><col className="table-value"/></colgroup>
+        <thead className="expense-head">
+         <tr><th>Data</th><th>Descrição da Despesa</th><th className="table-value">Valor</th></tr>
+        </thead>
+        <tbody>
+         {data.despesas.map(item=><tr key={item.id}>
+          <td>{formatDate(item.data)}</td>
+          <td className="bold">{item.despesa||'-'}</td>
+          <td className="table-value">{formatCurrency(item.valor)}</td>
+         </tr>)}
+        </tbody>
+        <tfoot>
+         <tr className="expense-total">
+          <td colSpan="2" style={{textAlign:'right'}}>TOTAL DESPESAS</td>
+          <td className="table-value">{formatCurrency(totals.totalDespesas)}</td>
+         </tr>
+        </tfoot>
+       </table>
+      :<EmptyMessage>Nenhum registro de despesa encontrado para este período.</EmptyMessage>}
+     </section>
+
+     {/* RESUMO */}
+     <section className="section">
+      <SectionTitle icon={BarChart3} title="Resumo do Período" color="summary-title"/>
+
+      <div className="summary-box">
+       <div className="summary-row entry-row">
+        <div>
+         <BarChart3 className="summary-icon"/>
+         <span className="summary-label">Total de Entradas</span>
+         <span className="summary-sub">Ofertas + Dízimos + Outras</span>
+        </div>
+        <div className="summary-value">{formatCurrency(totals.totalEntradasPeriodo)}</div>
+       </div>
+
+       <div className="summary-row exit-row">
+        <div>
+         <Receipt className="summary-icon"/>
+         <span className="summary-label">Total de Saídas</span>
+         <span className="summary-sub">Despesas</span>
+        </div>
+        <div className="summary-value">{formatCurrency(totals.totalDespesas)}</div>
+       </div>
+
+       <div className="summary-row balance-row">
+        <div>
+         <BarChart3 className="summary-icon"/>
+         <span className="summary-label">Saldo do Período</span>
+        </div>
+        <div className="summary-value">{formatCurrency(totals.saldoPeriodo)}</div>
+       </div>
+
+       <div className="summary-row cash-row">
+        <div>
+         <WalletCards className="summary-icon"/>
+         <span className="summary-label">Saldo Atual em Caixa (Geral)</span>
+        </div>
+        <div className="summary-value">{formatCurrency(totals.saldoGeral)}</div>
+       </div>
+      </div>
+     </section>
+
+     {/* ASSINATURA */}
+     <div className="signature-area">
+      <PenLine className="summary-icon" style={{float:'none',margin:'0 0 3mm',color:'#1e3a8a'}}/>
+      <div className="signature-line"></div>
+      <div className="signature-label">Tesoureiro (a)</div>
+     </div>
+
+     {/* RODAPÉ ÚNICO DO RELATÓRIO */}
+     <footer className="report-footer">
+      <div>Relatório emitido pelo sistema da Tesouraria.</div>
+      <div className="footer-center">TESOURARIA</div>
+      <div className="footer-right">Data de emissão: {currentDateTime}</div>
+     </footer>
+
+     <div className="screen-only-note print-hidden">Página 2 de 2</div>
+    </div>
+
+   </div>
+  </>
+ );
 };
 
-export default RelatorioEntradasDespesas;
+export default RelatorioEntradasDespesasPDF;
