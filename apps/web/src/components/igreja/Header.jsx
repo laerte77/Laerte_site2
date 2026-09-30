@@ -9,9 +9,9 @@ import UserMenu from'@/components/UserMenu';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 
 const Header=({toggleSidebar,submodule,isSidebarOpen})=>{
- const navigate=useNavigate();
- const{signOut}=useAuth();
+ const navigate=useNavigate(),{signOut}=useAuth();
  const[isSearchOpen,setIsSearchOpen]=useState(false);
+ const modulePath=submodule?.toLowerCase()==='secretaria'?'/igreja/secretaria':submodule?.toLowerCase()==='tesouraria'?'/igreja/tesouraria':'/igreja';
  const handleLogout=async()=>{await signOut();navigate('/login')};
 
  return <header className="dark-igreja sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-[hsl(var(--neon-igreja))]/20 bg-card/80 px-4 backdrop-blur-xl md:px-6 animate-fade-in motion-reduce:animate-none">
@@ -30,7 +30,7 @@ const Header=({toggleSidebar,submodule,isSidebarOpen})=>{
 
    <DividerLine moduleName="igreja" vertical className="mx-2 hidden h-8 opacity-40 md:block"/>
 
-   <Link to="/igreja" className={cn("min-w-0 items-center gap-2 rounded-md transition-[opacity,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-igreja))] focus-visible:ring-offset-2 motion-reduce:transition-none",isSearchOpen?"hidden md:flex":"flex")} aria-label="Ir para o módulo Igreja">
+   <Link to={modulePath} className={cn('min-w-0 items-center gap-2 rounded-md transition-[opacity,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-igreja))] focus-visible:ring-offset-2 motion-reduce:transition-none',isSearchOpen?'hidden md:flex':'flex')} aria-label={`Ir para ${submodule||'Igreja'}`}>
     <div className="flex min-w-0 flex-col">
      <span className="truncate text-lg font-bold tracking-tight text-[hsl(var(--neon-igreja))] transition-opacity duration-200 hover:opacity-80 motion-reduce:transition-none">Igreja</span>
      {submodule&&<span className="truncate text-xs font-semibold text-[hsl(var(--neon-igreja))] opacity-80">{submodule}</span>}
@@ -46,7 +46,7 @@ const Header=({toggleSidebar,submodule,isSidebarOpen})=>{
    </Button>
   </div>}
 
-  <div className={cn("flex items-center gap-1 md:gap-2",isSearchOpen?"hidden md:flex":"flex")}>
+  <div className={cn('flex items-center gap-1 md:gap-2',isSearchOpen?'hidden md:flex':'flex')}>
    <Button type="button" variant="ghost" size="icon" onClick={()=>setIsSearchOpen(true)} className="text-muted-foreground hover:text-[hsl(var(--neon-igreja))] hover:bg-[hsl(var(--neon-igreja))]/10 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none md:hidden" aria-label="Abrir pesquisa">
     <Search className="h-5 w-5" aria-hidden="true"/>
    </Button>
@@ -58,7 +58,7 @@ const Header=({toggleSidebar,submodule,isSidebarOpen})=>{
     <LogOut className="h-4 w-4" aria-hidden="true"/>LOG-OFF
    </Button>
   </div>
- </header>
+ </header>;
 };
 
 export default Header;
