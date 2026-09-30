@@ -30,7 +30,7 @@ const Header=({toggleSidebar,isSidebarOpen})=>{
 
    <DividerLine moduleName="entretenimento" vertical className="mx-2 hidden h-8 opacity-40 md:block"/>
 
-   <Link to="/entretenimento/dashboard/home" className={cn("min-w-0 items-center gap-2 rounded-md transition-[opacity,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-entretenimento))] focus-visible:ring-offset-2 motion-reduce:transition-none",isSearchOpen?"hidden md:flex":"flex")} aria-label="Ir para o painel Entretenimento">
+   <Link to="/entretenimento/dashboard" className={cn('min-w-0 items-center gap-2 rounded-md transition-[opacity,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-entretenimento))] focus-visible:ring-offset-2 motion-reduce:transition-none',isSearchOpen?'hidden md:flex':'flex')} aria-label="Ir para o painel Entretenimento">
     <span className="truncate text-lg font-bold tracking-tight text-[hsl(var(--neon-entretenimento))] transition-opacity duration-200 hover:opacity-80 motion-reduce:transition-none">Entretenimento</span>
    </Link>
   </div>
@@ -38,7 +38,7 @@ const Header=({toggleSidebar,isSidebarOpen})=>{
   {isSearchOpen&&<div className="absolute inset-0 z-40 flex items-center gap-2 bg-background/95 px-4 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200 motion-reduce:animate-none md:hidden">
    <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"/>
    <Input autoFocus type="search" placeholder="Pesquisar..." className="h-12 w-full border-none bg-transparent text-foreground focus-visible:ring-0 placeholder:text-muted-foreground/70" aria-label="Pesquisar no módulo Entretenimento" onBlur={()=>setIsSearchOpen(false)}/>
-   <Button type="button" variant="ghost" size="icon" onClick={()=>setIsSearchOpen(false)} aria-label="Fechar pesquisa">
+   <Button type="button" variant="ghost" size="icon" onClick={()=>setIsSearchOpen(false)} className="shrink-0 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none" aria-label="Fechar pesquisa">
     <X className="h-5 w-5" aria-hidden="true"/>
    </Button>
   </div>}
@@ -50,7 +50,7 @@ const Header=({toggleSidebar,isSidebarOpen})=>{
    </div>
   </div>
 
-  <div className={cn("flex items-center gap-1 md:gap-2",isSearchOpen?"hidden md:flex":"flex")}>
+  <div className={cn('flex items-center gap-1 md:gap-2',isSearchOpen?'hidden md:flex':'flex')}>
    <Button type="button" variant="ghost" size="icon" onClick={()=>setIsSearchOpen(true)} className="text-muted-foreground hover:text-[hsl(var(--neon-entretenimento))] hover:bg-[hsl(var(--neon-entretenimento))]/10 transition-[background-color,color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none md:hidden" aria-label="Abrir pesquisa">
     <Search className="h-5 w-5" aria-hidden="true"/>
    </Button>
