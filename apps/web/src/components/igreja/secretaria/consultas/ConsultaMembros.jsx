@@ -26,8 +26,7 @@ const getBase64Image=url=>new Promise(resolve=>{
   const canvas=document.createElement('canvas');
   canvas.width=img.naturalWidth||img.width;
   canvas.height=img.naturalHeight||img.height;
-  const ctx=canvas.getContext('2d');
-  ctx.drawImage(img,0,0);
+  canvas.getContext('2d').drawImage(img,0,0);
   resolve({data:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height});
  };
  img.onerror=()=>resolve(null);
@@ -112,9 +111,7 @@ const ConsultaMembros=()=>{
    setConjuntos(conjuntosRes.data||[]);
   }catch(error){
    toast({title:'Erro ao buscar dados',description:error.message,variant:'destructive'});
-  }finally{
-   setLoading(false);
-  }
+  }finally{setLoading(false)}
  },[user,toast]);
 
  useEffect(()=>{fetchData()},[fetchData]);
@@ -130,56 +127,149 @@ const ConsultaMembros=()=>{
 
  const handlePrint=()=>window.print();
 
+ const drawPdfHeader=(doc,logoData)=>{
+  if(logoData){
+   const maxW=23,maxH=21,ratio=logoData.width/logoData.height;
+   const w=Math.min(maxW,maxH*ratio),h=w/ratio;
+   doc.addImage(logoData.data,'PNG',8,5,w,h);
+  }
+
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(...COLORS.blue);
+  doc.setFontSize(10);
+  doc.text('IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR',105,11,{align:'center'});
+
+  doc.setFontSize(7);
+  doc.setTextColor(...COLORS.text);
+  doc.text('LEROLÂNDIA',105,16,{align:'center'});
+
+  doc.setFillColor(...COLORS.blue);
+  doc.roundedRect(10,22,190,8,2,2,'F');
+
+  doc.setFontSize(8);
+  doc.setTextColor(255,255,255);
+  doc.text('LISTAGEM GERAL DE MEMBROS',105,27,{align:'center'});
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(5.5);
+  doc.setTextColor(...COLORS.muted);
+  doc.text('Documento emitido pelo sistema da Secretaria',105,35,{align:'center'});
+ };
+
+ const drawPdfFooter=(doc)=>{
+  const pageHeight=doc.internal.pageSize.height;
+  doc.setDrawColor(...COLORS.line);
+  doc.setLineWidth(.3);
+  doc.line(10,pageHeight-16,200,pageHeight-16);
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(5);
+  doc.setTextColor(...COLORS.muted);
+
+  doc.text('Relatório emitido eletronicamente pelo sistema da Secretaria.',10,pageHeight-10);
+  doc.text('SECRETARIA • REGISTRO DE MEMBRO',105,pageHeight-10,{align:'center'});
+  doc.text(`Data de emissão: ${new Date().toLocaleDateString('pt-BR')}`,200,pageHeight-10,{align:'right'});
+ };
+
  const handleGeneratePDF=async()=>{
   if(!filteredMembros.length){
    toast({title:'Sem dados',description:'Não há membros para exportar.',variant:'warning'});
    return;
   }
 
-  const doc=new jsPDF();
-  try{
-   const logo=await getBase64Image(LOGO_URL);
-   if(logo){
-    const maxW=20,maxH=20,ratio=logo.width/logo.height;
-    const w=Math.min(maxW,maxH*ratio),h=w/ratio;
-    doc.addImage(logo.data,'PNG',15,15,w,h);
-   }
-  }catch(error){console.warn('Logo não adicionada',error)}
+  const doc=new jsPDF('p','mm','a4');
+  let logo=null;
+
+  try{logo=await getBase64Image(LOGO_URL)}catch{}
+
+  drawPdfHeader(doc,logo);
+
+  const statusText=filterStatus==='todos'?'Todos os Status':filterStatus==='ATIVO'?'Ativos':'Inativos';
+  const conjuntoNome=filterConjunto!=='todos'
+   ?conjuntos.find(c=>String(c.id)===filterConjunto)?.nome_conjunto||'-'
+   :'Todos os Conjuntos';
 
   doc.setFont('helvetica','bold');
-  doc.setFontSize(14);
-  doc.setTextColor(...COLORS.blue);
-  doc.text('IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR',105,20,{align:'center'});
-  doc.setFontSize(11);
+  doc.setFontSize(6.5);
   doc.setTextColor(...COLORS.text);
-  doc.text('LEROLÂNDIA',105,28,{align:'center'});
-  doc.setFontSize(14);
-  doc.setTextColor(...COLORS.blue);
-  doc.text('LISTAGEM DE MEMBROS',105,38,{align:'center'});
+  doc.text(`Status: ${statusText}`,10,41);
+
+  doc.setFont('helvetica','normal');
+  doc.text(`Conjunto: ${conjuntoNome}`,105,41,{align:'center'});
+  doc.text(`${filteredMembros.length} registro(s)`,200,41,{align:'right'});
+
+  if(searchTerm.trim())doc.text(`Busca: ${searchTerm.trim()}`,105,46,{align:'center'});
+
+  const startY=searchTerm.trim()?51:46;
 
   autoTable(doc,{
-   head:[['Nome','Nascimento','Admissão','Cargo','Est. Civil','Status']],
+   head:[['NOME','NASCIMENTO','ADMISSÃO','CARGO','EST. CIVIL','STATUS']],
    body:filteredMembros.map(m=>[
-    m.nome_completo,
+    m.nome_completo||'-',
     formatDate(m.data_nascimento),
     formatDate(m.data_entrada),
     m.cargo?.nome_cargo||'-',
     m.estado_civil?.toLowerCase()||'-',
     m.status||'ATIVO'
    ]),
-   startY:45,
-   styles:{fontSize:7,cellPadding:2,lineColor:[200,200,200],lineWidth:.1},
-   headStyles:{fillColor:COLORS.blue,textColor:255},
-   theme:'grid'
+   startY,
+   theme:'grid',
+   styles:{
+    font:'helvetica',
+    fontSize:6.8,
+    cellPadding:2.5,
+    textColor:COLORS.text,
+    lineColor:COLORS.line,
+    lineWidth:.2,
+    overflow:'linebreak',
+    valign:'middle'
+   },
+   headStyles:{
+    fillColor:[37,99,235],
+    textColor:[255,255,255],
+    fontStyle:'bold',
+    fontSize:6.8,
+    halign:'left'
+   },
+   alternateRowStyles:{fillColor:[248,250,252]},
+   columnStyles:{
+    0:{cellWidth:48},
+    1:{cellWidth:25,halign:'center'},
+    2:{cellWidth:25,halign:'center'},
+    3:{cellWidth:39},
+    4:{cellWidth:28},
+    5:{cellWidth:25,halign:'center'}
+   },
+   margin:{left:10,right:10,top:42,bottom:22},
+   didDrawPage:()=>drawPdfFooter(doc)
   });
 
-  const finalY=doc.lastAutoTable.finalY||45;
-  doc.setFontSize(10);
-  doc.setTextColor(...COLORS.text);
+  let summaryY=(doc.lastAutoTable?.finalY||startY)+9;
+
+  if(summaryY>264){
+   doc.addPage();
+   drawPdfHeader(doc,logo);
+   summaryY=43;
+  }
+
+  doc.setFillColor(...COLORS.light);
+  doc.roundedRect(10,summaryY,190,19,2.5,2.5,'F');
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(6.5);
+  doc.setTextColor(...COLORS.blue);
+  doc.text('RESUMO',15,summaryY+6);
+
   doc.setFont('helvetica','normal');
-  doc.text(`Total de Membros Listados: ${filteredMembros.length}`,14,finalY+10);
+  doc.setTextColor(...COLORS.text);
+  doc.text(`Total de membros listados: ${filteredMembros.length}`,15,summaryY+13);
+  doc.text(`Filtro: ${statusText}`,105,summaryY+13,{align:'center'});
+  doc.text(`Conjunto: ${conjuntoNome}`,196,summaryY+13,{align:'right'});
+
+  drawPdfFooter(doc);
+
   doc.save(`Membros_${new Date().toISOString().split('T')[0]}.pdf`);
-  toast({title:'PDF Gerado',description:'O relatório foi baixado com sucesso.'});
+  toast({title:'PDF Gerado',description:'O relatório geral foi gerado no padrão da Secretaria.'});
  };
 
  const handleExportExcel=()=>{
@@ -242,7 +332,6 @@ const ConsultaMembros=()=>{
   }
 
   const sections=buildFichaSections(m);
-
   const makeFields=fields=>fields.map(([label,value])=>`
    <div class="field">
     <span class="label">${escapeHtml(label)}</span>
@@ -262,14 +351,12 @@ body{font-family:Arial,Helvetica,sans-serif;color:#1e293b}
 .sheet{position:relative;width:194mm;min-height:281mm;margin:auto;overflow:hidden}
 .watermark{position:absolute;z-index:0;left:50%;top:55%;transform:translate(-50%,-50%);width:135mm;height:auto;max-height:135mm;object-fit:contain;opacity:.045}
 .content{position:relative;z-index:1}
-.header{display:grid;grid-template-columns:38mm 1fr 38mm;align-items:center;border-bottom:2px solid #1e3a8a;padding:2mm 0 4mm}
-.logo{max-width:30mm;max-height:24mm;width:auto;height:auto;object-fit:contain;justify-self:start}
+.header{display:grid;grid-template-columns:42mm 1fr 42mm;align-items:center;border-bottom:2px solid #1e3a8a;padding:1mm 0 5mm}
+.logo{max-width:34mm;max-height:28mm;width:auto;height:auto;object-fit:contain;justify-self:start;transform:translateY(-3mm)}
 .header-center{text-align:center}
 .header-center h1{margin:0;color:#1e3a8a;font-size:13px;font-weight:800;text-transform:uppercase;line-height:1.2}
 .header-center h2{margin:2px 0 0;color:#334155;font-size:9px;font-weight:700}
-.header-right{justify-self:end;text-align:right}
-.header-right .small{display:block;color:#64748b;font-size:6.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
-.header-right strong{display:block;margin-top:2px;color:#1e3a8a;font-size:9px}
+.header-right{display:none}
 .title{margin-top:4mm;background:#1e3a8a;color:#fff;border-radius:3px;padding:5px 8px;text-align:center;font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
 .subtitle{text-align:center;margin:2mm 0 3mm;color:#64748b;font-size:6.8px;font-weight:600}
 .member{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;border:1px solid #bfdbfe;background:#eff6ff;border-left:4px solid #0ea5e9;border-radius:4px;padding:6px 8px;margin-bottom:3mm}
@@ -283,9 +370,11 @@ body{font-family:Arial,Helvetica,sans-serif;color:#1e293b}
 .field{min-height:12mm;border:1px solid #cbd5e1;border-radius:3px;padding:3mm;background:rgba(255,255,255,.82)}
 .label{display:block;color:#64748b;font-size:6.3px;font-weight:800;text-transform:uppercase;letter-spacing:.35px;margin-bottom:1.5mm}
 .value{display:block;color:#0f172a;font-size:8.5px;font-weight:700;line-height:1.2;word-break:break-word}
-.footer{margin-top:5mm;padding-top:2.5mm;border-top:1px solid #cbd5e1;display:grid;grid-template-columns:1fr 1fr;gap:10mm;color:#64748b;font-size:6.5px}
-.footer-box{min-height:12mm}
-.footer-line{margin-top:7mm;border-top:1px solid #64748b;padding-top:1.5mm;text-align:center;color:#64748b}
+.footer{margin-top:5mm;padding-top:2.5mm;border-top:1px solid #cbd5e1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:5mm;color:#64748b;font-size:6.2px}
+.footer-box{text-align:left}
+.footer-box.center{text-align:center;font-weight:700;color:#1e3a8a}
+.footer-box.right{text-align:right}
+.footer-line{margin-top:4mm;border-top:1px solid #64748b;padding-top:1.5mm;text-align:center;color:#64748b;font-size:6.2px}
 @media print{.sheet{width:100%;min-height:auto}.watermark{opacity:.045}}
 </style>
 </head>
@@ -300,10 +389,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#1e293b}
 <h1>IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR</h1>
 <h2>LEROLÂNDIA</h2>
 </div>
-<div class="header-right">
-<span class="small">SECRETARIA</span>
-<strong>REGISTRO DE MEMBRO</strong>
-</div>
+<div class="header-right"></div>
 </div>
 
 <div class="title">Ficha de Atualização de Cadastro e Registro de Membro</div>
@@ -324,14 +410,14 @@ ${makeFields(section.fields)}
 
 <div class="footer">
 <div class="footer-box">Ficha emitida eletronicamente pelo sistema da Secretaria.</div>
-<div class="footer-box" style="text-align:right">Data de emissão: ${new Date().toLocaleDateString('pt-BR')}</div>
+<div class="footer-box center">SECRETARIA • REGISTRO DE MEMBRO</div>
+<div class="footer-box right">Data de emissão: ${new Date().toLocaleDateString('pt-BR')}</div>
 </div>
 
 <div class="footer-line">IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR • LEROLÂNDIA</div>
 
 </div>
 </div>
-
 <script>window.onload=()=>{window.focus();window.print()}</script>
 </body>
 </html>`);
@@ -353,11 +439,11 @@ ${makeFields(section.fields)}
   try{
    const logo=await getBase64Image(LOGO_URL);
    if(logo){
-    const maxW=26,maxH=21,ratio=logo.width/logo.height;
+    const maxW=31,maxH=25,ratio=logo.width/logo.height;
     const w=Math.min(maxW,maxH*ratio),h=w/ratio;
-    doc.addImage(logo.data,'PNG',margin,y,w,h);
+    doc.addImage(logo.data,'PNG',margin,6,w,h);
    }
-  }catch(error){console.warn('Logo não adicionada',error)}
+  }catch{}
 
   doc.setFont('helvetica','bold');
   doc.setTextColor(...COLORS.blue);
@@ -366,12 +452,6 @@ ${makeFields(section.fields)}
   doc.setFontSize(8.5);
   doc.setTextColor(...COLORS.text);
   doc.text('LEROLÂNDIA',105,20,{align:'center'});
-  doc.setTextColor(...COLORS.muted);
-  doc.setFontSize(6.5);
-  doc.text('SECRETARIA',190,13,{align:'right'});
-  doc.setTextColor(...COLORS.blue);
-  doc.setFontSize(7.5);
-  doc.text('REGISTRO DE MEMBRO',190,18,{align:'right'});
 
   doc.setFillColor(...COLORS.blue);
   doc.roundedRect(margin,24,contentW,9,2,2,'F');
@@ -411,7 +491,6 @@ ${makeFields(section.fields)}
    doc.setFontSize(5.7);
    doc.setTextColor(...COLORS.muted);
    doc.text(label.toUpperCase(),x+2.5,y+3.5);
-
    doc.setFontSize(7.5);
    doc.setTextColor(...COLORS.text);
    const lines=doc.splitTextToSize(String(value||'-'),w-5);
@@ -446,25 +525,37 @@ ${makeFields(section.fields)}
   sections.slice(0,3).forEach(section=>drawSection(section.title,section.fields,2));
   drawSection(sections[3].title,sections[3].fields,3);
 
-  const wm=await getBase64Image(LOGO_URL).catch(()=>null);
-  if(wm){
-   const maxW=110,maxH=90,ratio=wm.width/wm.height;
-   const w=Math.min(maxW,maxH*ratio),h=w/ratio;
-   const x=(pageW-w)/2,z=155-(h/2);
-   doc.setGState(new doc.GState({opacity:.045}));
-   doc.addImage(wm.data,'PNG',x,z,w,h);
-   doc.setGState(new doc.GState({opacity:1}));
-  }
+  try{
+   const wm=await getBase64Image(LOGO_URL);
+   if(wm){
+    const maxW=110,maxH=90,ratio=wm.width/wm.height;
+    const w=Math.min(maxW,maxH*ratio),h=w/ratio;
+    const x=(pageW-w)/2;
+    const z=155-(h/2);
+    doc.setGState(new doc.GState({opacity:.045}));
+    doc.addImage(wm.data,'PNG',x,z,w,h);
+    doc.setGState(new doc.GState({opacity:1}));
+   }
+  }catch{}
 
   doc.setDrawColor(...COLORS.line);
-  doc.line(margin,281,pageW-margin,281);
+  doc.line(margin,278,pageW-margin,278);
+
   doc.setFont('helvetica','normal');
   doc.setFontSize(5.8);
   doc.setTextColor(...COLORS.muted);
-  doc.text('Ficha emitida eletronicamente pelo sistema da Secretaria.',margin,286);
-  doc.text(`Data de emissão: ${new Date().toLocaleDateString('pt-BR')}`,pageW-margin,286,{align:'right'});
+  doc.text('Ficha emitida eletronicamente pelo sistema da Secretaria.',margin,283);
+
   doc.setFont('helvetica','bold');
-  doc.text('IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR • LEROLÂNDIA',105,291,{align:'center'});
+  doc.setTextColor(...COLORS.blue);
+  doc.text('SECRETARIA • REGISTRO DE MEMBRO',105,283,{align:'center'});
+
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(...COLORS.muted);
+  doc.text(`Data de emissão: ${new Date().toLocaleDateString('pt-BR')}`,pageW-margin,283,{align:'right'});
+
+  doc.setFont('helvetica','bold');
+  doc.text('IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR • LEROLÂNDIA',105,289,{align:'center'});
 
   doc.save(`Ficha_Membro_${(m.nome_completo||'Membro').replace(/\s+/g,'_')}.pdf`);
   toast({title:'Ficha em PDF',description:'A ficha foi criada em formato A4 em uma única folha.'});
@@ -474,15 +565,25 @@ ${makeFields(section.fields)}
 
   <style>{`
    @media print{
-    @page{margin:1cm;size:landscape}
+    @page{size:A4 portrait;margin:10mm}
+    body{background:#fff!important;color:#111827!important}
     .no-print{display:none!important}
     .print-only{display:block!important}
-    body{background:#fff!important;color:#000!important}
-    table{width:100%;border-collapse:collapse;font-size:10px}
-    th{background:#dbeafe!important;color:#1e3a8a!important;font-weight:bold;text-align:left;padding:4px;border:1px solid #93c5fd}
-    td{padding:4px;border:1px solid #e2e8f0;vertical-align:middle}
-    tr:nth-child(even){background:#f8fafc!important}
-    .header-logo{width:80px;height:80px;object-fit:contain;display:block;margin:0 auto}
+    .print-only{font-family:Arial,Helvetica,sans-serif}
+    .print-only .report-header{position:relative;text-align:center;margin-bottom:14px;padding-top:1px}
+    .print-only .report-logo{position:absolute;left:0;top:-4px;width:48px;height:48px;object-fit:contain}
+    .print-only .inst{font-size:16px;font-weight:800;color:#1e3a8a!important;line-height:1.15}
+    .print-only .city{font-size:8px;font-weight:700;color:#1f2937!important;margin-top:4px}
+    .print-only .title-bar{margin-top:9px;border-radius:4px;background:#1e3a8a!important;color:#fff!important;padding:6px 8px;font-size:9px;font-weight:800}
+    .print-only .subtitle{margin-top:4px;font-size:6px;color:#64748b!important}
+    .print-only .filters{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:6.8px;font-weight:600;color:#475569!important}
+    .print-only table{width:100%;border-collapse:collapse;font-size:8px;margin-top:9px}
+    .print-only th{background:#2563eb!important;color:#fff!important;padding:5px;border:1px solid #1d4ed8;text-align:left}
+    .print-only td{padding:5px;border:1px solid #cbd5e1;vertical-align:middle}
+    .print-only tbody tr:nth-child(even) td{background:#f8fafc!important}
+    .print-only .summary{margin-top:14px;padding:9px;border-radius:5px;background:#eff6ff!important;border:1px solid #dbeafe;display:flex;justify-content:space-between;gap:10px;font-size:8px;font-weight:700}
+    .print-only .footer{position:fixed;left:10mm;right:10mm;bottom:5mm;border-top:1px solid #cbd5e1;padding-top:4px;font-size:5.5px;color:#64748b!important;display:flex;justify-content:space-between;gap:8px}
+    .print-only .footer .center{font-weight:700;color:#1e3a8a!important}
    }
    .print-only{display:none}
   `}</style>
@@ -500,11 +601,8 @@ ${makeFields(section.fields)}
     </div>
 
     <div className="flex flex-wrap items-center gap-2">
-
      <Select value={filterStatus} onValueChange={setFilterStatus}>
-      <SelectTrigger className="w-36 border-border bg-card font-bold">
-       <SelectValue placeholder="Status"/>
-      </SelectTrigger>
+      <SelectTrigger className="w-36 border-border bg-card font-bold"><SelectValue placeholder="Status"/></SelectTrigger>
       <SelectContent className="dark-igreja">
        <SelectItem value="todos">Todos</SelectItem>
        <SelectItem value="ATIVO">Ativos</SelectItem>
@@ -512,42 +610,25 @@ ${makeFields(section.fields)}
       </SelectContent>
      </Select>
 
-     <Button variant="outline" size="sm" onClick={handleExportExcel} className="border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10">
-      <Download className="mr-2 h-4 w-4"/>Excel
-     </Button>
+     <Button variant="outline" size="sm" onClick={handleExportExcel} className="border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"><Download className="mr-2 h-4 w-4"/>Excel</Button>
 
-     <Button variant="outline" size="sm" onClick={handleGeneratePDF} className="border-rose-500/30 text-rose-500 hover:bg-rose-500/10">
-      <FileText className="mr-2 h-4 w-4"/>PDF
-     </Button>
+     <Button variant="outline" size="sm" onClick={handleGeneratePDF} className="border-blue-500/30 text-blue-500 hover:bg-blue-500/10"><FileText className="mr-2 h-4 w-4"/>PDF</Button>
 
-     <Button variant="default" size="sm" onClick={handlePrint}>
-      <Printer className="mr-2 h-4 w-4"/>Imprimir
-     </Button>
-
+     <Button variant="default" size="sm" onClick={handlePrint}><Printer className="mr-2 h-4 w-4"/>Imprimir</Button>
     </div>
    </div>
 
    <Card className="border-border bg-card shadow-lg">
-
     <CardHeader className="border-b border-border pb-3">
      <CardTitle className="flex items-center justify-between text-base">
-
-      <div className="flex items-center font-bold">
-       <Filter className="mr-2 h-4 w-4 text-primary"/>
-       Filtros Avançados
-      </div>
-
-      <Button variant="ghost" size="sm" onClick={()=>setShowFilters(!showFilters)} className="h-8 w-8 p-0">
-       {showFilters?<ChevronUp className="h-4 w-4"/>:<ChevronDown className="h-4 w-4"/>}
-      </Button>
-
+      <div className="flex items-center font-bold"><Filter className="mr-2 h-4 w-4 text-primary"/>Filtros Avançados</div>
+      <Button variant="ghost" size="sm" onClick={()=>setShowFilters(!showFilters)} className="h-8 w-8 p-0">{showFilters?<ChevronUp className="h-4 w-4"/>:<ChevronDown className="h-4 w-4"/>}</Button>
      </CardTitle>
     </CardHeader>
 
     <AnimatePresence>
      {showFilters&&
       <motion.div initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}}>
-
        <CardContent className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 md:grid-cols-3">
 
         <div className="relative">
@@ -575,11 +656,9 @@ ${makeFields(section.fields)}
         </Select>
 
        </CardContent>
-
       </motion.div>
      }
     </AnimatePresence>
-
    </Card>
 
    <div className="flex items-center justify-between px-2">
@@ -590,12 +669,10 @@ ${makeFields(section.fields)}
    </div>
 
    <div className="overflow-hidden rounded-md border border-border bg-card">
-
     <ScrollArea className="h-[calc(100vh-340px)] min-h-[400px]">
-
      <div className="grid grid-cols-1 gap-4 p-3 md:grid-cols-2 md:p-4 xl:grid-cols-3">
 
-      {loading&&Array(6).fill(0).map((_,i)=><CardSkeleton key={i}/> )}
+      {loading&&Array(6).fill(0).map((_,i)=><CardSkeleton key={i}/>)}
 
       {!loading&&!filteredMembros.length&&
        <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
@@ -613,38 +690,21 @@ ${makeFields(section.fields)}
         <Card className={`relative overflow-hidden rounded-xl border transition duration-300 hover:-translate-y-px ${inactive?'border-red-500/50 bg-red-950/10':'border-border bg-card hover:border-primary hover:bg-primary/5'}`}>
 
          {inactive&&
-          <div className="absolute right-3 top-3 flex items-center gap-1 rounded border border-red-500/30 bg-red-500/20 px-2 py-0.5 text-xs font-bold text-red-500">
-           <AlertTriangle className="h-3 w-3"/>INATIVO
-          </div>
+          <div className="absolute right-3 top-3 flex items-center gap-1 rounded border border-red-500/30 bg-red-500/20 px-2 py-0.5 text-xs font-bold text-red-500"><AlertTriangle className="h-3 w-3"/>INATIVO</div>
          }
 
          <CardHeader className="flex flex-row items-start gap-4 space-y-0 pb-3">
 
-          <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full border text-xl font-bold ${inactive?'border-red-500/30 bg-red-900/30 text-red-400':'border-border bg-secondary text-secondary-foreground'}`}>
-           {getInitials(membro.nome_completo)}
-          </div>
+          <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full border text-xl font-bold ${inactive?'border-red-500/30 bg-red-900/30 text-red-400':'border-border bg-secondary text-secondary-foreground'}`}>{getInitials(membro.nome_completo)}</div>
 
           <div className="min-w-0 flex-1 pr-10">
-
-           <CardTitle className={`truncate text-base font-bold ${inactive?'text-red-400':'group-hover:text-primary'}`}>
-            {membro.nome_completo}
-           </CardTitle>
+           <CardTitle className={`truncate text-base font-bold ${inactive?'text-red-400':'group-hover:text-primary'}`}>{membro.nome_completo}</CardTitle>
 
            <div className="mt-1.5 flex flex-col gap-1">
-
             {membro.cargo?.nome_cargo&&
-             <span className="flex w-fit items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
-              <Shield className="h-3 w-3"/>
-              {membro.cargo.nome_cargo}
-             </span>
+             <span className="flex w-fit items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary"><Shield className="h-3 w-3"/>{membro.cargo.nome_cargo}</span>
             }
-
-            {membro.funcoes_multiplas?.quantidade&&
-             <span className="text-[10px] text-muted-foreground">
-              {membro.funcoes_multiplas.quantidade} Função(ões)
-             </span>
-            }
-
+            {membro.funcoes_multiplas?.quantidade&&<span className="text-[10px] text-muted-foreground">{membro.funcoes_multiplas.quantidade} Função(ões)</span>}
            </div>
           </div>
 
@@ -655,50 +715,32 @@ ${makeFields(section.fields)}
           <div className="grid grid-cols-2 gap-4">
 
            <div>
-            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary">
-             <Calendar className="h-3 w-3"/>Nascimento
-            </span>
+            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary"><Calendar className="h-3 w-3"/>Nascimento</span>
             <p className="mt-1 truncate border-l-2 border-border pl-3 font-semibold">{formatDate(membro.data_nascimento)}</p>
            </div>
 
            <div>
-            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary">
-             <Heart className="h-3 w-3"/>Estado Civil
-            </span>
+            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary"><Heart className="h-3 w-3"/>Estado Civil</span>
             <p className="mt-1 truncate border-l-2 border-border pl-3 font-semibold capitalize">{membro.estado_civil?.toLowerCase()||'-'}</p>
            </div>
 
            <div className="col-span-2">
-
-            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary">
-             <Users className="h-3 w-3"/>Conjunto / Classe
-            </span>
-
+            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary"><Users className="h-3 w-3"/>Conjunto / Classe</span>
             <div className="mt-1 flex flex-wrap gap-2">
              {membro.conjunto?.nome_conjunto&&<Badge variant="secondary">{membro.conjunto.nome_conjunto}</Badge>}
              {membro.igreja_classes?.nome_classe&&<Badge variant="secondary">EBD: {membro.igreja_classes.nome_classe}</Badge>}
              {!membro.conjunto?.nome_conjunto&&!membro.igreja_classes?.nome_classe&&<span className="text-xs italic text-muted-foreground">Nenhuma participação</span>}
             </div>
-
            </div>
 
           </div>
          </CardContent>
 
          <CardFooter className="border-t border-border bg-muted/20 pb-4 pt-3">
-
           <div className="flex w-full gap-2">
-
-           <div className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs font-bold ${membro.is_batizado_aguas?'border-primary/50 bg-primary/10 text-primary':'border-border bg-muted text-muted-foreground opacity-60'}`}>
-            <Droplets className="h-3.5 w-3.5"/>Águas
-           </div>
-
-           <div className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs font-bold ${membro.is_batizado_espirito?'border-primary/50 bg-primary/10 text-primary':'border-border bg-muted text-muted-foreground opacity-60'}`}>
-            <Flame className="h-3.5 w-3.5"/>Espírito
-           </div>
-
+           <div className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs font-bold ${membro.is_batizado_aguas?'border-primary/50 bg-primary/10 text-primary':'border-border bg-muted text-muted-foreground opacity-60'}`}><Droplets className="h-3.5 w-3.5"/>Águas</div>
+           <div className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-xs font-bold ${membro.is_batizado_espirito?'border-primary/50 bg-primary/10 text-primary':'border-border bg-muted text-muted-foreground opacity-60'}`}><Flame className="h-3.5 w-3.5"/>Espírito</div>
           </div>
-
          </CardFooter>
 
         </Card>
@@ -706,9 +748,7 @@ ${makeFields(section.fields)}
       })}
 
      </div>
-
     </ScrollArea>
-
    </div>
 
   </motion.div>
@@ -721,62 +761,39 @@ ${makeFields(section.fields)}
      <div className="max-h-[90vh] overflow-y-auto">
 
       <DialogHeader className="border-b border-border bg-card px-6 py-5">
-
        <DialogTitle className="flex items-center gap-3 text-xl text-primary md:text-2xl">
-
-        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
-         <User className="h-5 w-5 text-primary"/>
-        </div>
-
+        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-primary/30 bg-primary/10"><User className="h-5 w-5 text-primary"/></div>
         Ficha do Membro
-
        </DialogTitle>
-
       </DialogHeader>
 
       <div className="space-y-6 p-5 md:p-7">
 
        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 text-center">
-
-        <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full border-2 border-primary/30 bg-secondary text-2xl font-bold text-primary">
-         {getInitials(selectedMembro.nome_completo)}
-        </div>
-
+        <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full border-2 border-primary/30 bg-secondary text-2xl font-bold text-primary">{getInitials(selectedMembro.nome_completo)}</div>
         <h2 className="text-2xl font-bold">{selectedMembro.nome_completo}</h2>
 
         <div className="mt-3 flex flex-wrap justify-center gap-2">
-
-         <Badge className={selectedMembro.status==='INATIVO'?'border-red-500/30 bg-red-500/10 text-red-500':'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'}>
-          {selectedMembro.status||'ATIVO'}
-         </Badge>
+         <Badge className={selectedMembro.status==='INATIVO'?'border-red-500/30 bg-red-500/10 text-red-500':'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'}>{selectedMembro.status||'ATIVO'}</Badge>
 
          {selectedMembro.cargo?.nome_cargo&&
-          <Badge variant="outline" className="border-primary/30 text-primary">
-           <Shield className="mr-1 h-3 w-3"/>
-           {selectedMembro.cargo.nome_cargo}
-          </Badge>
+          <Badge variant="outline" className="border-primary/30 text-primary"><Shield className="mr-1 h-3 w-3"/>{selectedMembro.cargo.nome_cargo}</Badge>
          }
-
         </div>
-
        </div>
 
        {buildFichaSections(selectedMembro).map(section=>
         <div key={section.title}>
 
-         <h3 className="mb-3 border-b border-border pb-2 text-sm font-bold uppercase tracking-wider text-primary">
-          {section.title}
-         </h3>
+         <h3 className="mb-3 border-b border-border pb-2 text-sm font-bold uppercase tracking-wider text-primary">{section.title}</h3>
 
          <div className={`grid gap-4 ${section.title==='Registros Eclesiásticos'?'grid-cols-1 sm:grid-cols-3':'grid-cols-1 sm:grid-cols-2'}`}>
-
           {section.fields.map(([label,value])=>
            <div key={label} className="rounded-lg border border-border bg-background/40 p-3">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
             <span className="mt-1 block font-semibold">{value}</span>
            </div>
           )}
-
          </div>
 
         </div>
@@ -786,17 +803,11 @@ ${makeFields(section.fields)}
 
       <DialogFooter className="flex flex-col gap-2 border-t border-border bg-muted/10 px-5 py-4 sm:flex-row sm:justify-end">
 
-       <Button type="button" variant="outline" onClick={()=>setSelectedMembro(null)}>
-        <X className="mr-2 h-4 w-4"/>Fechar
-       </Button>
+       <Button type="button" variant="outline" onClick={()=>setSelectedMembro(null)}><X className="mr-2 h-4 w-4"/>Fechar</Button>
 
-       <Button type="button" variant="outline" onClick={handlePrintFicha} className="border-blue-500/30 text-blue-500 hover:bg-blue-500/10">
-        <Printer className="mr-2 h-4 w-4"/>Imprimir Ficha
-       </Button>
+       <Button type="button" variant="outline" onClick={handlePrintFicha} className="border-blue-500/30 text-blue-500 hover:bg-blue-500/10"><Printer className="mr-2 h-4 w-4"/>Imprimir Ficha</Button>
 
-       <Button type="button" onClick={handleGenerateFichaPDF}>
-        <FileText className="mr-2 h-4 w-4"/>Gerar PDF
-       </Button>
+       <Button type="button" onClick={handleGenerateFichaPDF}><FileText className="mr-2 h-4 w-4"/>Gerar PDF</Button>
 
       </DialogFooter>
 
@@ -804,46 +815,67 @@ ${makeFields(section.fields)}
     }
 
    </DialogContent>
-
   </Dialog>
 
-  <div className="print-only mx-auto max-w-[297mm] bg-white p-4 text-black">
+  <div className="print-only">
 
-   <div className="mb-6 flex flex-col items-center border-b-2 border-black pb-4">
-    <img src={LOGO_URL} alt="Logo" className="header-logo mb-2"/>
-    <h1 className="text-center text-xl font-extrabold uppercase tracking-wide">IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR</h1>
-    <h2 className="text-center text-lg font-bold uppercase">LEROLÂNDIA</h2>
-    <h3 className="mt-3 rounded-full border px-6 py-1 text-center text-lg font-bold uppercase">LISTAGEM DE MEMBROS</h3>
-    {filterStatus!=='todos'&&<h4 className="mt-1 text-md text-center font-bold uppercase">STATUS: {filterStatus}</h4>}
+   <div className="report-header">
+
+    <img src={LOGO_URL} alt="Logo" className="report-logo"/>
+
+    <div className="inst">IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR</div>
+    <div className="city">LEROLÂNDIA</div>
+
+    <div className="title-bar">LISTAGEM GERAL DE MEMBROS</div>
+
+    <div className="subtitle">Documento emitido pelo sistema da Secretaria</div>
+
+    <div className="filters">
+     <span>Status: {filterStatus==='todos'?'Todos os Status':filterStatus}</span>
+     <span>{searchTerm.trim()?`Busca: ${searchTerm.trim()}`:'Todos os membros filtrados'}</span>
+     <span>{filteredMembros.length} registro(s)</span>
+    </div>
+
    </div>
 
-   <table className="w-full border-collapse text-xs">
+   <table>
+
     <thead>
      <tr>
-      <th className="border-b-2 p-2 text-left font-bold uppercase">NOME</th>
-      <th className="border-b-2 p-2 text-center font-bold uppercase">NASCIMENTO</th>
-      <th className="border-b-2 p-2 text-center font-bold uppercase">ADMISSÃO</th>
-      <th className="border-b-2 p-2 text-left font-bold uppercase">CARGO</th>
-      <th className="border-b-2 p-2 text-center font-bold uppercase">EST. CIVIL</th>
-      <th className="border-b-2 p-2 text-center font-bold uppercase">STATUS</th>
+      <th>NOME</th>
+      <th>NASCIMENTO</th>
+      <th>ADMISSÃO</th>
+      <th>CARGO</th>
+      <th>EST. CIVIL</th>
+      <th>STATUS</th>
      </tr>
     </thead>
+
     <tbody>
-     {filteredMembros.map((m,idx)=>
-      <tr key={m.id} className={idx%2===0?'bg-gray-100':''}>
-       <td className="border-b p-2 font-semibold uppercase">{m.nome_completo}</td>
-       <td className="border-b p-2 text-center">{formatDate(m.data_nascimento)}</td>
-       <td className="border-b p-2 text-center">{formatDate(m.data_entrada)}</td>
-       <td className="border-b p-2 font-medium uppercase">{m.cargo?.nome_cargo||'-'}</td>
-       <td className="border-b p-2 text-center capitalize">{m.estado_civil?.toLowerCase()||'-'}</td>
-       <td className="border-b p-2 text-center font-bold">{m.status||'ATIVO'}</td>
+     {filteredMembros.map(m=>
+      <tr key={m.id}>
+       <td style={{fontWeight:700,textTransform:'uppercase'}}>{m.nome_completo}</td>
+       <td style={{textAlign:'center'}}>{formatDate(m.data_nascimento)}</td>
+       <td style={{textAlign:'center'}}>{formatDate(m.data_entrada)}</td>
+       <td>{m.cargo?.nome_cargo||'-'}</td>
+       <td style={{textAlign:'center',textTransform:'capitalize'}}>{m.estado_civil?.toLowerCase()||'-'}</td>
+       <td style={{textAlign:'center',fontWeight:700}}>{m.status||'ATIVO'}</td>
       </tr>
      )}
     </tbody>
+
    </table>
 
-   <div className="mt-8 border-t-2 pt-4 text-center text-sm font-bold">
-    Total de Membros Listados: {filteredMembros.length}
+   <div className="summary">
+    <span>RESUMO</span>
+    <span>Total de membros listados: {filteredMembros.length}</span>
+    <span>Data: {new Date().toLocaleDateString('pt-BR')}</span>
+   </div>
+
+   <div className="footer">
+    <span>Relatório emitido eletronicamente pelo sistema da Secretaria.</span>
+    <span className="center">SECRETARIA • REGISTRO DE MEMBRO</span>
+    <span>IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR • LEROLÂNDIA</span>
    </div>
 
   </div>
