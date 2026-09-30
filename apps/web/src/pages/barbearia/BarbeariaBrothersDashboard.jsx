@@ -29,18 +29,20 @@ const BarbeariaBrothersDashboard=()=>{
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
 
  useModuleAccessGuard('barbearia');
+
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
  useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
 
  return <div className="flex h-screen overflow-hidden bg-gradient-professional font-sans text-[#A9A9A9]" style={{'--primary':'var(--neon-gold)','--ring':'var(--neon-gold)'}}>
   <Helmet><title>Barbearia Brothers</title></Helmet>
+
   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
 
   <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
    <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
 
-   <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent [&_.neon-card]:neon-border-gold [&_.neon-card]:neon-hover-gold">
-    <div className="mx-auto w-full max-w-7xl px-3 py-6 sm:px-4 md:px-6 md:py-8 lg:py-10">
+   <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent p-4 md:p-6 lg:p-8 [&_.neon-card]:neon-border-gold [&_.neon-card]:neon-hover-gold">
+    <div className="w-full">
      <Routes>
       <Route path="/" element={<BarbeariaDashboard/>}/>
       <Route path="cadastros/clientes" element={<CadastroClientesBarbearia/>}/>
