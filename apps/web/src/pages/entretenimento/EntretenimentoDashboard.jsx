@@ -1,5 +1,5 @@
 import React,{useState,useEffect,useContext}from'react';
-import{Routes,Route,Navigate,useNavigate}from'react-router-dom';
+import{Routes,Route,Navigate,useNavigate,useLocation}from'react-router-dom';
 import{Toaster}from'@/components/ui/toaster';
 import{useToast}from'@/components/ui/use-toast';
 import Sidebar from'@/components/entretenimento/Sidebar';
@@ -28,7 +28,7 @@ import{cn}from'@/lib/utils';
 import{Loader2}from'lucide-react';
 
 const EntretenimentoDashboard=()=>{
- const navigate=useNavigate(),{toast}=useToast(),{session,loading}=useAuth(),{isMobile}=useContext(DeviceContext);
+ const navigate=useNavigate(),location=useLocation(),{toast}=useToast(),{session,loading}=useAuth(),{isMobile}=useContext(DeviceContext);
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
 
  useModuleAccessGuard('entretenimento');
@@ -41,6 +41,7 @@ const EntretenimentoDashboard=()=>{
  },[session,loading,navigate,toast]);
 
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
+ useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
 
  if(loading)return <div className="flex h-screen items-center justify-center bg-transparent text-foreground" role="status" aria-live="polite"><Loader2 className="h-10 w-10 animate-spin text-[hsl(var(--neon-orange))] motion-reduce:animate-none"/></div>;
 
