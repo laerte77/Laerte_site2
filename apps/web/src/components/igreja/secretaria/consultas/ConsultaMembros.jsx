@@ -1,6 +1,6 @@
 import React,{useState,useEffect,useCallback,useMemo}from'react';
 import{motion,AnimatePresence}from'framer-motion';
-import{Users,Search,Filter,Printer,ChevronDown,ChevronUp,Download,FileText,Droplets,Flame,Calendar,Heart,Shield,AlertTriangle,X,UserRound}from'lucide-react';
+import{Users,User,Search,Filter,Printer,ChevronDown,ChevronUp,Download,FileText,Droplets,Flame,Calendar,Heart,Shield,AlertTriangle,X}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
@@ -35,9 +35,7 @@ const getBase64Image=url=>new Promise(resolve=>{
 const formatDate=value=>value?new Date(`${value}T00:00:00`).toLocaleDateString('pt-BR'):'-';
 
 const getFunctionNames=m=>{
- if(Array.isArray(m?.funcoes_multiplas?.funcoes_ids)&&m.funcoes_multiplas.funcoes_ids.length>0){
-  return m.funcoes_multiplas.funcoes_ids.join(', ');
- }
+ if(Array.isArray(m?.funcoes_multiplas?.funcoes_ids)&&m.funcoes_multiplas.funcoes_ids.length>0)return m.funcoes_multiplas.funcoes_ids.join(', ');
  return m?.funcoes_exercidas||'-';
 };
 
@@ -61,7 +59,6 @@ const CardSkeleton=()=>(
 const ConsultaMembros=()=>{
  const{user}=useAuth();
  const{toast}=useToast();
-
  const[membros,setMembros]=useState([]);
  const[funcoes,setFuncoes]=useState([]);
  const[conjuntos,setConjuntos]=useState([]);
@@ -90,19 +87,15 @@ const ConsultaMembros=()=>{
     supabase.from('igreja_funcoes').select('*').order('nome_funcao',{ascending:true}),
     supabase.from('igreja_conjuntos').select('*').order('nome_conjunto',{ascending:true})
    ]);
-
    if(membrosRes.error)throw membrosRes.error;
    if(funcoesRes.error)throw funcoesRes.error;
    if(conjuntosRes.error)throw conjuntosRes.error;
-
    setMembros(membrosRes.data||[]);
    setFuncoes(funcoesRes.data||[]);
    setConjuntos(conjuntosRes.data||[]);
   }catch(error){
    toast({title:'Erro ao buscar dados',description:error.message,variant:'destructive'});
-  }finally{
-   setLoading(false);
-  }
+  }finally{setLoading(false)}
  },[user,toast]);
 
  useEffect(()=>{fetchData()},[fetchData]);
@@ -123,13 +116,11 @@ const ConsultaMembros=()=>{
    toast({title:'Sem dados',description:'Não há membros para exportar.',variant:'warning'});
    return;
   }
-
   const doc=new jsPDF();
   try{
    const logoData=await getBase64Image(LOGO_URL);
    if(logoData)doc.addImage(logoData,'PNG',15,15,20,20);
   }catch(error){console.warn('Could not add logo to PDF',error)}
-
   doc.setFontSize(14);
   doc.setTextColor(30,58,138);
   doc.text('IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR',105,20,{align:'center'});
@@ -140,7 +131,6 @@ const ConsultaMembros=()=>{
   doc.setFont('helvetica','bold');
   doc.setTextColor(30,58,138);
   doc.text('LISTAGEM DE MEMBROS',105,38,{align:'center'});
-
   autoTable(doc,{
    head:[['Nome','Nascimento','Admissão','Cargo','Est. Civil','Status']],
    body:filteredMembros.map(m=>[
@@ -156,14 +146,12 @@ const ConsultaMembros=()=>{
    headStyles:{fillColor:[59,130,246],textColor:255},
    theme:'grid'
   });
-
   const finalY=doc.lastAutoTable.finalY||45;
   doc.setFontSize(10);
   doc.setFont('helvetica','normal');
   doc.setTextColor(0,0,0);
   doc.text(`Total de Membros Listados: ${filteredMembros.length}`,14,finalY+10);
   doc.save(`Membros_${new Date().toISOString().split('T')[0]}.pdf`);
-
   toast({title:'PDF Gerado',description:'O relatório foi baixado com sucesso.'});
  };
 
@@ -172,7 +160,6 @@ const ConsultaMembros=()=>{
    toast({title:'Nenhum dado',description:'A lista de membros está vazia.',variant:'destructive'});
    return;
   }
-
   const dataToExport=filteredMembros.map(m=>({
    Nome:m.nome_completo,
    'Data de Nascimento':formatDate(m.data_nascimento),
@@ -183,12 +170,10 @@ const ConsultaMembros=()=>{
    'Batismo Espírito Santo':m.is_batizado_espirito?'Sim':'Não',
    Status:m.status||'ATIVO'
   }));
-
   const worksheet=XLSX.utils.json_to_sheet(dataToExport);
   const workbook=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook,worksheet,'Membros');
   XLSX.writeFile(workbook,'Listagem_Membros.xlsx');
-
   toast({title:'Sucesso',description:'Excel exportado com sucesso.'});
  };
 
@@ -201,17 +186,13 @@ const ConsultaMembros=()=>{
 
  const handlePrintFicha=()=>{
   if(!selectedMembro)return;
-
   const m=selectedMembro;
   const popup=window.open('','_blank','width=900,height=1000');
-
   if(!popup){
    toast({title:'Impressão bloqueada',description:'Permita pop-ups para imprimir a ficha.',variant:'destructive'});
    return;
   }
-
   const funcao=getFunctionNames(m);
-
   popup.document.write(`
    <!doctype html>
    <html lang="pt-BR">
@@ -249,12 +230,10 @@ const ConsultaMembros=()=>{
        <h2>LEROLÂNDIA</h2>
        <div class="title">FICHA DO MEMBRO</div>
       </div>
-
       <div class="member">
        <h3>${m.nome_completo||'-'}</h3>
        <span class="status">${m.status||'ATIVO'}</span>
       </div>
-
       <div class="section">
        <h4>Dados Pessoais</h4>
        <div class="grid">
@@ -264,7 +243,6 @@ const ConsultaMembros=()=>{
         <div class="item"><span class="label">Data de Entrada</span><span class="value">${formatDate(m.data_entrada)}</span></div>
        </div>
       </div>
-
       <div class="section">
        <h4>Dados Ministeriais</h4>
        <div class="grid">
@@ -273,7 +251,6 @@ const ConsultaMembros=()=>{
         <div class="item"><span class="label">Quantidade de Funções</span><span class="value">${m.funcoes_multiplas?.quantidade||1}</span></div>
        </div>
       </div>
-
       <div class="section">
        <h4>Dados da Igreja</h4>
        <div class="grid">
@@ -283,7 +260,6 @@ const ConsultaMembros=()=>{
         <div class="item"><span class="label">Conjunto que Dirige</span><span class="value">${m.dirige_conjunto?.nome_conjunto||'-'}</span></div>
        </div>
       </div>
-
       <div class="section">
        <h4>Dados Eclesiásticos</h4>
        <div class="grid">
@@ -292,52 +268,43 @@ const ConsultaMembros=()=>{
         <div class="item"><span class="label">Status</span><span class="value">${m.status||'ATIVO'}</span></div>
        </div>
       </div>
-
       <div class="footer">Documento gerado pelo sistema da Secretaria.</div>
      </div>
      <script>window.onload=()=>{window.focus();window.print()}</script>
     </body>
    </html>
   `);
-
   popup.document.close();
  };
 
  const handleGenerateFichaPDF=async()=>{
   if(!selectedMembro)return;
-
   const m=selectedMembro;
   const doc=new jsPDF({unit:'mm',format:'a4'});
   const gold=[30,58,138];
   let y=18;
-
   try{
    const logoData=await getBase64Image(LOGO_URL);
    if(logoData)doc.addImage(logoData,'PNG',85,y,40,40);
   }catch(error){console.warn('Logo da ficha não adicionada',error)}
-
   y+=48;
   doc.setTextColor(...gold);
   doc.setFont('helvetica','bold');
   doc.setFontSize(15);
   doc.text('IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR',105,y,{align:'center'});
   y+=8;
-
   doc.setTextColor(50,50,50);
   doc.setFontSize(12);
   doc.text('LEROLÂNDIA',105,y,{align:'center'});
   y+=10;
-
   doc.setTextColor(...gold);
   doc.setFontSize(16);
   doc.text('FICHA DO MEMBRO',105,y,{align:'center'});
   y+=12;
-
   doc.setTextColor(20,20,20);
   doc.setFontSize(15);
   doc.text(m.nome_completo||'-',105,y,{align:'center'});
   y+=8;
-
   doc.setFontSize(9);
   doc.text(`STATUS: ${m.status||'ATIVO'}`,105,y,{align:'center'});
   y+=12;
@@ -356,7 +323,6 @@ const ConsultaMembros=()=>{
    styles:{fontSize:10,cellPadding:4},
    columnStyles:{0:{cellWidth:55},1:{cellWidth:120}}
   });
-
   y=doc.lastAutoTable.finalY+8;
 
   autoTable(doc,{
@@ -372,7 +338,6 @@ const ConsultaMembros=()=>{
    styles:{fontSize:10,cellPadding:4},
    columnStyles:{0:{cellWidth:55},1:{cellWidth:120}}
   });
-
   y=doc.lastAutoTable.finalY+8;
 
   autoTable(doc,{
@@ -389,7 +354,6 @@ const ConsultaMembros=()=>{
    styles:{fontSize:10,cellPadding:4},
    columnStyles:{0:{cellWidth:55},1:{cellWidth:120}}
   });
-
   y=doc.lastAutoTable.finalY+8;
 
   autoTable(doc,{
@@ -409,13 +373,11 @@ const ConsultaMembros=()=>{
   doc.setFontSize(8);
   doc.setTextColor(100,100,100);
   doc.text('Documento gerado pelo sistema da Secretaria.',105,287,{align:'center'});
-
   doc.save(`Ficha_${(m.nome_completo||'Membro').replace(/\s+/g,'_')}.pdf`);
   toast({title:'Ficha em PDF',description:'A ficha do membro foi gerada com sucesso.'});
  };
 
  return <div className="dark-igreja text-foreground">
-
   <style>{`
    @media print{
     @page{margin:1cm;size:landscape}
@@ -432,7 +394,6 @@ const ConsultaMembros=()=>{
   `}</style>
 
   <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="no-print space-y-5 md:space-y-6 motion-reduce:transition-none">
-
    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
     <div className="flex items-center gap-3">
      <img src={LOGO_URL} alt="Logo" className="h-14 w-14 object-contain md:h-16 md:w-16"/>
@@ -441,7 +402,6 @@ const ConsultaMembros=()=>{
       <p className="text-sm text-muted-foreground md:text-base">Visualize e filtre os membros da igreja.</p>
      </div>
     </div>
-
     <div className="flex flex-wrap items-center gap-2">
      <Select value={filterStatus} onValueChange={setFilterStatus}>
       <SelectTrigger className="w-36 border-border bg-card font-bold"><SelectValue placeholder="Status"/></SelectTrigger>
@@ -451,7 +411,6 @@ const ConsultaMembros=()=>{
        <SelectItem value="INATIVO" className="font-bold text-red-500">Inativos</SelectItem>
       </SelectContent>
      </Select>
-
      <Button variant="outline" size="sm" onClick={handleExportExcel} className="border-emerald-500/30 text-emerald-500 hover:border-emerald-500/50 hover:bg-emerald-500/10"><Download className="mr-2 h-4 w-4"/>Excel</Button>
      <Button variant="outline" size="sm" onClick={handleGeneratePDF} className="border-rose-500/30 text-rose-500 hover:border-rose-500/50 hover:bg-rose-500/10"><FileText className="mr-2 h-4 w-4"/>PDF</Button>
      <Button variant="default" size="sm" onClick={handlePrint} className="bg-primary text-primary-foreground hover:bg-primary/90"><Printer className="mr-2 h-4 w-4"/>Imprimir</Button>
@@ -509,7 +468,6 @@ const ConsultaMembros=()=>{
    <div className="overflow-hidden rounded-md border border-border bg-card">
     <ScrollArea className="h-[calc(100vh-340px)] min-h-[400px]">
      <div className="grid grid-cols-1 gap-4 p-3 md:grid-cols-2 md:p-4 xl:grid-cols-3">
-
       {loading&&Array(6).fill(0).map((_,i)=><CardSkeleton key={i}/> )}
 
       {!loading&&!filteredMembros.length&&<div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
@@ -520,22 +478,16 @@ const ConsultaMembros=()=>{
 
       {!loading&&filteredMembros.length>0&&filteredMembros.map(membro=>{
        const isInactive=membro.status==='INATIVO';
-
        return <motion.div key={membro.id} layout initial={{opacity:0,scale:.95}} animate={{opacity:1,scale:1}} transition={{duration:.2}} className="group cursor-pointer motion-reduce:transition-none" onClick={()=>setSelectedMembro(membro)}>
-        <Card className={`relative overflow-hidden rounded-xl border transition-[border-color,background-color,box-shadow,transform] duration-300 hover:-translate-y-px motion-reduce:transition-none ${
-         isInactive?'border-red-500/50 bg-red-950/10 hover:border-red-400':'border-border bg-card hover:border-primary hover:bg-primary/5'
-        }`}>
-
+        <Card className={`relative overflow-hidden rounded-xl border transition-[border-color,background-color,box-shadow,transform] duration-300 hover:-translate-y-px motion-reduce:transition-none ${isInactive?'border-red-500/50 bg-red-950/10 hover:border-red-400':'border-border bg-card hover:border-primary hover:bg-primary/5'}`}>
          {isInactive&&<div className="absolute right-3 top-3 flex items-center gap-1 rounded border border-red-500/30 bg-red-500/20 px-2 py-0.5 text-xs font-bold text-red-500"><AlertTriangle className="h-3 w-3" aria-hidden="true"/>INATIVO</div>}
 
          <CardHeader className="relative flex flex-row items-start gap-4 space-y-0 overflow-hidden pb-3">
           <div className={`z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-full border text-xl font-bold shadow-sm ${isInactive?'border-red-500/30 bg-red-900/30 text-red-400':'border-border bg-secondary text-secondary-foreground'}`}>
            {getInitials(membro.nome_completo)}
           </div>
-
           <div className="z-10 min-w-0 flex-1 pr-16">
            <CardTitle className={`truncate text-base font-bold transition-colors motion-reduce:transition-none ${isInactive?'text-red-400':'group-hover:text-primary'}`}>{membro.nome_completo}</CardTitle>
-
            <div className="mt-1.5 flex flex-col gap-1">
             {membro.cargo?.nome_cargo&&<span className={`flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${isInactive?'bg-red-900/20 text-red-300':'bg-primary/10 text-primary'}`}><Shield className="h-3 w-3" aria-hidden="true"/>{membro.cargo.nome_cargo}</span>}
             {membro.funcoes_multiplas?.quantidade&&<span className="text-[10px] font-medium text-muted-foreground">{membro.funcoes_multiplas.quantidade} Função(ões)</span>}
@@ -549,12 +501,10 @@ const ConsultaMembros=()=>{
             <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${isInactive?'text-red-400':'text-primary'}`}><Calendar className="h-3 w-3" aria-hidden="true"/>Nascimento</span>
             <p className="truncate border-l-2 border-border pl-4 font-semibold">{formatDate(membro.data_nascimento)}</p>
            </div>
-
            <div className="space-y-1">
             <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${isInactive?'text-red-400':'text-primary'}`}><Heart className="h-3 w-3" aria-hidden="true"/>Estado Civil</span>
             <p className="truncate border-l-2 border-border pl-4 font-semibold capitalize">{membro.estado_civil?membro.estado_civil.toLowerCase():'-'}</p>
            </div>
-
            <div className="col-span-2 space-y-1 pt-1">
             <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider ${isInactive?'text-red-400':'text-primary'}`}><Users className="h-3 w-3" aria-hidden="true"/>Conjunto / Classe</span>
             <div className="mt-1 flex flex-wrap gap-2">
@@ -590,7 +540,7 @@ const ConsultaMembros=()=>{
      <DialogHeader className="border-b border-border bg-card px-6 py-5">
       <DialogTitle className="flex items-center gap-3 text-xl text-primary md:text-2xl">
        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
-        <UserRound className="h-5 w-5 text-primary"/>
+        <User className="h-5 w-5 text-primary"/>
        </div>
        Ficha do Membro
       </DialogTitle>
@@ -598,9 +548,7 @@ const ConsultaMembros=()=>{
 
      <div className="space-y-6 p-5 md:p-7">
       <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 text-center">
-       <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full border-2 border-primary/30 bg-secondary text-2xl font-bold text-primary">
-        {getInitials(selectedMembro.nome_completo)}
-       </div>
+       <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full border-2 border-primary/30 bg-secondary text-2xl font-bold text-primary">{getInitials(selectedMembro.nome_completo)}</div>
        <h2 className="text-2xl font-bold md:text-3xl">{selectedMembro.nome_completo}</h2>
        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
         <Badge className={selectedMembro.status==='INATIVO'?'border-red-500/30 bg-red-500/10 text-red-500':'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'}>{selectedMembro.status||'ATIVO'}</Badge>
