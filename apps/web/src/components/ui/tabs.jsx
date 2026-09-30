@@ -1,106 +1,38 @@
-import * as React from 'react';
-import * as TabsPrimitive from '@radix-ui/react-tabs';
+import*as React from'react';
+import*as TabsPrimitive from'@radix-ui/react-tabs';
+import{cn}from'@/lib/utils';
 
-import { cn } from '@/lib/utils';
+const Tabs=TabsPrimitive.Root;
 
-const Tabs = TabsPrimitive.Root;
+const TabsList=React.forwardRef(({className,...props},ref)=>(
+ <TabsPrimitive.List ref={ref} className={cn(
+  'flex h-10 w-full items-center justify-start gap-1 overflow-x-auto rounded-md bg-muted p-1 text-muted-foreground overscroll-contain sm:inline-flex sm:w-auto',
+  'scrollbar-thin',
+  className
+ )} {...props}/>
+));
+TabsList.displayName=TabsPrimitive.List.displayName;
 
-const TabsList = React.forwardRef(
-  ({ className, ...props }, ref) => (
-    <TabsPrimitive.List
-      ref={ref}
-      className={cn(
-        [
-          'inline-flex',
-          'h-10',
-          'items-center',
-          'justify-center',
-          'rounded-md',
-          'bg-muted',
-          'p-1',
-          'text-muted-foreground',
-          'gap-1'
-        ].join(' '),
-        className
-      )}
-      {...props}
-    />
-  )
-);
+const TabsTrigger=React.forwardRef(({className,...props},ref)=>(
+ <TabsPrimitive.Trigger ref={ref} className={cn(
+  'inline-flex min-h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background',
+  'transition-[background-color,color,box-shadow,border-color,opacity] duration-200 ease-out',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+  'disabled:pointer-events-none disabled:opacity-50',
+  'data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm',
+  'hover:text-foreground max-md:min-h-10 max-md:px-4 max-md:text-[16px]',
+  'touch-action-manipulation motion-reduce:transition-none',
+  className
+ )} {...props}/>
+));
+TabsTrigger.displayName=TabsPrimitive.Trigger.displayName;
 
-TabsList.displayName = TabsPrimitive.List.displayName;
+const TabsContent=React.forwardRef(({className,...props},ref)=>(
+ <TabsPrimitive.Content ref={ref} className={cn(
+  'mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+  className
+ )} {...props}/>
+));
+TabsContent.displayName=TabsPrimitive.Content.displayName;
 
-const TabsTrigger = React.forwardRef(
-  ({ className, ...props }, ref) => (
-    <TabsPrimitive.Trigger
-      ref={ref}
-      className={cn(
-        [
-          'inline-flex',
-          'items-center',
-          'justify-center',
-          'whitespace-nowrap',
-          'rounded-sm',
-          'px-3',
-          'py-1.5',
-          'text-sm',
-          'font-medium',
-          'ring-offset-background',
-
-          'transition-[background-color,color,box-shadow,border-color,opacity]',
-          'duration-200',
-          'ease-out',
-
-          'focus-visible:outline-none',
-          'focus-visible:ring-2',
-          'focus-visible:ring-ring',
-          'focus-visible:ring-offset-2',
-
-          'disabled:pointer-events-none',
-          'disabled:opacity-50',
-
-          'data-[state=active]:bg-background',
-          'data-[state=active]:text-foreground',
-          'data-[state=active]:shadow-sm',
-
-          'hover:text-foreground',
-
-          'motion-reduce:transition-none'
-        ].join(' '),
-        className
-      )}
-      {...props}
-    />
-  )
-);
-
-TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
-
-const TabsContent = React.forwardRef(
-  ({ className, ...props }, ref) => (
-    <TabsPrimitive.Content
-      ref={ref}
-      className={cn(
-        [
-          'mt-2',
-          'ring-offset-background',
-          'focus-visible:outline-none',
-          'focus-visible:ring-2',
-          'focus-visible:ring-ring',
-          'focus-visible:ring-offset-2'
-        ].join(' '),
-        className
-      )}
-      {...props}
-    />
-  )
-);
-
-TabsContent.displayName = TabsPrimitive.Content.displayName;
-
-export {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent
-};
+export{Tabs,TabsList,TabsTrigger,TabsContent};
