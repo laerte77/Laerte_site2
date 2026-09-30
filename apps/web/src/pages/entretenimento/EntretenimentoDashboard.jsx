@@ -28,9 +28,7 @@ import{cn}from'@/lib/utils';
 import{Loader2}from'lucide-react';
 
 const EntretenimentoDashboard=()=>{
- const navigate=useNavigate(),{toast}=useToast();
- const{session,loading}=useAuth();
- const{isMobile}=useContext(DeviceContext);
+ const navigate=useNavigate(),{toast}=useToast(),{session,loading}=useAuth(),{isMobile}=useContext(DeviceContext);
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
 
  useModuleAccessGuard('entretenimento');
@@ -49,7 +47,7 @@ const EntretenimentoDashboard=()=>{
  return <div className="flex min-h-screen w-full bg-gradient-professional" style={{'--primary':'var(--neon-orange)','--ring':'var(--neon-orange)'}}>
   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
 
-  <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-64':'ml-20'))}>
+  <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
    <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
 
    <main className="flex-1 overflow-y-auto bg-transparent p-3 sm:p-4 md:p-6 lg:p-8 [&_.neon-card]:neon-border-orange [&_.neon-card]:neon-hover-orange">
@@ -78,7 +76,7 @@ const EntretenimentoDashboard=()=>{
 
   {isMobile&&isSidebarOpen&&<div className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm" onClick={()=>setSidebarOpen(false)} aria-hidden="true"/>}
   <Toaster/>
- </div>
+ </div>;
 };
 
 export default EntretenimentoDashboard;
