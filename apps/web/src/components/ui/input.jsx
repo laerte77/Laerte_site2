@@ -1,59 +1,25 @@
-import * as React from 'react';
-import { cn } from '@/lib/utils';
+import*as React from'react';
+import{cn}from'@/lib/utils';
 
-const Input = React.forwardRef(
-  ({ className, type, ...props }, ref) => {
-    return (
-      <input
-        type={type}
-        className={cn(
-          [
-            'flex h-10 w-full',
-            'rounded-md',
-            'border border-border',
-            'bg-input/50',
-            'px-3 py-2',
-            'text-sm text-foreground',
-            'ring-offset-background',
+const Input=React.forwardRef(({className,type,...props},ref)=>(
+ <input
+  ref={ref}
+  type={type}
+  className={cn(
+   'flex h-10 w-full rounded-md border border-border bg-input/50 px-3 py-2 text-sm text-foreground ring-offset-background',
+   'file:border-0 file:bg-transparent file:text-sm file:font-medium',
+   'placeholder:text-muted-foreground',
+   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus:glow-neon',
+   'disabled:cursor-not-allowed disabled:opacity-50',
+   'transition-[background-color,border-color,color,box-shadow,opacity] duration-200 ease-out',
+   'max-md:min-h-[44px] max-md:p-3 max-md:text-[16px]',
+   'touch-target motion-reduce:transition-none',
+   className
+  )}
+  {...props}
+ />
+));
 
-            'file:border-0',
-            'file:bg-transparent',
-            'file:text-sm',
-            'file:font-medium',
+Input.displayName='Input';
 
-            'placeholder:text-muted-foreground',
-
-            'focus-visible:outline-none',
-            'focus-visible:ring-2',
-            'focus-visible:ring-primary',
-            'focus-visible:ring-offset-2',
-
-            'disabled:cursor-not-allowed',
-            'disabled:opacity-50',
-
-            'transition-[background-color,border-color,color,box-shadow,opacity]',
-            'duration-200',
-            'ease-out',
-
-            'focus:glow-neon',
-
-            'max-md:min-h-[44px]',
-            'max-md:text-[16px]',
-            'max-md:p-3',
-
-            'touch-target',
-
-            'motion-reduce:transition-none'
-          ].join(' '),
-          className
-        )}
-        ref={ref}
-        {...props}
-      />
-    );
-  }
-);
-
-Input.displayName = 'Input';
-
-export { Input };
+export{Input};
