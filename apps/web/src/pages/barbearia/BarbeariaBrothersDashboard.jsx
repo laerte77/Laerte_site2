@@ -34,7 +34,7 @@ const BarbeariaBrothersDashboard=()=>{
   <Helmet><title>Barbearia Brothers</title></Helmet>
   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
 
-  <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-64':'ml-20'))}>
+  <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
    <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
 
    <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent [&_.neon-card]:neon-border-gold [&_.neon-card]:neon-hover-gold">
@@ -63,7 +63,7 @@ const BarbeariaBrothersDashboard=()=>{
   </div>
 
   {isMobile&&isSidebarOpen&&<div className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm" onClick={()=>setSidebarOpen(false)} aria-hidden="true"/>}
- </div>
+ </div>;
 };
 
 export default BarbeariaBrothersDashboard;
