@@ -24,7 +24,7 @@ const Header=({toggleSidebar,isSidebarOpen})=>{
 
    <DividerLine moduleName="barbearia" vertical className="mx-2 hidden h-8 opacity-40 md:block"/>
 
-   <button type="button" onClick={()=>navigate('/barbearia/dashboard/home')} className="hidden items-center gap-2 rounded-md sm:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-barbearia))] focus-visible:ring-offset-2">
+   <button type="button" onClick={()=>navigate('/barbearia/dashboard')} className="hidden items-center gap-2 rounded-md sm:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-barbearia))] focus-visible:ring-offset-2" aria-label="Ir para o painel Barbearia Brothers">
     <Scissors className="h-5 w-5 text-[hsl(var(--neon-barbearia))]" aria-hidden="true"/>
     <span className="text-lg font-bold uppercase tracking-wider text-[hsl(var(--neon-barbearia))]">Brothers</span>
    </button>
