@@ -1,5 +1,5 @@
 import React,{useState,useEffect,useContext}from'react';
-import{Routes,Route,Navigate,useNavigate}from'react-router-dom';
+import{Routes,Route,Navigate,useNavigate,useLocation}from'react-router-dom';
 import{Toaster}from'@/components/ui/toaster';
 import{useToast}from'@/components/ui/use-toast';
 import Sidebar from'@/components/pessoal/sidebar';
@@ -41,7 +41,7 @@ import{cn}from'@/lib/utils';
 import{Loader2}from'lucide-react';
 
 const PessoalDashboard=()=>{
- const navigate=useNavigate(),{toast}=useToast(),{session,loading,isAdmin,canAccessModule}=useAuth(),{isMobile}=useContext(DeviceContext);
+ const navigate=useNavigate(),location=useLocation(),{toast}=useToast(),{session,loading,isAdmin,canAccessModule}=useAuth(),{isMobile}=useContext(DeviceContext);
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
 
  useModuleAccessGuard('pessoal');
@@ -54,6 +54,7 @@ const PessoalDashboard=()=>{
  },[session,loading,navigate,toast,canAccessModule]);
 
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
+ useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
 
  if(loading||(!session&&!loading))return <div className="flex h-screen flex-col items-center justify-center text-foreground" role="status" aria-live="polite"><Loader2 className="mb-4 h-10 w-10 animate-spin text-[hsl(var(--neon-blue))] motion-reduce:animate-none"/><p>Carregando Módulo...</p></div>;
 
