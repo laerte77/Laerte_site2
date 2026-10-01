@@ -149,11 +149,9 @@ const ConsultaDirigentesConjunto=()=>{
    toast({title:'Sem dados',description:'Não há dirigentes para gerar o PDF.',variant:'destructive'});
    return;
   }
-
   try{
    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
    doc.setProperties({title:'Dirigentes por Conjunto',subject:'Relatório da Secretaria',author:'Igreja Assembleia de Deus Ministério Plantar'});
-
    const logo=await imageToBase64(LOGO);
    const today=new Date().toLocaleDateString('pt-BR');
    const statusLabel=status==='todos'?'Todos os Status':status==='ATIVO'?'Ativos':'Inativos';
@@ -162,12 +160,12 @@ const ConsultaDirigentesConjunto=()=>{
    doc.rect(0,0,210,34,'F');
 
    if(logo?.data&&logo.width&&logo.height){
-    const maxW=20,maxH=18;
+    const maxW=27,maxH=21;
     const scale=Math.min(maxW/logo.width,maxH/logo.height);
     const w=logo.width*scale;
     const h=logo.height*scale;
-    const x=12;
-    const y=7+(maxH-h)/2;
+    const x=11;
+    const y=6+(maxH-h)/2;
     try{doc.addImage(logo.data,'PNG',x,y,w,h)}catch{}
    }
 
@@ -178,7 +176,6 @@ const ConsultaDirigentesConjunto=()=>{
    doc.setFontSize(9);
    doc.setTextColor(226,232,240);
    doc.text('MINISTÉRIO PLANTAR • LEROLÂNDIA',105,18,{align:'center'});
-
    doc.setFillColor(...YELLOW);
    doc.roundedRect(55,23,100,7,2,2,'F');
    doc.setTextColor(...NAVY);
@@ -225,36 +222,26 @@ const ConsultaDirigentesConjunto=()=>{
 
    for(const c of grouped){
     const needed=18+c.dirigentes.length*7+12;
-    if(y+needed>270){
-     doc.addPage();
-     y=18;
-    }
+    if(y+needed>270){doc.addPage();y=18}
 
     doc.setFillColor(...NAVY);
     doc.roundedRect(14,y,182,11,2,2,'F');
     doc.setFillColor(...YELLOW);
     doc.circle(21,y+5.5,2.5,'F');
-
     doc.setFont('helvetica','bold');
     doc.setFontSize(8.5);
     doc.setTextColor(255,255,255);
     doc.text(c.nome_conjunto||'Sem nome',28,y+6.5);
-
     doc.setFillColor(30,41,59);
     doc.roundedRect(165,y+2,27,7,2,2,'F');
     doc.setFontSize(6.5);
     doc.setTextColor(255,255,255);
     doc.text(`${c.dirigentes.length} ${c.dirigentes.length===1?'DIRIGENTE':'DIRIGENTES'}`,178.5,y+6.5,{align:'center'});
-
     y+=14;
 
     autoTable(doc,{
      head:[['DIRIGENTE','FUNÇÃO / CARGO','STATUS']],
-     body:c.dirigentes.map(d=>[
-      d.nome_completo||'-',
-      d.cargo?.nome_cargo||getFunctions(d,funcoesList),
-      d.status||'ATIVO'
-     ]),
+     body:c.dirigentes.map(d=>[d.nome_completo||'-',d.cargo?.nome_cargo||getFunctions(d,funcoesList),d.status||'ATIVO']),
      startY:y,
      margin:{left:14,right:14,top:18,bottom:20},
      theme:'grid',
@@ -274,10 +261,7 @@ const ConsultaDirigentesConjunto=()=>{
     y=doc.lastAutoTable?.finalY?doc.lastAutoTable.finalY+9:y+20;
    }
 
-   if(y+28>275){
-    doc.addPage();
-    y=18;
-   }
+   if(y+28>275){doc.addPage();y=18}
 
    doc.setFillColor(...LIGHT);
    doc.roundedRect(14,y,182,22,3,3,'F');
@@ -285,7 +269,6 @@ const ConsultaDirigentesConjunto=()=>{
    doc.setFontSize(7);
    doc.setTextColor(...BLUE);
    doc.text('RESUMO DO RELATÓRIO',20,y+7);
-
    doc.setFont('helvetica','normal');
    doc.setTextColor(...TEXT);
    doc.text(`Conjuntos: ${grouped.length}`,20,y+15);
@@ -305,7 +288,6 @@ const ConsultaDirigentesConjunto=()=>{
    doc.text('Relatório emitido eletronicamente pelo sistema da Secretaria.',14,291);
    doc.text('SECRETARIA • DIRIGENTES POR CONJUNTO',105,291,{align:'center'});
    doc.text(`Página ${pages} de ${pages}`,196,291,{align:'right'});
-
    doc.save('Dirigentes_por_Conjunto.pdf');
    toast({title:'PDF Gerado',description:'Relatório de dirigentes criado com sucesso.'});
   }catch(error){
@@ -319,9 +301,7 @@ const ConsultaDirigentesConjunto=()=>{
    toast({title:'Sem dados',description:'Não há dirigentes para imprimir.',variant:'destructive'});
    return;
   }
-
   const statusLabel=status==='todos'?'Todos os Status':status==='ATIVO'?'Ativos':'Inativos';
-
   const rows=grouped.map(c=>`
    <section class="group">
     <div class="group-head"><div><span class="dot"></span>${c.nome_conjunto||'Sem nome'}</div><strong>${c.dirigentes.length} ${c.dirigentes.length===1?'DIRIGENTE':'DIRIGENTES'}</strong></div>
@@ -331,7 +311,6 @@ const ConsultaDirigentesConjunto=()=>{
    </section>`).join('');
 
   const w=window.open('','_blank','width=900,height=1100');
-
   if(!w){
    toast({title:'Impressão bloqueada',description:'Permita pop-ups para imprimir.',variant:'destructive'});
    return;
@@ -342,7 +321,7 @@ const ConsultaDirigentesConjunto=()=>{
 *{box-sizing:border-box}
 body{font-family:Arial,sans-serif;color:#1e293b;margin:0}
 .header{background:#0f172a;color:#fff;padding:12px 14px 10px;border-radius:0 0 7px 7px;text-align:center;position:relative}
-.logo{position:absolute;left:13px;top:10px;width:23mm;height:auto;max-height:20mm;object-fit:contain}
+.logo{position:absolute;left:13px;top:8px;width:27mm;height:auto;max-height:23mm;object-fit:contain}
 .inst{font-size:15px;font-weight:800}
 .sub{font-size:9px;color:#cbd5e1;margin-top:3px}
 .title{display:inline-block;background:#eab308;color:#0f172a;border-radius:4px;padding:5px 18px;margin-top:7px;font-size:9px;font-weight:800}
@@ -385,19 +364,14 @@ ${rows}
 
  return <div className="dark-igreja text-foreground h-full flex flex-col">
   <Helmet><title>Dirigentes por Conjunto | Secretaria</title></Helmet>
-
   <div className="flex-1 space-y-5">
    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
     <div className="flex items-center gap-3">
      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10"><Crown className="h-6 w-6 text-blue-400"/></div>
-     <div>
-      <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 md:text-3xl">Dirigentes por Conjunto</h2>
-      <p className="text-sm text-muted-foreground">Consulte os dirigentes responsáveis por cada conjunto.</p>
-     </div>
+     <div><h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 md:text-3xl">Dirigentes por Conjunto</h2><p className="text-sm text-muted-foreground">Consulte os dirigentes responsáveis por cada conjunto.</p></div>
     </div>
-
     <div className="flex flex-wrap gap-2">
-     <Button variant="outline" size="sm" onClick={()=>setShowFilters(v=>!v)} className="border-yellow-500/50"><Filter className="mr-2 h-4 w-4 text-yellow-400"/>{showFilters?'Ocultar Filtros':'Filtros'}{showFilters?<ChevronUp className="ml-1 h-4 w-4"/>:<ChevronDown className="ml-1 h-4 w-4"/>}</Button>
+     <Button variant="outline" size="sm" onClick={()=>setShowFilters(v=>!v)} className="border-yellow-500/50"><Filter className="mr-2 h-4 w-4 text-yellow-400"/>{showFilters?'Ocultar Filtros':'Filtros'}{showFilters?<ChevronUp className="ml-1 h-4 w-4"/>:<ChevronDown className="ml-1 h-4 w-4" />}</Button>
      <Button variant="outline" size="sm" onClick={exportExcel} className="border-yellow-500/50"><Download className="mr-2 h-4 w-4"/>Excel</Button>
      <Button variant="outline" size="sm" onClick={generatePDF} className="border-yellow-500/50"><FileText className="mr-2 h-4 w-4"/>PDF</Button>
      <Button size="sm" onClick={print} className="bg-indigo-600 hover:bg-indigo-700"><Printer className="mr-2 h-4 w-4"/>Imprimir</Button>
@@ -430,10 +404,7 @@ ${rows}
     {grouped.map(c=><motion.div key={c.id} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}>
      <Card className="overflow-hidden border-border bg-card shadow-sm transition-all hover:border-yellow-400/70 hover:shadow-yellow-400/5">
       <CardHeader className="border-b border-border bg-muted/10 pb-3">
-       <CardTitle className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-400/10"><Users className="h-4 w-4 text-yellow-400"/></div><span className="truncate text-base font-bold">{c.nome_conjunto}</span></div>
-        <Badge variant="outline" className="border-yellow-400/40 text-yellow-400">{c.dirigentes.length}</Badge>
-       </CardTitle>
+       <CardTitle className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-400/10"><Users className="h-4 w-4 text-yellow-400"/></div><span className="truncate text-base font-bold">{c.nome_conjunto}</span></div><Badge variant="outline" className="border-yellow-400/40 text-yellow-400">{c.dirigentes.length}</Badge></CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 p-3">
        {c.dirigentes.map(d=>{
@@ -445,10 +416,7 @@ ${rows}
            <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
              <p className={`truncate text-sm font-bold ${isInactive?'text-red-400':'text-foreground'}`}>{d.nome_completo}</p>
-             <div className="mt-1 flex flex-wrap gap-1">
-              {d.cargo?.nome_cargo&&<Badge variant="outline" className="border-yellow-400/30 text-[10px] text-yellow-400"><Shield className="mr-1 h-3 w-3"/>{d.cargo.nome_cargo}</Badge>}
-              <Badge variant="outline" className={`text-[10px] ${isInactive?'border-red-500/30 text-red-500':'border-yellow-400/20 text-yellow-400'}`}>{isInactive?'INATIVO':'ATIVO'}</Badge>
-             </div>
+             <div className="mt-1 flex flex-wrap gap-1">{d.cargo?.nome_cargo&&<Badge variant="outline" className="border-yellow-400/30 text-[10px] text-yellow-400"><Shield className="mr-1 h-3 w-3"/>{d.cargo.nome_cargo}</Badge>}<Badge variant="outline" className={`text-[10px] ${isInactive?'border-red-500/30 text-red-500':'border-yellow-400/20 text-yellow-400'}`}>{isInactive?'INATIVO':'ATIVO'}</Badge></div>
             </div>
             <Crown className="h-4 w-4 shrink-0 text-yellow-400"/>
            </div>
@@ -469,28 +437,8 @@ ${rows}
     {selected&&<div className="max-h-[90vh] overflow-y-auto">
      <DialogHeader className="border-b border-border px-6 py-5"><DialogTitle className="flex items-center gap-3 text-xl text-primary"><div className="flex h-11 w-11 items-center justify-center rounded-full border border-yellow-400/30 bg-yellow-400/10"><User className="h-5 w-5 text-yellow-400"/></div>Ficha do Dirigente</DialogTitle></DialogHeader>
      <div className="space-y-5 p-5 md:p-6">
-      <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-5 text-center">
-       <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full border-2 border-yellow-400/30 bg-secondary text-2xl font-bold text-yellow-400">{initials(selected.nome_completo)}</div>
-       <h2 className="text-2xl font-bold">{selected.nome_completo}</h2>
-       <div className="mt-3 flex flex-wrap justify-center gap-2">
-        <Badge variant="outline" className={selected.status==='INATIVO'?'border-red-500/30 text-red-500':'border-emerald-500/30 text-emerald-500'}>{selected.status||'ATIVO'}</Badge>
-        {selected.cargo?.nome_cargo&&<Badge variant="outline" className="border-yellow-400/30 text-yellow-400"><Shield className="mr-1 h-3 w-3"/>{selected.cargo.nome_cargo}</Badge>}
-       </div>
-      </div>
-      <div>
-       <h3 className="mb-3 border-b border-border pb-2 text-sm font-bold uppercase tracking-wider text-primary">Dados do Dirigente</h3>
-       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {[
-         ['Nome Completo',selected.nome_completo],
-         ['Conjunto que Dirige',selected._conjunto?.nome_conjunto||selected.dirige_conjunto?.nome_conjunto||'-'],
-         ['Cargo',selected.cargo?.nome_cargo||'-'],
-         ['Função/Funções',getFunctions(selected,funcoesList)],
-         ['Classe da EBD',selected.igreja_classes?.nome_classe||'-'],
-         ['É Dirigente','Sim'],
-         ['Status',selected.status||'ATIVO']
-        ].map(([label,value])=><div key={label} className="rounded-lg border border-border bg-background/40 p-3"><span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span><span className="mt-1 block font-semibold">{value}</span></div>)}
-       </div>
-      </div>
+      <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-5 text-center"><div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full border-2 border-yellow-400/30 bg-secondary text-2xl font-bold text-yellow-400">{initials(selected.nome_completo)}</div><h2 className="text-2xl font-bold">{selected.nome_completo}</h2><div className="mt-3 flex flex-wrap justify-center gap-2"><Badge variant="outline" className={selected.status==='INATIVO'?'border-red-500/30 text-red-500':'border-emerald-500/30 text-emerald-500'}>{selected.status||'ATIVO'}</Badge>{selected.cargo?.nome_cargo&&<Badge variant="outline" className="border-yellow-400/30 text-yellow-400"><Shield className="mr-1 h-3 w-3"/>{selected.cargo.nome_cargo}</Badge>}</div></div>
+      <div><h3 className="mb-3 border-b border-border pb-2 text-sm font-bold uppercase tracking-wider text-primary">Dados do Dirigente</h3><div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{[['Nome Completo',selected.nome_completo],['Conjunto que Dirige',selected._conjunto?.nome_conjunto||selected.dirige_conjunto?.nome_conjunto||'-'],['Cargo',selected.cargo?.nome_cargo||'-'],['Função/Funções',getFunctions(selected,funcoesList)],['Classe da EBD',selected.igreja_classes?.nome_classe||'-'],['É Dirigente','Sim'],['Status',selected.status||'ATIVO']].map(([label,value])=><div key={label} className="rounded-lg border border-border bg-background/40 p-3"><span className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span><span className="mt-1 block font-semibold">{value}</span></div>)}</div></div>
      </div>
      <DialogFooter className="border-t border-border bg-muted/10 px-5 py-4"><Button variant="outline" onClick={()=>setSelected(null)}><X className="mr-2 h-4 w-4"/>Fechar</Button></DialogFooter>
     </div>}
