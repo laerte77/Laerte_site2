@@ -19,22 +19,34 @@ export default function RelatorioEntradasDespesasPDF(){
  const range=useMemo(()=>{
   if(type==='mensal'&&year&&month){
    const y=+year,m=+month;
-   return{a:new Date(Date.UTC(y,m,1)),b:new Date(Date.UTC(y,m+1,0,23,59,59)),p:`${M[m]||''}/${y}`};
+   return{
+    a:new Date(Date.UTC(y,m,1)),
+    b:new Date(Date.UTC(y,m+1,0,23,59,59)),
+    p:`${M[m]||''}/${y}`
+   };
   }
-  if(sd&&ed)return{a:new Date(`${sd}T00:00:00Z`),b:new Date(`${ed}T23:59:59Z`),p:`${dt(sd)} a ${dt(ed)}`};
+  if(sd&&ed)return{
+   a:new Date(`${sd}T00:00:00Z`),
+   b:new Date(`${ed}T23:59:59Z`),
+   p:`${dt(sd)} a ${dt(ed)}`
+  };
   return null;
  },[type,year,month,sd,ed]);
 
  const load=useCallback(async()=>{
   if(!range){setErr('Período inválido.');setLoading(false);return}
   setLoading(true);setErr('');
+
   try{
    const[r1,r2,r3,r4]=await Promise.all([
     supabase.from('igreja_entradas').select('*,igreja_dizimistas(nome)').gte('data',range.a.toISOString()).lte('data',range.b.toISOString()).order('data',{ascending:true}),
     supabase.from('igreja_despesas').select('*').gte('data',range.a.toISOString()).lte('data',range.b.toISOString()).order('data',{ascending:true}),
-    supabase.from('igreja_entradas').select('valor'),
-    supabase.from('igreja_despesas').select('valor')
+
+    /* CAIXA GERAL: todos os lançamentos ATÉ o fim do filtro */
+    supabase.from('igreja_entradas').select('valor').lte('data',range.b.toISOString()),
+    supabase.from('igreja_despesas').select('valor').lte('data',range.b.toISOString())
    ]);
+
    if(r1.error)throw r1.error;
    if(r2.error)throw r2.error;
    if(r3.error)throw r3.error;
@@ -48,6 +60,8 @@ export default function RelatorioEntradasDespesasPDF(){
     z:en.filter(v=>tipo(v.tipo_entrada)==='DIZIMO'),
     e:en.filter(v=>!['OFERTA','DIZIMO'].includes(tipo(v.tipo_entrada))),
     x:ex,
+
+    /* acumulado geral até a data limite do filtro */
     allO:(r3.data||[]).reduce((s,v)=>s+Number(v.valor||0),0),
     allX:(r4.data||[]).reduce((s,v)=>s+Number(v.valor||0),0)
    });
@@ -73,13 +87,17 @@ export default function RelatorioEntradasDespesasPDF(){
 
  const t=useMemo(()=>{
   const o=total(d.o),z=total(d.z),e=total(d.e),x=total(d.x),i=o+z+e;
-  return{o,z,e,x,i,s:i-x,geral:d.allO-d.allX};
+  return{
+   o,
+   z,
+   e,
+   x,
+   i,
+   s:i-x,
+   geral:d.allO-d.allX
+  };
  },[d]);
 
- /*
-  Cálculo aproximado da altura usada na página 1.
-  Assim "Outras Entradas" aparece em apenas uma página.
- */
  const entryOnPage1=useMemo(()=>{
   const header=43;
   const section=n=>5+12+14.5+(n?6.2*n:8);
@@ -141,7 +159,6 @@ export default function RelatorioEntradasDespesasPDF(){
  return<>
   <Helmet>
    <title>Relatório Financeiro</title>
-
    <style>{`
 @page{size:A4 portrait;margin:0}
 *{box-sizing:border-box}
@@ -211,13 +228,11 @@ tfoot td{font-weight:800;height:7.5mm;font-size:10px}
 
    <div className="bar np">
     <span>Pré-visualização de Impressão</span>
-
     <div className="actions">
      <Button onClick={()=>window.print()}>
       <Printer className="mr-2 h-4 w-4"/>
       Imprimir
      </Button>
-
      <Button variant="outline" onClick={()=>window.close()}>
       <X className="mr-2 h-4 w-4"/>
       Fechar
@@ -225,7 +240,6 @@ tfoot td{font-weight:800;height:7.5mm;font-size:10px}
     </div>
    </div>
 
-   {/* PÁGINA 1 */}
    <div className="page p1">
 
     <header className="head">
@@ -280,7 +294,6 @@ tfoot td{font-weight:800;height:7.5mm;font-size:10px}
 
    </div>
 
-   {/* PÁGINA 2 */}
    <div className="page p2">
 
     {!entryOnPage1&&<OtherEntries/>}
