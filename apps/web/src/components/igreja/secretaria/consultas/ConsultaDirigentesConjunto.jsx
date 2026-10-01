@@ -38,16 +38,19 @@ const getFunctions=(m,list)=>{
   if(names.length)return names.join(', ');
  }
  if(m?.igreja_funcoes?.nome_funcao)return m.igreja_funcoes.nome_funcao;
- return '-';
+ return'-';
 };
 
 const imageToBase64=url=>new Promise(resolve=>{
- const img=new Image();img.crossOrigin='Anonymous';img.src=url;
+ const img=new Image();
+ img.crossOrigin='Anonymous';
+ img.src=url;
  img.onload=()=>{
   const canvas=document.createElement('canvas');
-  canvas.width=img.width;canvas.height=img.height;
+  canvas.width=img.width;
+  canvas.height=img.height;
   canvas.getContext('2d').drawImage(img,0,0);
-  resolve(canvas.toDataURL('image/png'));
+  resolve({data:canvas.toDataURL('image/png'),width:img.width,height:img.height});
  };
  img.onerror=()=>resolve(null);
 });
@@ -138,7 +141,13 @@ const ConsultaDirigentesConjunto=()=>{
   doc.setFillColor(...NAVY);
   doc.rect(0,0,210,34,'F');
 
-  if(logo)doc.addImage(logo,'PNG',12,7,20,20);
+  if(logo){
+   const maxW=20,maxH=18;
+   const scale=Math.min(maxW/logo.width,maxH/logo.height);
+   const w=logo.width*scale;
+   const h=logo.height*scale;
+   doc.addImage(logo.data,'PNG',12,7+(maxH-h)/2,w,h);
+  }
 
   doc.setTextColor(255,255,255);
   doc.setFont('helvetica','bold');
@@ -167,8 +176,7 @@ const ConsultaDirigentesConjunto=()=>{
   }
 
   const summaryY=search.trim()?53:48;
-  const boxW=43.5;
-  const gap=3;
+  const boxW=43.5,gap=3;
   const boxes=[
    ['CONJUNTOS',grouped.length,YELLOW],
    ['DIRIGENTES',filtered.length,BLUE],
@@ -202,7 +210,6 @@ const ConsultaDirigentesConjunto=()=>{
 
    doc.setFillColor(...NAVY);
    doc.roundedRect(14,y,182,11,2,2,'F');
-
    doc.setFillColor(...YELLOW);
    doc.circle(21,y+5.5,2.5,'F');
 
@@ -229,38 +236,15 @@ const ConsultaDirigentesConjunto=()=>{
     startY:y,
     margin:{left:14,right:14,top:18,bottom:20},
     theme:'grid',
-    styles:{
-     font:'helvetica',
-     fontSize:8.2,
-     cellPadding:{top:3.2,right:3,bottom:3.2,left:3},
-     textColor:TEXT,
-     lineColor:LINE,
-     lineWidth:.2,
-     valign:'middle'
-    },
-    headStyles:{
-     fillColor:BLUE,
-     textColor:[255,255,255],
-     fontStyle:'bold',
-     fontSize:7,
-     cellPadding:3.5
-    },
+    styles:{font:'helvetica',fontSize:8.2,cellPadding:{top:3.2,right:3,bottom:3.2,left:3},textColor:TEXT,lineColor:LINE,lineWidth:.2,valign:'middle'},
+    headStyles:{fillColor:BLUE,textColor:[255,255,255],fontStyle:'bold',fontSize:7,cellPadding:3.5},
     alternateRowStyles:{fillColor:[248,250,252]},
-    columnStyles:{
-     0:{cellWidth:73},
-     1:{cellWidth:78},
-     2:{cellWidth:31,halign:'center'}
-    },
+    columnStyles:{0:{cellWidth:73},1:{cellWidth:78},2:{cellWidth:31,halign:'center'}},
     didDrawCell:data=>{
      if(data.section==='body'&&data.column.index===2){
       const value=String(data.cell.raw||'');
-      if(value==='ATIVO'){
-       doc.setTextColor(22,163,74);
-       doc.setFont('helvetica','bold');
-      }else{
-       doc.setTextColor(220,38,38);
-       doc.setFont('helvetica','bold');
-      }
+      doc.setTextColor(value==='ATIVO'?[22,163,74]:[220,38,38]);
+      doc.setFont('helvetica','bold');
      }
     }
    });
@@ -290,18 +274,17 @@ const ConsultaDirigentesConjunto=()=>{
   doc.text(`Inativos: ${inactive}`,165,y+15);
 
   const pages=doc.getNumberOfPages();
+  const lastPage=pages;
 
-  for(let i=1;i<=pages;i++){
-   doc.setPage(i);
-   doc.setDrawColor(226,232,240);
-   doc.line(14,286,196,286);
-   doc.setFont('helvetica','normal');
-   doc.setFontSize(5.5);
-   doc.setTextColor(...MUTED);
-   doc.text('Relatório emitido eletronicamente pelo sistema da Secretaria.',14,291);
-   doc.text('SECRETARIA • DIRIGENTES POR CONJUNTO',105,291,{align:'center'});
-   doc.text(`Página ${i} de ${pages}`,196,291,{align:'right'});
-  }
+  doc.setPage(lastPage);
+  doc.setDrawColor(226,232,240);
+  doc.line(14,286,196,286);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(5.5);
+  doc.setTextColor(...MUTED);
+  doc.text('Relatório emitido eletronicamente pelo sistema da Secretaria.',14,291);
+  doc.text('SECRETARIA • DIRIGENTES POR CONJUNTO',105,291,{align:'center'});
+  doc.text(`Página ${lastPage} de ${pages}`,196,291,{align:'right'});
 
   doc.save('Dirigentes_por_Conjunto.pdf');
   toast({title:'PDF Gerado',description:'Relatório de dirigentes criado com sucesso.'});
@@ -314,6 +297,7 @@ const ConsultaDirigentesConjunto=()=>{
   }
 
   const statusLabel=status==='todos'?'Todos os Status':status==='ATIVO'?'Ativos':'Inativos';
+
   const rows=grouped.map(c=>`
    <section class="group">
     <div class="group-head"><div><span class="dot"></span>${c.nome_conjunto||'Sem nome'}</div><strong>${c.dirigentes.length} ${c.dirigentes.length===1?'DIRIGENTE':'DIRIGENTES'}</strong></div>
@@ -334,7 +318,7 @@ const ConsultaDirigentesConjunto=()=>{
 *{box-sizing:border-box}
 body{font-family:Arial,sans-serif;color:#1e293b;margin:0}
 .header{background:#0f172a;color:#fff;padding:12px 14px 10px;border-radius:0 0 7px 7px;text-align:center;position:relative}
-.logo{position:absolute;left:13px;top:10px;width:22mm;height:22mm;object-fit:contain}
+.logo{position:absolute;left:13px;top:10px;width:23mm;height:auto;max-height:20mm;object-fit:contain}
 .inst{font-size:15px;font-weight:800}
 .sub{font-size:9px;color:#cbd5e1;margin-top:3px}
 .title{display:inline-block;background:#eab308;color:#0f172a;border-radius:4px;padding:5px 18px;margin-top:7px;font-size:9px;font-weight:800}
@@ -360,8 +344,9 @@ td:last-child{text-align:center;font-weight:700}
 .inactive{color:#ef4444}
 .summary{margin-top:10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:9px;display:grid;grid-template-columns:repeat(4,1fr);font-size:7px}
 .summary span{font-weight:700;color:#1e3a8a}
-.footer{position:fixed;bottom:3mm;left:9mm;right:9mm;border-top:1px solid #e2e8f0;padding-top:3px;display:grid;grid-template-columns:1fr auto 1fr;font-size:5.5px;color:#64748b}
-.footer span:nth-child(2){font-weight:700;color:#1e3a8a;text-align:center}.footer span:last-child{text-align:right}
+.footer{margin-top:12px;border-top:1px solid #e2e8f0;padding-top:4px;display:grid;grid-template-columns:1fr auto 1fr;font-size:5.5px;color:#64748b;page-break-inside:avoid;break-inside:avoid}
+.footer span:nth-child(2){font-weight:700;color:#1e3a8a;text-align:center}
+.footer span:last-child{text-align:right}
 </style></head><body>
 <div class="header"><img src="${LOGO}" class="logo"><div class="inst">IGREJA ASSEMBLEIA DE DEUS</div><div class="sub">MINISTÉRIO PLANTAR • LEROLÂNDIA</div><div class="title">DIRIGENTES POR CONJUNTO</div></div>
 <div class="meta"><span>Status: ${statusLabel}${search.trim()?` • Busca: ${search.trim()}`:''}</span><span>Emitido em: ${new Date().toLocaleDateString('pt-BR')}</span></div>
@@ -380,9 +365,7 @@ ${rows}
   <div className="flex-1 space-y-5">
    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
     <div className="flex items-center gap-3">
-     <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10">
-      <Crown className="h-6 w-6 text-blue-400"/>
-     </div>
+     <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10"><Crown className="h-6 w-6 text-blue-400"/></div>
      <div>
       <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 md:text-3xl">Dirigentes por Conjunto</h2>
       <p className="text-sm text-muted-foreground">Consulte os dirigentes responsáveis por cada conjunto.</p>
@@ -390,9 +373,7 @@ ${rows}
     </div>
 
     <div className="flex flex-wrap gap-2">
-     <Button variant="outline" size="sm" onClick={()=>setShowFilters(v=>!v)} className="border-yellow-500/50">
-      <Filter className="mr-2 h-4 w-4 text-yellow-400"/>{showFilters?'Ocultar Filtros':'Filtros'}{showFilters?<ChevronUp className="ml-1 h-4 w-4"/>:<ChevronDown className="ml-1 h-4 w-4"/>}
-     </Button>
+     <Button variant="outline" size="sm" onClick={()=>setShowFilters(v=>!v)} className="border-yellow-500/50"><Filter className="mr-2 h-4 w-4 text-yellow-400"/>{showFilters?'Ocultar Filtros':'Filtros'}{showFilters?<ChevronUp className="ml-1 h-4 w-4"/>:<ChevronDown className="ml-1 h-4 w-4"/>}</Button>
      <Button variant="outline" size="sm" onClick={exportExcel} className="border-yellow-500/50"><Download className="mr-2 h-4 w-4"/>Excel</Button>
      <Button variant="outline" size="sm" onClick={generatePDF} className="border-yellow-500/50"><FileText className="mr-2 h-4 w-4"/>PDF</Button>
      <Button size="sm" onClick={print} className="bg-indigo-600 hover:bg-indigo-700"><Printer className="mr-2 h-4 w-4"/>Imprimir</Button>
@@ -402,29 +383,11 @@ ${rows}
    <AnimatePresence>
     {showFilters&&<motion.div initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} className="overflow-hidden">
      <Card className="border-border bg-card">
-      <CardHeader className="border-b border-border pb-3">
-       <CardTitle className="flex items-center text-base"><Filter className="mr-2 h-4 w-4 text-yellow-400"/>Filtros</CardTitle>
-      </CardHeader>
+      <CardHeader className="border-b border-border pb-3"><CardTitle className="flex items-center text-base"><Filter className="mr-2 h-4 w-4 text-yellow-400"/>Filtros</CardTitle></CardHeader>
       <CardContent className="grid grid-cols-1 gap-3 pt-4 md:grid-cols-3">
-       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-        <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar dirigente ou conjunto..." className="border-border bg-background pl-9"/>
-       </div>
-       <Select value={status} onValueChange={setStatus}>
-        <SelectTrigger className="bg-background"><SelectValue placeholder="Status"/></SelectTrigger>
-        <SelectContent className="dark-igreja">
-         <SelectItem value="todos">Todos os Status</SelectItem>
-         <SelectItem value="ATIVO">Ativos</SelectItem>
-         <SelectItem value="INATIVO">Inativos</SelectItem>
-        </SelectContent>
-       </Select>
-       <Select value={conjunto} onValueChange={setConjunto}>
-        <SelectTrigger className="bg-background"><SelectValue placeholder="Conjunto"/></SelectTrigger>
-        <SelectContent className="dark-igreja max-h-[280px]">
-         <SelectItem value="todos">Todos os Conjuntos</SelectItem>
-         {conjuntos.map(c=><SelectItem key={c.id} value={String(c.id)}>{c.nome_conjunto}</SelectItem>)}
-        </SelectContent>
-       </Select>
+       <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar dirigente ou conjunto..." className="border-border bg-background pl-9"/></div>
+       <Select value={status} onValueChange={setStatus}><SelectTrigger className="bg-background"><SelectValue placeholder="Status"/></SelectTrigger><SelectContent className="dark-igreja"><SelectItem value="todos">Todos os Status</SelectItem><SelectItem value="ATIVO">Ativos</SelectItem><SelectItem value="INATIVO">Inativos</SelectItem></SelectContent></Select>
+       <Select value={conjunto} onValueChange={setConjunto}><SelectTrigger className="bg-background"><SelectValue placeholder="Conjunto"/></SelectTrigger><SelectContent className="dark-igreja max-h-[280px]"><SelectItem value="todos">Todos os Conjuntos</SelectItem>{conjuntos.map(c=><SelectItem key={c.id} value={String(c.id)}>{c.nome_conjunto}</SelectItem>)}</SelectContent></Select>
       </CardContent>
      </Card>
     </motion.div>}
@@ -447,14 +410,10 @@ ${rows}
       <Card className="overflow-hidden border-border bg-card shadow-sm transition-all hover:border-yellow-400/70 hover:shadow-yellow-400/5">
        <CardHeader className="border-b border-border bg-muted/10 pb-3">
         <CardTitle className="flex items-center justify-between gap-3">
-         <div className="flex min-w-0 items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-400/10"><Users className="h-4 w-4 text-yellow-400"/></div>
-          <span className="truncate text-base font-bold">{c.nome_conjunto}</span>
-         </div>
+         <div className="flex min-w-0 items-center gap-2"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-400/10"><Users className="h-4 w-4 text-yellow-400"/></div><span className="truncate text-base font-bold">{c.nome_conjunto}</span></div>
          <Badge variant="outline" className="border-yellow-400/40 text-yellow-400">{c.dirigentes.length}</Badge>
         </CardTitle>
        </CardHeader>
-
        <CardContent className="space-y-3 p-3">
         {c.dirigentes.map(d=>{
          const isInactive=(d.status||'ATIVO')==='INATIVO';
@@ -478,7 +437,6 @@ ${rows}
          </motion.div>
         })}
        </CardContent>
-
        <CardFooter className="border-t border-border bg-muted/10 px-3 py-2 text-[10px] text-muted-foreground">Clique no dirigente para visualizar a ficha.</CardFooter>
       </Card>
      </motion.div>)}
@@ -489,9 +447,7 @@ ${rows}
   <Dialog open={!!selected} onOpenChange={open=>{if(!open)setSelected(null)}}>
    <DialogContent className="max-w-2xl border-border bg-card p-0 text-foreground">
     {selected&&<div className="max-h-[90vh] overflow-y-auto">
-     <DialogHeader className="border-b border-border px-6 py-5">
-      <DialogTitle className="flex items-center gap-3 text-xl text-primary"><div className="flex h-11 w-11 items-center justify-center rounded-full border border-yellow-400/30 bg-yellow-400/10"><User className="h-5 w-5 text-yellow-400"/></div>Ficha do Dirigente</DialogTitle>
-     </DialogHeader>
+     <DialogHeader className="border-b border-border px-6 py-5"><DialogTitle className="flex items-center gap-3 text-xl text-primary"><div className="flex h-11 w-11 items-center justify-center rounded-full border border-yellow-400/30 bg-yellow-400/10"><User className="h-5 w-5 text-yellow-400"/></div>Ficha do Dirigente</DialogTitle></DialogHeader>
      <div className="space-y-5 p-5 md:p-6">
       <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-5 text-center">
        <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full border-2 border-yellow-400/30 bg-secondary text-2xl font-bold text-yellow-400">{initials(selected.nome_completo)}</div>
