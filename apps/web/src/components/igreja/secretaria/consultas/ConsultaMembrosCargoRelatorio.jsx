@@ -2,10 +2,11 @@ import React,{useState,useEffect,useCallback,useMemo}from'react';
 import{motion,AnimatePresence}from'framer-motion';
 import{Briefcase,Printer,Download,FileText,Search,Filter,Users,UserMinus,ChevronDown,ChevronUp,CheckCircle2,AlertTriangle}from'lucide-react';
 import{Button}from'@/components/ui/button';
-import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
+import{Card,CardContent,CardHeader,CardTitle,CardFooter}from'@/components/ui/card';
 import{Badge}from'@/components/ui/badge';
 import{Input}from'@/components/ui/input';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
+import{ScrollArea}from'@/components/ui/scroll-area';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{useToast}from'@/components/ui/use-toast';
@@ -23,6 +24,8 @@ const age=v=>{
  if(m<0||(m===0&&t.getDate()<b.getDate()))a--;
  return a;
 };
+
+const date=v=>v?new Date(`${v}T00:00:00`).toLocaleDateString('pt-BR'):'-';
 
 const imageToBase64=url=>new Promise(resolve=>{
  let done=false;
@@ -52,13 +55,18 @@ const ConsultaMembrosCargoRelatorio=()=>{
   setLoading(true);
   try{
    const[a,b]=await Promise.all([
-    supabase.from('igreja_membros').select('*,cargo:cargos_igreja(nome_cargo)').order('nome_completo',{ascending:true}),
+    supabase.from('igreja_membros').select('id,nome_completo,data_nascimento,status,cargo:cargos_igreja(nome_cargo)').order('nome_completo',{ascending:true}),
     supabase.from('cargos_igreja').select('*').order('nome_cargo',{ascending:true})
    ]);
-   if(a.error)throw a.error;if(b.error)throw b.error;
-   setAll(a.data||[]);setCargos(b.data||[]);
-  }catch(e){toast({title:'Erro ao buscar dados',description:e.message,variant:'destructive'})}
-  finally{setLoading(false)}
+   if(a.error)throw a.error;
+   if(b.error)throw b.error;
+   setAll(a.data||[]);
+   setCargos(b.data||[]);
+  }catch(e){
+   toast({title:'Erro ao buscar dados',description:e.message,variant:'destructive'});
+  }finally{
+   setLoading(false);
+  }
  },[user,toast]);
 
  useEffect(()=>{load()},[load]);
@@ -66,7 +74,8 @@ const ConsultaMembrosCargoRelatorio=()=>{
  const filtered=useMemo(()=>{
   const term=search.trim().toLowerCase();
   return all.filter(m=>{
-   const st=m.status||'ATIVO',cg=m.cargo?.nome_cargo||'Sem Cargo';
+   const st=m.status||'ATIVO';
+   const cg=m.cargo?.nome_cargo||'Sem Cargo';
    return(status==='todos'||st===status)&&(cargo==='todos'||cg===cargo)&&(!term||`${m.nome_completo||''} ${cg}`.toLowerCase().includes(term));
   });
  },[all,cargo,status,search]);
@@ -74,12 +83,13 @@ const ConsultaMembrosCargoRelatorio=()=>{
  const grouped=useMemo(()=>{
   const g={};
   filtered.forEach(m=>{
-   const c=m.cargo?.nome_cargo||'Sem Cargo';
-   if(!g[c])g[c]=[];
-   g[c].push(m);
+   const key=m.cargo?.nome_cargo||'Sem Cargo';
+   if(!g[key])g[key]=[];
+   g[key].push(m);
   });
   return Object.keys(g).sort((a,b)=>{
-   if(a==='Sem Cargo')return 1;if(b==='Sem Cargo')return-1;
+   if(a==='Sem Cargo')return 1;
+   if(b==='Sem Cargo')return-1;
    return a.localeCompare(b,'pt-BR');
   }).reduce((o,k)=>(o[k]=g[k],o),{});
  },[filtered]);
@@ -87,17 +97,17 @@ const ConsultaMembrosCargoRelatorio=()=>{
  const active=filtered.filter(m=>(m.status||'ATIVO')==='ATIVO').length;
  const inactive=filtered.filter(m=>(m.status||'ATIVO')==='INATIVO').length;
  const cargoCount=Object.keys(grouped).length;
+ const semCargo=grouped['Sem Cargo']?.length||0;
 
  const exportExcel=()=>{
   if(!filtered.length){
    toast({title:'Sem dados',description:'Não há membros para exportar.',variant:'destructive'});
    return;
   }
-  const rows=[];
-  Object.entries(grouped).forEach(([c,members])=>members.forEach(m=>rows.push({
+  const rows=Object.entries(grouped).flatMap(([c,members])=>members.map(m=>({
    Cargo:c,
-   Nome:m.nome_completo||'-',
-   Nascimento:m.data_nascimento?new Date(`${m.data_nascimento}T00:00:00`).toLocaleDateString('pt-BR'):'-',
+   Nome:m.nome_completo||'',
+   Nascimento:date(m.data_nascimento),
    Idade:age(m.data_nascimento),
    Status:m.status||'ATIVO'
   })));
@@ -114,68 +124,87 @@ const ConsultaMembrosCargoRelatorio=()=>{
    toast({title:'Sem dados',description:'Não há membros para gerar o PDF.',variant:'destructive'});
    return;
   }
+
   try{
    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
    const logo=await imageToBase64(LOGO);
    doc.setProperties({title:'Membros por Cargo',subject:'Relatório da Secretaria',author:'Igreja Assembleia de Deus Ministério Plantar'});
-   doc.setFillColor(...NAVY);doc.rect(0,0,210,34,'F');
+
+   doc.setFillColor(...NAVY);
+   doc.rect(0,0,210,34,'F');
 
    if(logo?.data&&logo.width&&logo.height){
-    const maxW=27,maxH=21,scale=Math.min(maxW/logo.width,maxH/logo.height),w=logo.width*scale,h=logo.height*scale;
+    const maxW=27,maxH=21,scale=Math.min(maxW/logo.width,maxH/logo.height);
+    const w=logo.width*scale,h=logo.height*scale;
     doc.addImage(logo.data,'PNG',11,6+(maxH-h)/2,w,h);
    }
 
-   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(12);
+   doc.setTextColor(255,255,255);
+   doc.setFont('helvetica','bold');
+   doc.setFontSize(12);
    doc.text('IGREJA ASSEMBLEIA DE DEUS',105,12,{align:'center'});
-   doc.setFontSize(9);doc.setTextColor(226,232,240);
+   doc.setFontSize(9);
+   doc.setTextColor(226,232,240);
    doc.text('MINISTÉRIO PLANTAR • LEROLÂNDIA',105,18,{align:'center'});
 
-   doc.setFillColor(...YELLOW);doc.roundedRect(55,23,100,7,2,2,'F');
-   doc.setTextColor(...NAVY);doc.setFontSize(8);
+   doc.setFillColor(...YELLOW);
+   doc.roundedRect(55,23,100,7,2,2,'F');
+   doc.setTextColor(...NAVY);
+   doc.setFontSize(8);
    doc.text('MEMBROS POR CARGO',105,28,{align:'center'});
 
    const statusLabel=status==='todos'?'Todos os Status':status==='ATIVO'?'Ativos':'Inativos';
-   doc.setTextColor(...TEXT);doc.setFont('helvetica','normal');doc.setFontSize(7);
+   doc.setTextColor(...TEXT);
+   doc.setFont('helvetica','normal');
+   doc.setFontSize(7);
    doc.text(`Status: ${statusLabel}`,14,42);
    doc.text(search.trim()?`Busca: ${search.trim()}`:`Todos os cargos`,105,42,{align:'center'});
    doc.text(`Total: ${filtered.length}`,196,42,{align:'right'});
 
    const boxW=43.5,gap=3,summaryY=48;
-   [
-    ['CARGOS',cargoCount,YELLOW],
-    ['MEMBROS',filtered.length,BLUE],
-    ['ATIVOS',active,[34,197,94]],
-    ['INATIVOS',inactive,[239,68,68]]
-   ].forEach((b,i)=>{
+   [['CARGOS',cargoCount,YELLOW],['MEMBROS',filtered.length,BLUE],['ATIVOS',active,[34,197,94]],['INATIVOS',inactive,[239,68,68]]].forEach((b,i)=>{
     const x=14+i*(boxW+gap);
-    doc.setFillColor(248,250,252);doc.roundedRect(x,summaryY,boxW,16,2,2,'F');
-    doc.setFillColor(...b[2]);doc.roundedRect(x,summaryY,2.5,16,1,1,'F');
-    doc.setFont('helvetica','bold');doc.setFontSize(6.5);doc.setTextColor(...MUTED);
-    doc.text(b[0],x+6,summaryY+6);doc.setFontSize(12);doc.setTextColor(...TEXT);
+    doc.setFillColor(248,250,252);
+    doc.roundedRect(x,summaryY,boxW,16,2,2,'F');
+    doc.setFillColor(...b[2]);
+    doc.roundedRect(x,summaryY,2.5,16,1,1,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(...MUTED);
+    doc.text(b[0],x+6,summaryY+6);
+    doc.setFontSize(12);
+    doc.setTextColor(...TEXT);
     doc.text(String(b[1]),x+6,summaryY+12.5);
    });
 
    let y=71;
 
    for(const[cargoName,members]of Object.entries(grouped)){
-    if(y+45>272){doc.addPage();y=18}
-    doc.setFillColor(...NAVY);doc.roundedRect(14,y,182,11,2,2,'F');
-    doc.setFillColor(...YELLOW);doc.circle(21,y+5.5,2.5,'F');
-    doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(255,255,255);
+    if(y+45>272){
+     doc.addPage();
+     y=18;
+    }
+
+    doc.setFillColor(...NAVY);
+    doc.roundedRect(14,y,182,11,2,2,'F');
+    doc.setFillColor(...YELLOW);
+    doc.circle(21,y+5.5,2.5,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(255,255,255);
     doc.text(cargoName,28,y+6.5);
-    doc.setFillColor(30,41,59);doc.roundedRect(165,y+2,27,7,2,2,'F');
-    doc.setFontSize(6.5);doc.setTextColor(255,255,255);
+
+    doc.setFillColor(30,41,59);
+    doc.roundedRect(165,y+2,27,7,2,2,'F');
+    doc.setFontSize(6.5);
+    doc.setTextColor(255,255,255);
     doc.text(`${members.length} ${members.length===1?'MEMBRO':'MEMBROS'}`,178.5,y+6.5,{align:'center'});
+
     y+=14;
 
     autoTable(doc,{
      head:[['MEMBRO','NASCIMENTO','IDADE','STATUS']],
-     body:members.map(m=>[
-      m.nome_completo||'-',
-      m.data_nascimento?new Date(`${m.data_nascimento}T00:00:00`).toLocaleDateString('pt-BR'):'-',
-      age(m.data_nascimento),
-      m.status||'ATIVO'
-     ]),
+     body:members.map(m=>[m.nome_completo||'-',date(m.data_nascimento),age(m.data_nascimento),m.status||'ATIVO']),
      startY:y,
      margin:{left:14,right:14,top:18,bottom:20},
      theme:'grid',
@@ -190,28 +219,43 @@ const ConsultaMembrosCargoRelatorio=()=>{
       }
      }
     });
+
     y=doc.lastAutoTable?.finalY?doc.lastAutoTable.finalY+9:y+20;
    }
 
-   if(y+28>275){doc.addPage();y=18}
+   if(y+28>275){
+    doc.addPage();
+    y=18;
+   }
 
-   doc.setFillColor(...LIGHT);doc.roundedRect(14,y,182,22,3,3,'F');
-   doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(...BLUE);
+   doc.setFillColor(...LIGHT);
+   doc.roundedRect(14,y,182,22,3,3,'F');
+   doc.setFont('helvetica','bold');
+   doc.setFontSize(7);
+   doc.setTextColor(...BLUE);
    doc.text('RESUMO DO RELATÓRIO',20,y+7);
-   doc.setFont('helvetica','normal');doc.setTextColor(...TEXT);
+   doc.setFont('helvetica','normal');
+   doc.setTextColor(...TEXT);
    doc.text(`Cargos com membros: ${cargoCount}`,20,y+15);
-   doc.text(`Ativos: ${active}`,85,y+15);
-   doc.text(`Inativos: ${inactive}`,135,y+15);
-   doc.text(`Total: ${filtered.length}`,196,y+15,{align:'right'});
+   doc.text(`Sem cargo: ${semCargo}`,84,y+15);
+   doc.setTextColor(22,163,74);
+   doc.text(`Ativos: ${active}`,126,y+15);
+   doc.setTextColor(220,38,38);
+   doc.text(`Inativos: ${inactive}`,164,y+15);
 
    const pages=doc.getNumberOfPages();
    doc.setPage(pages);
-   doc.setDrawColor(...LINE);doc.line(14,286,196,286);
-   doc.setFont('helvetica','normal');doc.setFontSize(5.5);doc.setTextColor(...MUTED);
+   doc.setDrawColor(...LINE);
+   doc.line(14,286,196,286);
+   doc.setFont('helvetica','normal');
+   doc.setFontSize(5.5);
+   doc.setTextColor(...MUTED);
    doc.text('Relatório emitido eletronicamente pelo sistema da Secretaria.',14,291);
-   doc.setFont('helvetica','bold');doc.setTextColor(...BLUE);
+   doc.setFont('helvetica','bold');
+   doc.setTextColor(...BLUE);
    doc.text('SECRETARIA • MEMBROS POR CARGO',105,291,{align:'center'});
-   doc.setFont('helvetica','normal');doc.setTextColor(...MUTED);
+   doc.setFont('helvetica','normal');
+   doc.setTextColor(...MUTED);
    doc.text(`Página ${pages} de ${pages} • ${new Date().toLocaleDateString('pt-BR')}`,196,291,{align:'right'});
 
    doc.save('Membros_Por_Cargo.pdf');
@@ -228,15 +272,16 @@ const ConsultaMembrosCargoRelatorio=()=>{
    return;
   }
 
-  const groups=Object.entries(grouped).map(([c,members])=>`
+  const groups=Object.entries(grouped).map(([cargoName,members])=>`
    <section class="group">
-    <div class="group-head"><span><i></i>${c}</span><strong>${members.length} ${members.length===1?'MEMBRO':'MEMBROS'}</strong></div>
+    <div class="group-head"><span><i></i>${cargoName}</span><strong>${members.length} ${members.length===1?'MEMBRO':'MEMBROS'}</strong></div>
     <table><thead><tr><th>MEMBRO</th><th>NASCIMENTO</th><th>IDADE</th><th>STATUS</th></tr></thead><tbody>
-     ${members.map(m=>`<tr><td>${m.nome_completo||'-'}</td><td class="center">${m.data_nascimento?new Date(`${m.data_nascimento}T00:00:00`).toLocaleDateString('pt-BR'):'-'}</td><td class="center">${age(m.data_nascimento)}</td><td class="${m.status==='INATIVO'?'inactive':'active'}">${m.status||'ATIVO'}</td></tr>`).join('')}
+    ${members.map(m=>`<tr><td>${m.nome_completo||'-'}</td><td class="center">${date(m.data_nascimento)}</td><td class="center">${age(m.data_nascimento)}</td><td class="${m.status==='INATIVO'?'inactive':'active'}">${m.status||'ATIVO'}</td></tr>`).join('')}
     </tbody></table>
    </section>`).join('');
 
   const w=window.open('','_blank','width=900,height=1100');
+
   if(!w){
    toast({title:'Impressão bloqueada',description:'Permita pop-ups para imprimir.',variant:'destructive'});
    return;
@@ -244,7 +289,8 @@ const ConsultaMembrosCargoRelatorio=()=>{
 
   w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Membros por Cargo</title><style>
 @page{size:A4 portrait;margin:9mm}
-*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#1e293b;margin:0}
+*{box-sizing:border-box}
+body{font-family:Arial,sans-serif;color:#1e293b;margin:0}
 .header{background:#0f172a;color:#fff;padding:12px 14px 10px;border-radius:0 0 7px 7px;text-align:center;position:relative}
 .logo{position:absolute;left:13px;top:8px;width:27mm;height:auto;max-height:23mm;object-fit:contain}
 .inst{font-size:15px;font-weight:800}.sub{font-size:9px;color:#cbd5e1;margin-top:3px}
@@ -259,16 +305,21 @@ const ConsultaMembrosCargoRelatorio=()=>{
 .group-head{display:flex;justify-content:space-between;align-items:center;background:#0f172a;color:#fff;border-radius:5px 5px 0 0;padding:7px 9px;font-size:8px;font-weight:800}
 .group-head i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#eab308;margin-right:6px;vertical-align:middle}
 .group-head strong{background:#1e293b;border-radius:12px;padding:3px 8px;font-size:6px}
-table{width:100%;border-collapse:collapse;font-size:7.5px}th{background:#2563eb;color:#fff;padding:5px;text-align:left;border:1px solid #1d4ed8}
-td{padding:5px;border:1px solid #cbd5e1}tbody tr:nth-child(even) td{background:#f8fafc}.center{text-align:center;font-weight:700}.active{color:#16a34a}.inactive{color:#ef4444}
-.summary{margin-top:10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:9px;display:grid;grid-template-columns:repeat(4,1fr);font-size:7px}.summary span{font-weight:700;color:#1e3a8a}
-.footer{margin-top:12px;border-top:1px solid #e2e8f0;padding-top:4px;display:grid;grid-template-columns:1fr auto 1fr;font-size:5.5px;color:#64748b}.footer span:nth-child(2){font-weight:700;color:#1e3a8a;text-align:center}.footer span:last-child{text-align:right}
+table{width:100%;border-collapse:collapse;font-size:7.5px}
+th{background:#2563eb;color:#fff;padding:5px;text-align:left;border:1px solid #1d4ed8}
+td{padding:5px;border:1px solid #cbd5e1}
+tbody tr:nth-child(even) td{background:#f8fafc}
+.center{text-align:center;font-weight:700}.active{color:#16a34a}.inactive{color:#ef4444}
+.summary{margin-top:10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:9px;display:grid;grid-template-columns:repeat(4,1fr);font-size:7px}
+.summary span{font-weight:700;color:#1e3a8a}
+.footer{margin-top:12px;border-top:1px solid #e2e8f0;padding-top:4px;display:grid;grid-template-columns:1fr auto 1fr;font-size:5.5px;color:#64748b}
+.footer span:nth-child(2){font-weight:700;color:#1e3a8a;text-align:center}.footer span:last-child{text-align:right}
 </style></head><body>
 <div class="header"><img src="${LOGO}" class="logo"><div class="inst">IGREJA ASSEMBLEIA DE DEUS</div><div class="sub">MINISTÉRIO PLANTAR • LEROLÂNDIA</div><div class="title">MEMBROS POR CARGO</div></div>
 <div class="meta"><span>Status: ${status==='todos'?'Todos os Status':status==='ATIVO'?'Ativos':'Inativos'}${search.trim()?` • Busca: ${search.trim()}`:''}</span><span>${cargo==='todos'?'Todos os cargos':cargo}</span><span>${filtered.length} registro(s) • ${new Date().toLocaleDateString('pt-BR')}</span></div>
 <div class="cards"><div class="card"><div class="label">CARGOS</div><div class="value">${cargoCount}</div></div><div class="card"><div class="label">MEMBROS</div><div class="value">${filtered.length}</div></div><div class="card"><div class="label">ATIVOS</div><div class="value">${active}</div></div><div class="card"><div class="label">INATIVOS</div><div class="value">${inactive}</div></div></div>
 ${groups}
-<div class="summary"><span>Cargos: ${cargoCount}</span><span>Ativos: ${active}</span><span>Inativos: ${inactive}</span><span>Total: ${filtered.length}</span></div>
+<div class="summary"><span>Cargos: ${cargoCount}</span><span>Sem cargo: ${semCargo}</span><span>Ativos: ${active}</span><span>Total: ${filtered.length}</span></div>
 <div class="footer"><span>Relatório emitido pelo sistema da Secretaria.</span><span>SECRETARIA • MEMBROS POR CARGO</span><span>Data: ${new Date().toLocaleDateString('pt-BR')}</span></div>
 <script>window.onload=()=>setTimeout(()=>window.print(),150)<\\/script></body></html>`);
   w.document.close();
@@ -276,13 +327,21 @@ ${groups}
 
  return <div className="dark-igreja text-foreground h-full flex flex-col">
   <div className="flex-1 space-y-5">
+
    <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
     <div className="flex items-center gap-3">
-     <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10"><Briefcase className="h-6 w-6 text-blue-500"/></div>
-     <div><h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 md:text-3xl">Membros por Cargo</h2><p className="text-sm text-muted-foreground">Distribuição dos membros por cargo eclesiástico.</p></div>
+     <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10"><Briefcase className="h-6 w-6 text-blue-400"/></div>
+     <div>
+      <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 md:text-3xl">Membros por Cargo</h2>
+      <p className="text-sm text-muted-foreground">Consulte a distribuição dos membros por cargo eclesiástico.</p>
+     </div>
     </div>
+
     <div className="flex flex-wrap gap-2">
-     <Button variant="outline" size="sm" onClick={()=>setShowFilters(v=>!v)}><Filter className="mr-2 h-4 w-4"/>{showFilters?'Ocultar Filtros':'Filtros'}{showFilters?<ChevronUp className="ml-1 h-4 w-4"/>:<ChevronDown className="ml-1 h-4 w-4" />}</Button>
+     <Button variant="outline" size="sm" onClick={()=>setShowFilters(v=>!v)} className="border-yellow-500/40">
+      <Filter className="mr-2 h-4 w-4 text-yellow-400"/>{showFilters?'Ocultar Filtros':'Filtros'}
+      {showFilters?<ChevronUp className="ml-1 h-4 w-4"/>:<ChevronDown className="ml-1 h-4 w-4"/>}
+     </Button>
      <Button variant="outline" size="sm" onClick={exportExcel}><Download className="mr-2 h-4 w-4"/>Excel</Button>
      <Button variant="outline" size="sm" onClick={generatePDF}><FileText className="mr-2 h-4 w-4"/>PDF</Button>
      <Button size="sm" onClick={imprimir} className="bg-indigo-600 hover:bg-indigo-700"><Printer className="mr-2 h-4 w-4"/>Imprimir</Button>
@@ -292,11 +351,29 @@ ${groups}
    <AnimatePresence>
     {showFilters&&<motion.div initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} className="overflow-hidden">
      <Card>
-      <CardHeader className="border-b border-border pb-3"><CardTitle className="flex items-center text-base"><Filter className="mr-2 h-4 w-4 text-primary"/>Filtros</CardTitle></CardHeader>
+      <CardHeader className="border-b border-border pb-3">
+       <CardTitle className="flex items-center text-base"><Filter className="mr-2 h-4 w-4 text-yellow-400"/>Filtros</CardTitle>
+      </CardHeader>
       <CardContent className="grid grid-cols-1 gap-3 pt-4 md:grid-cols-3">
-       <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar membro ou cargo..." className="pl-9"/></div>
-       <Select value={status} onValueChange={setStatus}><SelectTrigger><SelectValue placeholder="Status"/></SelectTrigger><SelectContent className="dark-igreja"><SelectItem value="todos">Todos os Status</SelectItem><SelectItem value="ATIVO">Ativos</SelectItem><SelectItem value="INATIVO">Inativos</SelectItem></SelectContent></Select>
-       <Select value={cargo} onValueChange={setCargo}><SelectTrigger><SelectValue placeholder="Cargo"/></SelectTrigger><SelectContent className="dark-igreja max-h-[280px]"><SelectItem value="todos">Todos os Cargos</SelectItem>{cargos.map(c=><SelectItem key={c.id} value={c.nome_cargo}>{c.nome_cargo}</SelectItem>)}</SelectContent></Select>
+       <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+        <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar membro ou cargo..." className="pl-9"/>
+       </div>
+       <Select value={status} onValueChange={setStatus}>
+        <SelectTrigger><SelectValue placeholder="Status"/></SelectTrigger>
+        <SelectContent className="dark-igreja">
+         <SelectItem value="todos">Todos os Status</SelectItem>
+         <SelectItem value="ATIVO">Ativos</SelectItem>
+         <SelectItem value="INATIVO">Inativos</SelectItem>
+        </SelectContent>
+       </Select>
+       <Select value={cargo} onValueChange={setCargo}>
+        <SelectTrigger><SelectValue placeholder="Cargo"/></SelectTrigger>
+        <SelectContent className="dark-igreja max-h-[280px]">
+         <SelectItem value="todos">Todos os Cargos</SelectItem>
+         {cargos.map(c=><SelectItem key={c.id} value={c.nome_cargo}>{c.nome_cargo}</SelectItem>)}
+        </SelectContent>
+       </Select>
       </CardContent>
      </Card>
     </motion.div>}
@@ -310,31 +387,68 @@ ${groups}
    </div>
 
    {loading?
-    <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card py-16"><div className="h-9 w-9 rounded-full border-4 border-primary border-t-transparent animate-spin"/><p className="mt-4 text-sm text-muted-foreground">Carregando cargos...</p></div>
-   :!cargoCount?
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-16 text-center"><Briefcase className="mb-4 h-12 w-12 text-muted-foreground/50"/><h3 className="text-lg font-bold">Nenhum membro encontrado</h3><p className="mt-1 text-sm text-muted-foreground">Ajuste os filtros para visualizar os registros.</p></div>
+    <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card py-16">
+     <div className="h-9 w-9 rounded-full border-4 border-primary border-t-transparent motion-safe:animate-spin"/>
+     <p className="mt-4 text-sm text-muted-foreground">Carregando cargos...</p>
+    </div>
    :
-    <div className="mx-auto w-full max-w-6xl space-y-5 pb-6">
-     {Object.entries(grouped).map(([cargoName,members])=>
-      <motion.div key={cargoName} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-       <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/40 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2"><div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${cargoName==='Sem Cargo'?'bg-amber-500/10':'bg-primary/10'}`}><Briefcase className={`h-4 w-4 ${cargoName==='Sem Cargo'?'text-amber-500':'text-primary'}`}/></div><h3 className="truncate font-bold">{cargoName}</h3></div>
-        <Badge variant={cargoName==='Sem Cargo'?'outline':'secondary'}>{members.length} {members.length===1?'membro':'membros'}</Badge>
-       </div>
+    !cargoCount?
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-16 text-center">
+     <Briefcase className="mb-4 h-12 w-12 text-muted-foreground/50"/>
+     <h3 className="text-lg font-bold">Nenhum membro encontrado</h3>
+     <p className="mt-1 text-sm text-muted-foreground">Ajuste os filtros para visualizar os registros.</p>
+    </div>
+   :
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 pb-6">
+     {Object.entries(grouped).map(([cargoName,members])=>{
+      const sem=cargoName==='Sem Cargo';
 
-       <div className="divide-y divide-border">
-        {members.map((m,i)=>{
-         const inactive=(m.status||'ATIVO')==='INATIVO';
-         return <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40">
-          <div className="flex min-w-0 items-center gap-3"><div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${inactive?'bg-red-500/10 text-red-500':'bg-blue-600/10 text-blue-500'}`}>{i+1}</div><div className="min-w-0"><p className={`truncate font-medium ${inactive?'text-red-500':'text-foreground'}`}>{m.nome_completo}</p><p className="text-xs text-muted-foreground">{m.data_nascimento?`${age(m.data_nascimento)} anos`:'Idade não informada'}</p></div></div>
-          <Badge variant={inactive?'destructive':'secondary'} className="shrink-0">{m.status||'ATIVO'}</Badge>
+      return <motion.div key={cargoName} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}>
+       <Card className={`h-full overflow-hidden bg-card shadow-sm transition-all hover:border-yellow-400/60 ${sem?'border-amber-500/30':'border-border'}`}>
+        <CardHeader className={`border-b border-border pb-3 ${sem?'bg-amber-500/5':'bg-muted/20'}`}>
+         <CardTitle className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${sem?'bg-amber-500/10':'bg-blue-600/10'}`}>
+            <Briefcase className={`h-4 w-4 ${sem?'text-amber-500':'text-blue-500'}`}/>
+           </div>
+           <div className="min-w-0">
+            <h3 className={`truncate text-base font-bold ${sem?'text-amber-500':'text-foreground'}`}>{cargoName}</h3>
+            <p className="text-[10px] text-muted-foreground">{members.length} {members.length===1?'membro cadastrado':'membros cadastrados'}</p>
+           </div>
+          </div>
+          <Badge variant={sem?'outline':'secondary'} className={`shrink-0 ${sem?'border-amber-500/30 text-amber-500':''}`}>{members.length}</Badge>
+         </CardTitle>
+        </CardHeader>
+
+        <CardContent className="p-0">
+         <ScrollArea className="h-[360px]">
+          <div className="divide-y divide-border">
+           {members.map((m,i)=>{
+            const inactive=(m.status||'ATIVO')==='INATIVO';
+            return <div key={m.id} className={`flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/40 ${inactive?'bg-red-500/5':''}`}>
+             <div className="flex min-w-0 items-center gap-3">
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${inactive?'bg-red-500/10 text-red-500':'bg-blue-600/10 text-blue-500'}`}>{i+1}</div>
+              <div className="min-w-0">
+               <p className={`truncate text-sm font-semibold ${inactive?'text-red-400':'text-foreground'}`}>{m.nome_completo}</p>
+               <p className="mt-0.5 text-[10px] text-muted-foreground">{m.data_nascimento?`${age(m.data_nascimento)} anos`:'Idade não informada'}</p>
+              </div>
+             </div>
+             <Badge variant={inactive?'destructive':'secondary'} className="shrink-0 text-[9px]">{m.status||'ATIVO'}</Badge>
+            </div>
+           })}
+          </div>
+         </ScrollArea>
+        </CardContent>
+
+        <CardFooter className="border-t border-border bg-muted/10 px-4 py-2">
+         <div className="flex w-full items-center justify-between text-[10px] text-muted-foreground">
+          <span>Lista por cargo</span>
+          <span>{members.length} registro(s)</span>
          </div>
-        })}
-       </div>
-      </motion.div>
-     )}
-
-     <div className="rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 p-5 text-center text-white shadow-lg"><p className="text-xs font-medium uppercase tracking-[.18em] text-blue-100">Total Geral</p><p className="mt-1 text-3xl font-bold">{filtered.length} Membros Listados</p><p className="mt-1 text-xs text-blue-100">{cargoCount} cargo(s) com registros</p></div>
+        </CardFooter>
+       </Card>
+      </motion.div>;
+     })}
     </div>
    }
   </div>
