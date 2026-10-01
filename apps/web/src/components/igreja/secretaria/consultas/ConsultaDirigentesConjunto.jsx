@@ -42,17 +42,36 @@ const getFunctions=(m,list)=>{
 };
 
 const imageToBase64=url=>new Promise(resolve=>{
- const img=new Image();
- img.crossOrigin='Anonymous';
- img.src=url;
- img.onload=()=>{
-  const canvas=document.createElement('canvas');
-  canvas.width=img.width;
-  canvas.height=img.height;
-  canvas.getContext('2d').drawImage(img,0,0);
-  resolve({data:canvas.toDataURL('image/png'),width:img.width,height:img.height});
+ let finished=false;
+ const done=value=>{
+  if(finished)return;
+  finished=true;
+  resolve(value);
  };
- img.onerror=()=>resolve(null);
+ const img=new Image();
+ const timer=setTimeout(()=>done(null),8000);
+ img.crossOrigin='anonymous';
+ img.onload=()=>{
+  try{
+   const canvas=document.createElement('canvas');
+   canvas.width=img.naturalWidth||img.width;
+   canvas.height=img.naturalHeight||img.height;
+   const ctx=canvas.getContext('2d');
+   if(!ctx)throw new Error('Canvas indisponível.');
+   ctx.drawImage(img,0,0);
+   const data=canvas.toDataURL('image/png');
+   clearTimeout(timer);
+   done({data,width:canvas.width,height:canvas.height});
+  }catch{
+   clearTimeout(timer);
+   done(null);
+  }
+ };
+ img.onerror=()=>{
+  clearTimeout(timer);
+  done(null);
+ };
+ img.src=url;
 });
 
 const ConsultaDirigentesConjunto=()=>{
@@ -131,163 +150,168 @@ const ConsultaDirigentesConjunto=()=>{
    return;
   }
 
-  const doc=new jsPDF('p','mm','a4');
-  doc.setProperties({title:'Dirigentes por Conjunto',subject:'Relatório da Secretaria',author:'Igreja Assembleia de Deus Ministério Plantar'});
+  try{
+   const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+   doc.setProperties({title:'Dirigentes por Conjunto',subject:'Relatório da Secretaria',author:'Igreja Assembleia de Deus Ministério Plantar'});
 
-  const logo=await imageToBase64(LOGO);
-  const today=new Date().toLocaleDateString('pt-BR');
-  const statusLabel=status==='todos'?'Todos os Status':status==='ATIVO'?'Ativos':'Inativos';
+   const logo=await imageToBase64(LOGO);
+   const today=new Date().toLocaleDateString('pt-BR');
+   const statusLabel=status==='todos'?'Todos os Status':status==='ATIVO'?'Ativos':'Inativos';
 
-  doc.setFillColor(...NAVY);
-  doc.rect(0,0,210,34,'F');
+   doc.setFillColor(...NAVY);
+   doc.rect(0,0,210,34,'F');
 
-  if(logo){
-   const maxW=20,maxH=18;
-   const scale=Math.min(maxW/logo.width,maxH/logo.height);
-   const w=logo.width*scale;
-   const h=logo.height*scale;
-   doc.addImage(logo.data,'PNG',12,7+(maxH-h)/2,w,h);
-  }
+   if(logo?.data&&logo.width&&logo.height){
+    const maxW=20,maxH=18;
+    const scale=Math.min(maxW/logo.width,maxH/logo.height);
+    const w=logo.width*scale;
+    const h=logo.height*scale;
+    const x=12;
+    const y=7+(maxH-h)/2;
+    try{doc.addImage(logo.data,'PNG',x,y,w,h)}catch{}
+   }
 
-  doc.setTextColor(255,255,255);
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(12);
-  doc.text('IGREJA ASSEMBLEIA DE DEUS',105,12,{align:'center'});
-  doc.setFontSize(9);
-  doc.setTextColor(226,232,240);
-  doc.text('MINISTÉRIO PLANTAR • LEROLÂNDIA',105,18,{align:'center'});
-
-  doc.setFillColor(...YELLOW);
-  doc.roundedRect(55,23,100,7,2,2,'F');
-  doc.setTextColor(...NAVY);
-  doc.setFontSize(8);
-  doc.text('DIRIGENTES POR CONJUNTO',105,28,{align:'center'});
-
-  doc.setTextColor(...TEXT);
-  doc.setFontSize(7);
-  doc.setFont('helvetica','normal');
-  doc.text(`Status: ${statusLabel}`,14,42);
-  doc.text(`Emitido em: ${today}`,105,42,{align:'center'});
-  doc.text(`Total: ${filtered.length}`,196,42,{align:'right'});
-
-  if(search.trim()){
-   doc.setTextColor(...MUTED);
-   doc.text(`Busca: ${search.trim()}`,105,47,{align:'center'});
-  }
-
-  const summaryY=search.trim()?53:48;
-  const boxW=43.5,gap=3;
-  const boxes=[
-   ['CONJUNTOS',grouped.length,YELLOW],
-   ['DIRIGENTES',filtered.length,BLUE],
-   ['ATIVOS',active,[34,197,94]],
-   ['INATIVOS',inactive,[239,68,68]]
-  ];
-
-  boxes.forEach((b,i)=>{
-   const x=14+i*(boxW+gap);
-   doc.setFillColor(248,250,252);
-   doc.roundedRect(x,summaryY,boxW,16,2,2,'F');
-   doc.setFillColor(...b[2]);
-   doc.roundedRect(x,summaryY,2.5,16,1,1,'F');
+   doc.setTextColor(255,255,255);
    doc.setFont('helvetica','bold');
-   doc.setFontSize(6.5);
-   doc.setTextColor(...MUTED);
-   doc.text(b[0],x+6,summaryY+6);
    doc.setFontSize(12);
+   doc.text('IGREJA ASSEMBLEIA DE DEUS',105,12,{align:'center'});
+   doc.setFontSize(9);
+   doc.setTextColor(226,232,240);
+   doc.text('MINISTÉRIO PLANTAR • LEROLÂNDIA',105,18,{align:'center'});
+
+   doc.setFillColor(...YELLOW);
+   doc.roundedRect(55,23,100,7,2,2,'F');
+   doc.setTextColor(...NAVY);
+   doc.setFontSize(8);
+   doc.text('DIRIGENTES POR CONJUNTO',105,28,{align:'center'});
+
    doc.setTextColor(...TEXT);
-   doc.text(String(b[1]),x+6,summaryY+12.5);
-  });
+   doc.setFontSize(7);
+   doc.setFont('helvetica','normal');
+   doc.text(`Status: ${statusLabel}`,14,42);
+   doc.text(`Emitido em: ${today}`,105,42,{align:'center'});
+   doc.text(`Total: ${filtered.length}`,196,42,{align:'right'});
 
-  let y=summaryY+23;
+   if(search.trim()){
+    doc.setTextColor(...MUTED);
+    doc.text(`Busca: ${search.trim()}`,105,47,{align:'center'});
+   }
 
-  for(const c of grouped){
-   const needed=18+c.dirigentes.length*7+12;
-   if(y+needed>270){
+   const summaryY=search.trim()?53:48;
+   const boxW=43.5,gap=3;
+   const boxes=[
+    ['CONJUNTOS',grouped.length,YELLOW],
+    ['DIRIGENTES',filtered.length,BLUE],
+    ['ATIVOS',active,[34,197,94]],
+    ['INATIVOS',inactive,[239,68,68]]
+   ];
+
+   boxes.forEach((b,i)=>{
+    const x=14+i*(boxW+gap);
+    doc.setFillColor(248,250,252);
+    doc.roundedRect(x,summaryY,boxW,16,2,2,'F');
+    doc.setFillColor(...b[2]);
+    doc.roundedRect(x,summaryY,2.5,16,1,1,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(...MUTED);
+    doc.text(b[0],x+6,summaryY+6);
+    doc.setFontSize(12);
+    doc.setTextColor(...TEXT);
+    doc.text(String(b[1]),x+6,summaryY+12.5);
+   });
+
+   let y=summaryY+23;
+
+   for(const c of grouped){
+    const needed=18+c.dirigentes.length*7+12;
+    if(y+needed>270){
+     doc.addPage();
+     y=18;
+    }
+
+    doc.setFillColor(...NAVY);
+    doc.roundedRect(14,y,182,11,2,2,'F');
+    doc.setFillColor(...YELLOW);
+    doc.circle(21,y+5.5,2.5,'F');
+
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(255,255,255);
+    doc.text(c.nome_conjunto||'Sem nome',28,y+6.5);
+
+    doc.setFillColor(30,41,59);
+    doc.roundedRect(165,y+2,27,7,2,2,'F');
+    doc.setFontSize(6.5);
+    doc.setTextColor(255,255,255);
+    doc.text(`${c.dirigentes.length} ${c.dirigentes.length===1?'DIRIGENTE':'DIRIGENTES'}`,178.5,y+6.5,{align:'center'});
+
+    y+=14;
+
+    autoTable(doc,{
+     head:[['DIRIGENTE','FUNÇÃO / CARGO','STATUS']],
+     body:c.dirigentes.map(d=>[
+      d.nome_completo||'-',
+      d.cargo?.nome_cargo||getFunctions(d,funcoesList),
+      d.status||'ATIVO'
+     ]),
+     startY:y,
+     margin:{left:14,right:14,top:18,bottom:20},
+     theme:'grid',
+     styles:{font:'helvetica',fontSize:8.2,cellPadding:{top:3.2,right:3,bottom:3.2,left:3},textColor:TEXT,lineColor:LINE,lineWidth:.2,valign:'middle'},
+     headStyles:{fillColor:BLUE,textColor:[255,255,255],fontStyle:'bold',fontSize:7,cellPadding:3.5},
+     alternateRowStyles:{fillColor:[248,250,252]},
+     columnStyles:{0:{cellWidth:73},1:{cellWidth:78},2:{cellWidth:31,halign:'center'}},
+     didParseCell:data=>{
+      if(data.section==='body'&&data.column.index===2){
+       const value=String(data.cell.raw||'');
+       data.cell.styles.textColor=value==='ATIVO'?[22,163,74]:[220,38,38];
+       data.cell.styles.fontStyle='bold';
+      }
+     }
+    });
+
+    y=doc.lastAutoTable?.finalY?doc.lastAutoTable.finalY+9:y+20;
+   }
+
+   if(y+28>275){
     doc.addPage();
     y=18;
    }
 
-   doc.setFillColor(...NAVY);
-   doc.roundedRect(14,y,182,11,2,2,'F');
-   doc.setFillColor(...YELLOW);
-   doc.circle(21,y+5.5,2.5,'F');
-
+   doc.setFillColor(...LIGHT);
+   doc.roundedRect(14,y,182,22,3,3,'F');
    doc.setFont('helvetica','bold');
-   doc.setFontSize(8.5);
-   doc.setTextColor(255,255,255);
-   doc.text(c.nome_conjunto||'Sem nome',28,y+6.5);
+   doc.setFontSize(7);
+   doc.setTextColor(...BLUE);
+   doc.text('RESUMO DO RELATÓRIO',20,y+7);
 
-   doc.setFillColor(30,41,59);
-   doc.roundedRect(165,y+2,27,7,2,2,'F');
-   doc.setFontSize(6.5);
-   doc.setTextColor(255,255,255);
-   doc.text(`${c.dirigentes.length} ${c.dirigentes.length===1?'DIRIGENTE':'DIRIGENTES'}`,178.5,y+6.5,{align:'center'});
+   doc.setFont('helvetica','normal');
+   doc.setTextColor(...TEXT);
+   doc.text(`Conjuntos: ${grouped.length}`,20,y+15);
+   doc.text(`Dirigentes: ${filtered.length}`,72,y+15);
+   doc.setTextColor(22,163,74);
+   doc.text(`Ativos: ${active}`,122,y+15);
+   doc.setTextColor(220,38,38);
+   doc.text(`Inativos: ${inactive}`,165,y+15);
 
-   y+=14;
+   const pages=doc.getNumberOfPages();
+   doc.setPage(pages);
+   doc.setDrawColor(226,232,240);
+   doc.line(14,286,196,286);
+   doc.setFont('helvetica','normal');
+   doc.setFontSize(5.5);
+   doc.setTextColor(...MUTED);
+   doc.text('Relatório emitido eletronicamente pelo sistema da Secretaria.',14,291);
+   doc.text('SECRETARIA • DIRIGENTES POR CONJUNTO',105,291,{align:'center'});
+   doc.text(`Página ${pages} de ${pages}`,196,291,{align:'right'});
 
-   autoTable(doc,{
-    head:[['DIRIGENTE','FUNÇÃO / CARGO','STATUS']],
-    body:c.dirigentes.map(d=>[
-     d.nome_completo||'-',
-     d.cargo?.nome_cargo||getFunctions(d,funcoesList),
-     d.status||'ATIVO'
-    ]),
-    startY:y,
-    margin:{left:14,right:14,top:18,bottom:20},
-    theme:'grid',
-    styles:{font:'helvetica',fontSize:8.2,cellPadding:{top:3.2,right:3,bottom:3.2,left:3},textColor:TEXT,lineColor:LINE,lineWidth:.2,valign:'middle'},
-    headStyles:{fillColor:BLUE,textColor:[255,255,255],fontStyle:'bold',fontSize:7,cellPadding:3.5},
-    alternateRowStyles:{fillColor:[248,250,252]},
-    columnStyles:{0:{cellWidth:73},1:{cellWidth:78},2:{cellWidth:31,halign:'center'}},
-    didDrawCell:data=>{
-     if(data.section==='body'&&data.column.index===2){
-      const value=String(data.cell.raw||'');
-      doc.setTextColor(value==='ATIVO'?[22,163,74]:[220,38,38]);
-      doc.setFont('helvetica','bold');
-     }
-    }
-   });
-
-   y=doc.lastAutoTable.finalY+9;
+   doc.save('Dirigentes_por_Conjunto.pdf');
+   toast({title:'PDF Gerado',description:'Relatório de dirigentes criado com sucesso.'});
+  }catch(error){
+   console.error('Erro ao gerar PDF:',error);
+   toast({title:'Erro ao gerar PDF',description:error?.message||'Não foi possível gerar o relatório.',variant:'destructive'});
   }
-
-  if(y+28>275){
-   doc.addPage();
-   y=18;
-  }
-
-  doc.setFillColor(...LIGHT);
-  doc.roundedRect(14,y,182,22,3,3,'F');
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...BLUE);
-  doc.text('RESUMO DO RELATÓRIO',20,y+7);
-
-  doc.setFont('helvetica','normal');
-  doc.setTextColor(...TEXT);
-  doc.text(`Conjuntos: ${grouped.length}`,20,y+15);
-  doc.text(`Dirigentes: ${filtered.length}`,72,y+15);
-  doc.setTextColor(22,163,74);
-  doc.text(`Ativos: ${active}`,122,y+15);
-  doc.setTextColor(220,38,38);
-  doc.text(`Inativos: ${inactive}`,165,y+15);
-
-  const pages=doc.getNumberOfPages();
-  const lastPage=pages;
-
-  doc.setPage(lastPage);
-  doc.setDrawColor(226,232,240);
-  doc.line(14,286,196,286);
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(5.5);
-  doc.setTextColor(...MUTED);
-  doc.text('Relatório emitido eletronicamente pelo sistema da Secretaria.',14,291);
-  doc.text('SECRETARIA • DIRIGENTES POR CONJUNTO',105,291,{align:'center'});
-  doc.text(`Página ${lastPage} de ${pages}`,196,291,{align:'right'});
-
-  doc.save('Dirigentes_por_Conjunto.pdf');
-  toast({title:'PDF Gerado',description:'Relatório de dirigentes criado com sucesso.'});
  };
 
  const print=()=>{
@@ -354,7 +378,7 @@ td:last-child{text-align:center;font-weight:700}
 ${rows}
 <div class="summary"><span>Conjuntos: ${grouped.length}</span><span>Dirigentes: ${filtered.length}</span><span>Ativos: ${active}</span><span>Inativos: ${inactive}</span></div>
 <div class="footer"><span>Relatório emitido pelo sistema da Secretaria.</span><span>SECRETARIA • DIRIGENTES POR CONJUNTO</span><span>Data: ${new Date().toLocaleDateString('pt-BR')}</span></div>
-<script>window.onload=()=>setTimeout(()=>window.print(),150)<\\/script>
+<script>window.onload=()=>setTimeout(()=>window.print(),150)<\/script>
 </body></html>`);
   w.document.close();
  };
@@ -400,48 +424,44 @@ ${rows}
     <Card className="border-border bg-card"><CardContent className="p-4"><div className="flex items-center justify-between"><div><p className="text-xs uppercase tracking-wide text-muted-foreground">Inativos</p><p className="mt-1 text-2xl font-bold text-red-500">{inactive}</p></div><AlertTriangle className="h-5 w-5 text-red-500"/></div></CardContent></Card>
    </div>
 
-   {loading?
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">{Array(6).fill(0).map((_,i)=><Card key={i} className="h-64 animate-pulse border-border bg-card"/>)}</div>
-   :!grouped.length?
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-16 text-center"><Crown className="mb-4 h-12 w-12 text-muted-foreground/50"/><h3 className="text-lg font-bold">Nenhum dirigente encontrado</h3><p className="mt-1 text-sm text-muted-foreground">Ajuste os filtros para visualizar os dirigentes.</p></div>
-   :
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-     {grouped.map(c=><motion.div key={c.id} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}>
-      <Card className="overflow-hidden border-border bg-card shadow-sm transition-all hover:border-yellow-400/70 hover:shadow-yellow-400/5">
-       <CardHeader className="border-b border-border bg-muted/10 pb-3">
-        <CardTitle className="flex items-center justify-between gap-3">
-         <div className="flex min-w-0 items-center gap-2"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-400/10"><Users className="h-4 w-4 text-yellow-400"/></div><span className="truncate text-base font-bold">{c.nome_conjunto}</span></div>
-         <Badge variant="outline" className="border-yellow-400/40 text-yellow-400">{c.dirigentes.length}</Badge>
-        </CardTitle>
-       </CardHeader>
-       <CardContent className="space-y-3 p-3">
-        {c.dirigentes.map(d=>{
-         const isInactive=(d.status||'ATIVO')==='INATIVO';
-         return <motion.div key={d.id} whileHover={{y:-1}} onClick={()=>setSelected({...d,_conjunto:c})} className={`cursor-pointer rounded-xl border p-3 transition-colors ${isInactive?'border-red-500/30 bg-red-500/5':'border-border bg-background/40 hover:border-yellow-400/40 hover:bg-yellow-400/5'}`}>
-          <div className="flex items-start gap-3">
-           <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${isInactive?'border-red-500/30 bg-red-500/10 text-red-500':'border-yellow-400/30 bg-yellow-400/10 text-yellow-400'}`}>{initials(d.nome_completo)}</div>
-           <div className="min-w-0 flex-1">
-            <div className="flex items-start justify-between gap-2">
-             <div className="min-w-0">
-              <p className={`truncate text-sm font-bold ${isInactive?'text-red-400':'text-foreground'}`}>{d.nome_completo}</p>
-              <div className="mt-1 flex flex-wrap gap-1">
-               {d.cargo?.nome_cargo&&<Badge variant="outline" className="border-yellow-400/30 text-[10px] text-yellow-400"><Shield className="mr-1 h-3 w-3"/>{d.cargo.nome_cargo}</Badge>}
-               <Badge variant="outline" className={`text-[10px] ${isInactive?'border-red-500/30 text-red-500':'border-yellow-400/20 text-yellow-400'}`}>{isInactive?'INATIVO':'ATIVO'}</Badge>
-              </div>
+   {loading?<div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">{Array(6).fill(0).map((_,i)=><Card key={i} className="h-64 animate-pulse border-border bg-card"/>)}</div>:
+   !grouped.length?<div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-16 text-center"><Crown className="mb-4 h-12 w-12 text-muted-foreground/50"/><h3 className="text-lg font-bold">Nenhum dirigente encontrado</h3><p className="mt-1 text-sm text-muted-foreground">Ajuste os filtros para visualizar os dirigentes.</p></div>:
+   <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+    {grouped.map(c=><motion.div key={c.id} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}>
+     <Card className="overflow-hidden border-border bg-card shadow-sm transition-all hover:border-yellow-400/70 hover:shadow-yellow-400/5">
+      <CardHeader className="border-b border-border bg-muted/10 pb-3">
+       <CardTitle className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-400/10"><Users className="h-4 w-4 text-yellow-400"/></div><span className="truncate text-base font-bold">{c.nome_conjunto}</span></div>
+        <Badge variant="outline" className="border-yellow-400/40 text-yellow-400">{c.dirigentes.length}</Badge>
+       </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 p-3">
+       {c.dirigentes.map(d=>{
+        const isInactive=(d.status||'ATIVO')==='INATIVO';
+        return <motion.div key={d.id} whileHover={{y:-1}} onClick={()=>setSelected({...d,_conjunto:c})} className={`cursor-pointer rounded-xl border p-3 transition-colors ${isInactive?'border-red-500/30 bg-red-500/5':'border-border bg-background/40 hover:border-yellow-400/40 hover:bg-yellow-400/5'}`}>
+         <div className="flex items-start gap-3">
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${isInactive?'border-red-500/30 bg-red-500/10 text-red-500':'border-yellow-400/30 bg-yellow-400/10 text-yellow-400'}`}>{initials(d.nome_completo)}</div>
+          <div className="min-w-0 flex-1">
+           <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+             <p className={`truncate text-sm font-bold ${isInactive?'text-red-400':'text-foreground'}`}>{d.nome_completo}</p>
+             <div className="mt-1 flex flex-wrap gap-1">
+              {d.cargo?.nome_cargo&&<Badge variant="outline" className="border-yellow-400/30 text-[10px] text-yellow-400"><Shield className="mr-1 h-3 w-3"/>{d.cargo.nome_cargo}</Badge>}
+              <Badge variant="outline" className={`text-[10px] ${isInactive?'border-red-500/30 text-red-500':'border-yellow-400/20 text-yellow-400'}`}>{isInactive?'INATIVO':'ATIVO'}</Badge>
              </div>
-             <Crown className="h-4 w-4 shrink-0 text-yellow-400"/>
             </div>
-            <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{getFunctions(d,funcoesList)}</p>
+            <Crown className="h-4 w-4 shrink-0 text-yellow-400"/>
            </div>
+           <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{getFunctions(d,funcoesList)}</p>
           </div>
-         </motion.div>
-        })}
-       </CardContent>
-       <CardFooter className="border-t border-border bg-muted/10 px-3 py-2 text-[10px] text-muted-foreground">Clique no dirigente para visualizar a ficha.</CardFooter>
-      </Card>
-     </motion.div>)}
-    </div>
-   }
+         </div>
+        </motion.div>
+       })}
+      </CardContent>
+      <CardFooter className="border-t border-border bg-muted/10 px-3 py-2 text-[10px] text-muted-foreground">Clique no dirigente para visualizar a ficha.</CardFooter>
+     </Card>
+    </motion.div>)}
+   </div>}
   </div>
 
   <Dialog open={!!selected} onOpenChange={open=>{if(!open)setSelected(null)}}>
@@ -457,7 +477,6 @@ ${rows}
         {selected.cargo?.nome_cargo&&<Badge variant="outline" className="border-yellow-400/30 text-yellow-400"><Shield className="mr-1 h-3 w-3"/>{selected.cargo.nome_cargo}</Badge>}
        </div>
       </div>
-
       <div>
        <h3 className="mb-3 border-b border-border pb-2 text-sm font-bold uppercase tracking-wider text-primary">Dados do Dirigente</h3>
        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
