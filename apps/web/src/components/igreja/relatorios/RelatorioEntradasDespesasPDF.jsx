@@ -3,7 +3,7 @@ import{useSearchParams}from'react-router-dom';
 import{supabase}from'@/lib/customSupabaseClient';
 import{Helmet}from'react-helmet';
 import{Button}from'@/components/ui/button';
-import{Printer,X,FileText,PenLine,TrendingUp,Wallet,BarChart3}from'lucide-react';
+import{Printer,X,PenLine,TrendingUp,Wallet,BarChart3}from'lucide-react';
 
 const LOGO='https://horizons-cdn.hostinger.com/23ae9372-1ce3-488a-9be5-00d3fa6b6d54/612e5784f3faca006483ae69c11fa425.png';
 const M=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -76,10 +76,22 @@ export default function RelatorioEntradasDespesasPDF(){
   return{o,z,e,x,i,s:i-x,geral:d.allO-d.allX};
  },[d]);
 
+ /*
+  Cálculo aproximado da altura usada na página 1.
+  Assim "Outras Entradas" aparece em apenas uma página.
+ */
+ const entryOnPage1=useMemo(()=>{
+  const header=43;
+  const section=n=>5+12+14.5+(n?6.2*n:8);
+  const used=header+section(d.o.length)+section(d.z.length);
+  const other=section(d.e.length);
+  return used+other<=278;
+ },[d.o.length,d.z.length,d.e.length]);
+
  const Empty=({children})=><div className="empty">{children}</div>;
 
- const Section=({title,c,icon:Icon,children,extra=''})=>
-  <section className={`sec ${extra}`}>
+ const Section=({title,c,icon:Icon,children})=>
+  <section className="sec">
    <div className={`st ${c}`}><Icon/>{title}</div>
    {children}
   </section>;
@@ -104,6 +116,24 @@ export default function RelatorioEntradasDespesasPDF(){
    </tfoot>
   </table>;
 
+ const OtherEntries=()=>(
+  <Section title="Outras Entradas" c="other" icon={BarChart3}>
+   {d.e.length?
+    <Table
+     heads={['Data','Descrição','Valor']}
+     rows={d.e.map(v=>[
+      dt(v.data),
+      <b>{v.ofertante||v.igreja_dizimistas?.nome||v.tipo_entrada||'ENTRADA'}</b>,
+      money(v.valor)
+     ])}
+     total={['TOTAL OUTRAS ENTRADAS',money(t.e)]}
+     cls="other-head"
+    />:
+    <Empty>Nenhum outro registro de entrada encontrado para este período.</Empty>
+   }
+  </Section>
+ );
+
  if(loading)return<div className="load">Gerando relatório...</div>;
 
  if(err)return<div className="load"><b>{err}</b><Button onClick={()=>window.close()}>Fechar</Button></div>;
@@ -111,6 +141,7 @@ export default function RelatorioEntradasDespesasPDF(){
  return<>
   <Helmet>
    <title>Relatório Financeiro</title>
+
    <style>{`
 @page{size:A4 portrait;margin:0}
 *{box-sizing:border-box}
@@ -130,7 +161,6 @@ body{font-family:Arial,Helvetica,sans-serif;color:#17365d;-webkit-print-color-ad
 .title{margin:2mm 0;background:#123b97;color:#fff;border-radius:4px;padding:5px;font-size:12px;font-weight:800}
 .period{font-size:11px;font-weight:800;color:#17365d}
 .sec{margin-top:5mm;break-inside:avoid;page-break-inside:avoid}
-.sec.flex-entry{margin-top:4mm}
 .p2 .sec:first-child{margin-top:0}
 .st{min-height:10mm;display:flex;align-items:center;gap:9px;padding:0 10px;margin-bottom:2mm;border-radius:5px;font-size:14px;font-weight:800}
 .st svg{width:21px;height:21px;stroke-width:2.5}
@@ -181,13 +211,21 @@ tfoot td{font-weight:800;height:7.5mm;font-size:10px}
 
    <div className="bar np">
     <span>Pré-visualização de Impressão</span>
+
     <div className="actions">
-     <Button onClick={()=>window.print()}><Printer className="mr-2 h-4 w-4"/>Imprimir</Button>
-     <Button variant="outline" onClick={()=>window.close()}><X className="mr-2 h-4 w-4"/>Fechar</Button>
+     <Button onClick={()=>window.print()}>
+      <Printer className="mr-2 h-4 w-4"/>
+      Imprimir
+     </Button>
+
+     <Button variant="outline" onClick={()=>window.close()}>
+      <X className="mr-2 h-4 w-4"/>
+      Fechar
+     </Button>
     </div>
    </div>
 
-   {/* PÁGINA 1 — TODAS AS ENTRADAS QUE COUBEREM */}
+   {/* PÁGINA 1 */}
    <div className="page p1">
 
     <header className="head">
@@ -197,15 +235,24 @@ tfoot td{font-weight:800;height:7.5mm;font-size:10px}
       <div className="city">LEROLÂNDIA</div>
      </div>
 
-     <div className="title">RELATÓRIO FINANCEIRO DE ENTRADAS E DESPESAS</div>
-     <div className="period">Período: {range.p}</div>
+     <div className="title">
+      RELATÓRIO FINANCEIRO DE ENTRADAS E DESPESAS
+     </div>
+
+     <div className="period">
+      Período: {range.p}
+     </div>
     </header>
 
     <Section title="Ofertas" c="offer" icon={TrendingUp}>
      {d.o.length?
       <Table
        heads={['Data','Descrição / Ofertante','Valor']}
-       rows={d.o.map(v=>[dt(v.data),<b>{v.ofertante||'IGREJA'}</b>,money(v.valor)])}
+       rows={d.o.map(v=>[
+        dt(v.data),
+        <b>{v.ofertante||'IGREJA'}</b>,
+        money(v.valor)
+       ])}
        total={['TOTAL OFERTAS',money(t.o)]}
        cls="offer-head"
       />:
@@ -217,7 +264,11 @@ tfoot td{font-weight:800;height:7.5mm;font-size:10px}
      {d.z.length?
       <Table
        heads={['Data','Dizimista','Valor']}
-       rows={d.z.map(v=>[dt(v.data),<b>{v.igreja_dizimistas?.nome||'NÃO IDENTIFICADO'}</b>,money(v.valor)])}
+       rows={d.z.map(v=>[
+        dt(v.data),
+        <b>{v.igreja_dizimistas?.nome||'NÃO IDENTIFICADO'}</b>,
+        money(v.valor)
+       ])}
        total={['TOTAL DÍZIMOS',money(t.z)]}
        cls="tithe-head"
       />:
@@ -225,49 +276,24 @@ tfoot td{font-weight:800;height:7.5mm;font-size:10px}
      }
     </Section>
 
-    {/* OUTRAS ENTRADAS FICA NA PÁGINA 1 SE O BLOCO COMPLETO COUBER */}
-    <Section title="Outras Entradas" c="other" icon={BarChart3} extra="flex-entry">
-     {d.e.length?
-      <Table
-       heads={['Data','Descrição','Valor']}
-       rows={d.e.map(v=>[
-        dt(v.data),
-        <b>{v.ofertante||v.igreja_dizimistas?.nome||v.tipo_entrada||'ENTRADA'}</b>,
-        money(v.valor)
-       ])}
-       total={['TOTAL OUTRAS ENTRADAS',money(t.e)]}
-       cls="other-head"
-      />:
-      <Empty>Nenhum outro registro de entrada encontrado para este período.</Empty>
-     }
-    </Section>
+    {entryOnPage1&&<OtherEntries/>}
 
    </div>
 
-   {/* PÁGINA 2 — DESPESAS + RESUMO */}
+   {/* PÁGINA 2 */}
    <div className="page p2">
 
-    <Section title="Outras Entradas" c="other" icon={BarChart3}>
-     {d.e.length?
-      <Table
-       heads={['Data','Descrição','Valor']}
-       rows={d.e.map(v=>[
-        dt(v.data),
-        <b>{v.ofertante||v.igreja_dizimistas?.nome||v.tipo_entrada||'ENTRADA'}</b>,
-        money(v.valor)
-       ])}
-       total={['TOTAL OUTRAS ENTRADAS',money(t.e)]}
-       cls="other-head"
-      />:
-      <Empty>Nenhum outro registro de entrada encontrado para este período.</Empty>
-     }
-    </Section>
+    {!entryOnPage1&&<OtherEntries/>}
 
     <Section title="Despesas" c="expense" icon={Wallet}>
      {d.x.length?
       <Table
        heads={['Data','Descrição da Despesa','Valor']}
-       rows={d.x.map(v=>[dt(v.data),<b>{v.despesa||v.descricao||'-'}</b>,money(v.valor)])}
+       rows={d.x.map(v=>[
+        dt(v.data),
+        <b>{v.despesa||v.descricao||'-'}</b>,
+        money(v.valor)
+       ])}
        total={['TOTAL DESPESAS',money(t.x)]}
        cls="expense-head"
       />:
