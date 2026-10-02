@@ -1,14 +1,21 @@
 import React,{useState,useEffect,useCallback}from'react';
-import{motion}from'framer-motion';
-import{Plus,Edit,Trash,TrendingUp}from'lucide-react';
+import{Plus,Edit,Trash,TrendingUp,RefreshCw,Search}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
+import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
 import{useToast}from'@/components/ui/use-toast';
-import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
+import{
+ AlertDialog,AlertDialogAction,AlertDialogCancel,
+ AlertDialogContent,AlertDialogDescription,
+ AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,
+ AlertDialogTrigger
+}from'@/components/ui/alert-dialog';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import ModalLancamentoPadrao from'../ModalLancamentoPadrao';
+
+const BLUE='hsl(var(--neon-pessoal))';
 
 const TiposReceita=()=>{
  const{user}=useAuth();
@@ -16,6 +23,7 @@ const TiposReceita=()=>{
 
  const[tipos,setTipos]=useState([]);
  const[loading,setLoading]=useState(true);
+ const[search,setSearch]=useState('');
  const[nomeReceita,setNomeReceita]=useState('');
  const[editingId,setEditingId]=useState(null);
  const[isDialogOpen,setIsDialogOpen]=useState(false);
@@ -37,9 +45,7 @@ const TiposReceita=()=>{
     description:error.message,
     variant:'destructive'
    });
-  }else{
-   setTipos(data||[]);
-  }
+  }else setTipos(data||[]);
 
   setLoading(false);
  },[user,toast]);
@@ -51,29 +57,31 @@ const TiposReceita=()=>{
 
   const channel=supabase
    .channel('tipos_receita_changes')
-   .on('postgres_changes',{event:'*',schema:'public',table:'tipos_receita'},fetchTipos)
+   .on(
+    'postgres_changes',
+    {event:'*',schema:'public',table:'tipos_receita'},
+    fetchTipos
+   )
    .subscribe();
 
   return()=>supabase.removeChannel(channel);
  },[user,fetchTipos]);
 
- const resetForm=useCallback(()=>{
+ const resetForm=()=>{
   setNomeReceita('');
   setEditingId(null);
- },[]);
+ };
 
- const closeDialog=useCallback(()=>{
+ const closeDialog=()=>{
   setIsDialogOpen(false);
   resetForm();
- },[resetForm]);
+ };
 
  const openDialog=tipo=>{
   if(tipo){
    setNomeReceita(tipo.nome_receita||'');
    setEditingId(tipo.id);
-  }else{
-   resetForm();
-  }
+  }else resetForm();
 
   setIsDialogOpen(true);
  };
@@ -90,43 +98,38 @@ const TiposReceita=()=>{
    return;
   }
 
-  const dataToSave={
-   nome_receita:nomeReceita.trim(),
-   user_id:user.id
+  const payload={
+   user_id:user.id,
+   nome_receita:nomeReceita.trim()
   };
 
   try{
-   if(editingId!==null){
+   if(editingId){
     const{error}=await supabase
      .from('tipos_receita')
-     .update(dataToSave)
-     .eq('id',editingId);
+     .update(payload)
+     .eq('id',editingId)
+     .eq('user_id',user.id);
 
     if(error)throw error;
 
-    toast({
-     title:'Sucesso',
-     description:'Tipo de receita atualizado.'
-    });
+    toast({title:'Sucesso',description:'Tipo de receita atualizado.'});
    }else{
     const{error}=await supabase
      .from('tipos_receita')
-     .insert(dataToSave);
+     .insert(payload);
 
     if(error)throw error;
 
-    toast({
-     title:'Sucesso',
-     description:'Tipo de receita cadastrado.'
-    });
+    toast({title:'Sucesso',description:'Tipo de receita cadastrado.'});
    }
 
-   resetForm();
+   closeDialog();
    fetchTipos();
   }catch(error){
    toast({
     title:'Erro',
-    description:error.message||'Não foi possível salvar o tipo de receita.',
+    description:error.message||'Não foi possível salvar.',
     variant:'destructive'
    });
   }
@@ -136,56 +139,152 @@ const TiposReceita=()=>{
   const{error}=await supabase
    .from('tipos_receita')
    .delete()
-   .eq('id',id);
+   .eq('id',id)
+   .eq('user_id',user.id);
 
   if(error){
    toast({
     title:'Erro',
-    description:'Não foi possível excluir o tipo de receita.',
+    description:'Não foi possível excluir.',
     variant:'destructive'
    });
-  }else{
-   toast({
-    title:'Sucesso',
-    description:'Tipo de receita excluído.'
-   });
-
-   fetchTipos();
+   return;
   }
+
+  toast({title:'Sucesso',description:'Tipo de receita excluído.'});
+  fetchTipos();
  };
 
+ const tiposFiltrados=tipos.filter(tipo=>
+  !search.trim()||
+  String(tipo.nome_receita||'')
+   .toLowerCase()
+   .includes(search.trim().toLowerCase())
+ );
+
  return(
-  <div className="dark-pessoal space-y-6">
+  <div className="dark-pessoal space-y-4">
 
-   <motion.div
-    initial={{opacity:0,y:-20}}
-    animate={{opacity:1,y:0}}
-   >
-    <div className="flex items-center justify-between">
+   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex items-center gap-3">
+     <div
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border"
+      style={{
+       borderColor:'hsl(var(--neon-pessoal)/.2)',
+       background:'hsl(var(--neon-pessoal)/.1)'
+      }}
+     >
+      <TrendingUp
+       className="h-5 w-5"
+       style={{color:BLUE}}
+      />
+     </div>
+
      <div>
-      <h2 className="mb-2 text-3xl font-bold text-foreground">
-       Tipos de Receita
-      </h2>
+      <p
+       className="text-[11px] font-semibold uppercase tracking-[.2em]"
+       style={{color:BLUE}}
+      >
+       Cadastros
+      </p>
 
-      <p className="text-muted-foreground">
-       Cadastre os tipos de receita (A-Z)
+      <h1 className="text-2xl font-bold tracking-tight">
+       Tipos de Receita
+      </h1>
+
+      <p className="text-sm text-muted-foreground">
+       Cadastre e organize os tipos de receita.
       </p>
      </div>
+    </div>
+
+    <div className="flex flex-wrap gap-2">
+     <Button
+      variant="outline"
+      onClick={fetchTipos}
+     >
+      <RefreshCw className="mr-2 h-4 w-4"/>
+      Atualizar
+     </Button>
 
      <Button
       onClick={()=>openDialog()}
-      className="bg-[hsl(var(--neon-pessoal))] text-white hover:bg-[hsl(var(--neon-pessoal)/.88)]"
+      className="text-white"
+      style={{background:BLUE}}
      >
       <Plus className="mr-2 h-4 w-4"/>
       Novo Tipo
      </Button>
     </div>
-   </motion.div>
+   </div>
+
+   <Card className="border-border bg-card/80">
+    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+     <div className="relative w-full max-w-md">
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+
+      <Input
+       value={search}
+       onChange={e=>setSearch(e.target.value)}
+       placeholder="Pesquisar tipo de receita..."
+       className="bg-input pl-9"
+      />
+     </div>
+
+     <span className="text-sm text-muted-foreground">
+      {tiposFiltrados.length} tipo(s)
+     </span>
+    </CardContent>
+   </Card>
+
+   <div className="grid gap-4 md:grid-cols-3">
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-medium text-muted-foreground">
+       Tipos cadastrados
+      </CardTitle>
+     </CardHeader>
+     <CardContent>
+      <p
+       className="text-2xl font-bold"
+       style={{color:BLUE}}
+      >
+       {tipos.length}
+      </p>
+     </CardContent>
+    </Card>
+
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-medium text-muted-foreground">
+       Resultado atual
+      </CardTitle>
+     </CardHeader>
+     <CardContent>
+      <p className="text-2xl font-bold">
+       {tiposFiltrados.length}
+      </p>
+     </CardContent>
+    </Card>
+
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-medium text-muted-foreground">
+       Situação
+      </CardTitle>
+     </CardHeader>
+     <CardContent>
+      <p className="text-2xl font-bold text-emerald-400">
+       Ativo
+      </p>
+     </CardContent>
+    </Card>
+   </div>
 
    <ModalLancamentoPadrao
     open={isDialogOpen}
     onClose={closeDialog}
-    title={editingId!==null?'Editar Tipo de Receita':'Novo Tipo de Receita'}
+    title={editingId?'Editar Tipo de Receita':'Novo Tipo de Receita'}
     description="Preencha o nome do tipo de receita."
     icon={TrendingUp}
     theme="blue"
@@ -195,7 +294,6 @@ const TiposReceita=()=>{
        type="button"
        variant="outline"
        onClick={closeDialog}
-       className="h-11 rounded-xl border-border px-5"
       >
        Cancelar
       </Button>
@@ -203,9 +301,10 @@ const TiposReceita=()=>{
       <Button
        type="submit"
        form="form-tipo-receita"
-       className="h-11 rounded-xl bg-[hsl(var(--neon-pessoal))] px-6 font-semibold text-white shadow-[0_0_18px_hsl(var(--neon-pessoal)/.22)] hover:bg-[hsl(var(--neon-pessoal)/.88)]"
+       className="text-white"
+       style={{background:BLUE}}
       >
-       {editingId!==null?'Salvar Alterações':'Salvar Tipo'}
+       {editingId?'Salvar Alterações':'Salvar Tipo'}
       </Button>
      </>
     }
@@ -213,124 +312,139 @@ const TiposReceita=()=>{
     <form
      id="form-tipo-receita"
      onSubmit={handleSave}
-     className="max-h-[calc(100vh-300px)] overflow-y-auto pr-1"
+     className="space-y-5"
     >
-     <div className="space-y-5">
+     <div className="space-y-2">
+      <Label>Nome da Receita</Label>
 
-      <div className="space-y-2">
-       <Label>Nome da Receita</Label>
-
-       <Input
-        value={nomeReceita}
-        onChange={e=>setNomeReceita(e.target.value)}
-        placeholder="Ex: Salário"
-        className="h-11 rounded-xl bg-input"
-        required
-       />
-      </div>
-
+      <Input
+       value={nomeReceita}
+       onChange={e=>setNomeReceita(e.target.value)}
+       placeholder="Ex: Salário"
+       className="h-11 rounded-xl bg-input"
+       required
+      />
      </div>
     </form>
    </ModalLancamentoPadrao>
 
-   <motion.div
-    initial={{opacity:0,y:20}}
-    animate={{opacity:1,y:0}}
-    transition={{delay:.2}}
-    className="overflow-hidden rounded-xl border border-border bg-card shadow-lg"
-   >
-    <div className="overflow-x-auto">
-     <table className="w-full">
-      <thead className="border-b border-border bg-muted/50">
-       <tr>
-        <th className="p-4 text-left text-sm font-semibold text-muted-foreground">
-         Nome da Receita
-        </th>
+   <Card className="border-border bg-card">
+    <CardHeader className="pb-3">
+     <CardTitle
+      className="text-lg"
+      style={{color:BLUE}}
+     >
+      Tipos cadastrados
+     </CardTitle>
+    </CardHeader>
 
-        <th className="p-4 text-right text-sm font-semibold text-muted-foreground">
-         Ações
-        </th>
-       </tr>
-      </thead>
+    <CardContent className="p-0">
+     <div className="overflow-x-auto">
+      <table className="w-full">
+       <thead>
+        <tr className="border-b border-border bg-muted/30">
+         <th className="p-4 text-left text-sm font-semibold text-muted-foreground">
+          Nome da Receita
+         </th>
 
-      <tbody className="divide-y divide-border">
-       {loading?(
-        <tr>
-         <td colSpan="2" className="p-8 text-center">
-          Carregando...
-         </td>
+         <th className="p-4 text-right text-sm font-semibold text-muted-foreground">
+          Ações
+         </th>
         </tr>
-       ):tipos.length===0?(
-        <tr>
-         <td colSpan="2" className="p-8 text-center text-muted-foreground">
-          <TrendingUp className="mx-auto mb-2 h-10 w-10"/>
-          Nenhum tipo de receita cadastrado
-         </td>
-        </tr>
-       ):(
-        tipos.map(tipo=>(
-         <tr
-          key={tipo.id}
-          className="transition-colors hover:bg-accent"
-         >
-          <td className="p-4 text-foreground">
-           {tipo.nome_receita}
+       </thead>
+
+       <tbody>
+        {loading?(
+         <tr>
+          <td
+           colSpan={2}
+           className="p-10 text-center text-muted-foreground"
+          >
+           Carregando...
           </td>
+         </tr>
+        ):tiposFiltrados.length===0?(
+         <tr>
+          <td
+           colSpan={2}
+           className="p-10 text-center text-muted-foreground"
+          >
+           <TrendingUp className="mx-auto mb-2 h-10 w-10 opacity-50"/>
+           {tipos.length
+            ?'Nenhum tipo corresponde à pesquisa.'
+            :'Nenhum tipo de receita cadastrado.'}
+          </td>
+         </tr>
+        ):(
+         tiposFiltrados.map(tipo=>(
+          <tr
+           key={tipo.id}
+           className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-pessoal)/.04)]"
+          >
+           <td className="p-4 font-medium">
+            {tipo.nome_receita}
+           </td>
 
-          <td className="p-4 text-right">
-           <Button
-            variant="ghost"
-            size="icon"
-            onClick={()=>openDialog(tipo)}
-            className="mr-2 text-blue-400 hover:text-blue-300"
-           >
-            <Edit className="h-4 w-4"/>
-           </Button>
-
-           <AlertDialog>
-            <AlertDialogTrigger asChild>
+           <td className="p-4 text-right">
+            <div className="flex justify-end gap-1">
              <Button
               variant="ghost"
               size="icon"
-              className="text-red-500 hover:text-red-400"
+              onClick={()=>openDialog(tipo)}
+              className="text-blue-400 hover:bg-blue-500/10"
+              title="Editar"
              >
-              <Trash className="h-4 w-4"/>
+              <Edit className="h-4 w-4"/>
              </Button>
-            </AlertDialogTrigger>
 
-            <AlertDialogContent className="dark-pessoal border-border bg-card">
-             <AlertDialogHeader>
-              <AlertDialogTitle>
-               Confirmar Exclusão
-              </AlertDialogTitle>
+             <AlertDialog>
+              <AlertDialogTrigger asChild>
+               <Button
+                variant="ghost"
+                size="icon"
+                className="text-red-400 hover:bg-red-500/10"
+                title="Excluir"
+               >
+                <Trash className="h-4 w-4"/>
+               </Button>
+              </AlertDialogTrigger>
 
-              <AlertDialogDescription>
-               Deseja remover este tipo de receita?
-              </AlertDialogDescription>
-             </AlertDialogHeader>
+              <AlertDialogContent className="dark-pessoal border-border bg-card">
+               <AlertDialogHeader>
+                <AlertDialogTitle>
+                 Confirmar Exclusão
+                </AlertDialogTitle>
 
-             <AlertDialogFooter>
-              <AlertDialogCancel>
-               Cancelar
-              </AlertDialogCancel>
+                <AlertDialogDescription>
+                 Deseja remover o tipo{' '}
+                 <strong>{tipo.nome_receita}</strong>?
+                </AlertDialogDescription>
+               </AlertDialogHeader>
 
-              <AlertDialogAction
-               onClick={()=>handleDelete(tipo.id)}
-               className="bg-red-600 hover:bg-red-700"
-              >
-               Deletar
-              </AlertDialogAction>
-             </AlertDialogFooter>
-            </AlertDialogContent>
-           </AlertDialog>
-          </td>
-         </tr>
-        ))
-       )}
-      </tbody>
-     </table>
-    </div>
-   </motion.div>
+               <AlertDialogFooter>
+                <AlertDialogCancel>
+                 Cancelar
+                </AlertDialogCancel>
+
+                <AlertDialogAction
+                 onClick={()=>handleDelete(tipo.id)}
+                 className="bg-red-600 hover:bg-red-700"
+                >
+                 Excluir
+                </AlertDialogAction>
+               </AlertDialogFooter>
+              </AlertDialogContent>
+             </AlertDialog>
+            </div>
+           </td>
+          </tr>
+         ))
+        )}
+       </tbody>
+      </table>
+     </div>
+    </CardContent>
+   </Card>
 
   </div>
  );
