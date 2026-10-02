@@ -20,7 +20,7 @@ import DespesaPrevista from'@/components/pessoal/lancamentos/DespesaPrevista';
 import CartaoLancamentos from'@/components/pessoal/lancamentos/CartaoLancamentos';
 import LancamentoDevedores from'@/components/pessoal/lancamentos/LancamentoDevedores';
 import LancamentoDizimosOfertas from'@/components/pessoal/lancamentos/LancamentoDizimosOfertas';
-import Leitura from'@/components/pessoal/lancamentos/Leitura';
+import Leitura from'@/components/pessoal/leitura/Leitura';
 import Aportes from'@/components/pessoal/investimentos/Aportes';
 import Rendimentos from'@/components/pessoal/investimentos/Rendimentos';
 import ContasMes from'@/components/pessoal/consultas/ContasMes';
@@ -50,7 +50,6 @@ const PessoalDashboard=()=>{
 
  useEffect(()=>{
   if(loading)return;
-
   if(!session){
    toast({title:'Acesso Negado',description:'Por favor, faça login.',variant:'destructive'});
    navigate('/login');
@@ -61,9 +60,7 @@ const PessoalDashboard=()=>{
  },[session,loading,navigate,toast,canAccessModule]);
 
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
- useEffect(()=>{
-  if(isMobile)setSidebarOpen(false);
- },[location.pathname,isMobile]);
+ useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
 
  if(loading||!session){
   return(
