@@ -1,166 +1,452 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Helmet } from 'react-helmet';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, FileDown } from 'lucide-react';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { useToast } from '@/components/ui/use-toast';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import React,{useState,useEffect,useCallback,useMemo}from'react';
+import{Search,Download,RefreshCw,Receipt,TrendingDown,CalendarDays,WalletCards}from'lucide-react';
+import{Input}from'@/components/ui/input';
+import{Button}from'@/components/ui/button';
+import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
+import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
+import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
+import{ScrollArea}from'@/components/ui/scroll-area';
+import{Label}from'@/components/ui/label';
+import{supabase}from'@/lib/customSupabaseClient';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
+import{useToast}from'@/components/ui/use-toast';
+import{exportToExcel}from'@/lib/ExportUtils';
 
-const RelatorioDespesas = () => {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [despesas, setDespesas] = useState([]);
-  const [tiposDespesa, setTiposDespesa] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filtros, setFiltros] = useState({
-    dataInicio: '',
-    dataFim: '',
-    tipoDespesa: 'todos',
-    pesquisa: '',
+const money=v=>new Intl.NumberFormat('pt-BR',{
+ style:'currency',
+ currency:'BRL'
+}).format(Number(v||0));
+
+const dateBR=v=>{
+ if(!v)return'—';
+ const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+ return m?`${m[3]}/${m[2]}/${m[1]}`:new Date(v).toLocaleDateString('pt-BR');
+};
+
+const StatCard=({label,value,icon:Icon,type='red',note})=>{
+ const styles={
+  red:{
+   border:'border-red-500/20',
+   bg:'from-red-500/10 to-red-700/10',
+   icon:'bg-red-500/10',
+   text:'text-red-400'
+  },
+  blue:{
+   border:'border-blue-500/20',
+   bg:'from-blue-500/10 to-blue-700/10',
+   icon:'bg-blue-500/10',
+   text:'text-blue-400'
+  }
+ };
+
+ const s=styles[type];
+
+ return(
+  <Card className={`${s.border} bg-gradient-to-br ${s.bg}`}>
+   <CardContent className="p-4">
+    <div className="flex items-center gap-3">
+     <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${s.icon}`}>
+      <Icon className={`h-5 w-5 ${s.text}`}/>
+     </div>
+     <div className="min-w-0">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`mt-1 truncate text-xl font-bold ${s.text}`}>{value}</p>
+      {note&&<p className="mt-1 text-xs text-muted-foreground">{note}</p>}
+     </div>
+    </div>
+   </CardContent>
+  </Card>
+ );
+};
+
+const RelatorioDespesas=()=>{
+ const{user}=useAuth();
+ const{toast}=useToast();
+
+ const[despesas,setDespesas]=useState([]);
+ const[tiposDespesa,setTiposDespesa]=useState([]);
+ const[loading,setLoading]=useState(true);
+
+ const[filtros,setFiltros]=useState({
+  dataInicio:'',
+  dataFim:'',
+  tipoDespesa:'todos',
+  pesquisa:''
+ });
+
+ const fetchData=useCallback(async()=>{
+  if(!user)return;
+
+  setLoading(true);
+
+  const[despesasRes,tiposRes]=await Promise.all([
+   supabase
+    .from('despesas')
+    .select('*')
+    .eq('user_id',user.id)
+    .order('data',{ascending:false}),
+
+   supabase
+    .from('tipos_despesa')
+    .select('*')
+    .eq('user_id',user.id)
+    .order('nome_despesa',{ascending:true})
+  ]);
+
+  if(despesasRes.error){
+   toast({
+    title:'Erro ao buscar despesas',
+    variant:'destructive'
+   });
+  }else{
+   setDespesas(despesasRes.data||[]);
+  }
+
+  if(tiposRes.error){
+   toast({
+    title:'Erro ao buscar tipos',
+    variant:'destructive'
+   });
+  }else{
+   setTiposDespesa(tiposRes.data||[]);
+  }
+
+  setLoading(false);
+ },[user,toast]);
+
+ useEffect(()=>{
+  fetchData();
+
+  if(!user)return;
+
+  const channel=supabase
+   .channel('pessoal_relatorio_despesas_changes')
+   .on(
+    'postgres_changes',
+    {event:'*',schema:'public'},
+    fetchData
+   )
+   .subscribe();
+
+  return()=>supabase.removeChannel(channel);
+ },[user,fetchData]);
+
+ const filteredDespesas=useMemo(()=>{
+  const pesquisa=filtros.pesquisa.trim().toLowerCase();
+
+  return despesas.filter(d=>{
+   const data=String(d.data||'').slice(0,10);
+
+   if(filtros.dataInicio&&data<filtros.dataInicio)return false;
+   if(filtros.dataFim&&data>filtros.dataFim)return false;
+
+   if(
+    filtros.tipoDespesa!=='todos'&&
+    d.despesa!==filtros.tipoDespesa
+   )return false;
+
+   if(pesquisa){
+    const descricao=String(d.despesa||'').toLowerCase();
+    const pagamento=String(d.forma_pagamento||'').toLowerCase();
+
+    if(!descricao.includes(pesquisa)&&!pagamento.includes(pesquisa)){
+     return false;
+    }
+   }
+
+   return true;
   });
+ },[despesas,filtros]);
 
-  const fetchData = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    const [despesasRes, tiposRes] = await Promise.all([
-      supabase.from('despesas').select('*').eq('user_id', user.id).order('data', { ascending: false }),
-      supabase.from('tipos_despesa').select('*').eq('user_id', user.id),
-    ]);
-    if (despesasRes.error) toast({ title: 'Erro ao buscar despesas', variant: 'destructive' });
-    else setDespesas(despesasRes.data);
-    if (tiposRes.error) toast({ title: 'Erro ao buscar tipos', variant: 'destructive' });
-    else setTiposDespesa(tiposRes.data);
-    setLoading(false);
-  }, [user, toast]);
+ const total=useMemo(
+  ()=>filteredDespesas.reduce((sum,d)=>sum+Number(d.valor||0),0),
+  [filteredDespesas]
+ );
 
-  useEffect(() => {
-    fetchData();
-    if (!user) return;
-    const channel = supabase.channel('pessoal_relatorio_despesas_changes')
-      .on('postgres_changes', { event: '*', schema: 'public' }, fetchData)
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [user, fetchData]);
+ const quantidade=filteredDespesas.length;
 
-  const filteredDespesas = useMemo(() => {
-    return despesas.filter(d => {
-      const dataDespesa = new Date(d.data);
-      const dataInicio = filtros.dataInicio ? new Date(filtros.dataInicio) : null;
-      const dataFim = filtros.dataFim ? new Date(filtros.dataFim) : null;
-      if (dataInicio && dataDespesa < dataInicio) return false;
-      if (dataFim && dataDespesa > dataFim) return false;
-      if (filtros.tipoDespesa !== 'todos' && d.despesa !== filtros.tipoDespesa) return false;
-      if (filtros.pesquisa && !(d.despesa.toLowerCase().includes(filtros.pesquisa.toLowerCase()) || d.forma_pagamento.toLowerCase().includes(filtros.pesquisa.toLowerCase()))) return false;
-      return true;
-    });
-  }, [filtros, despesas]);
+ const media=quantidade?total/quantidade:0;
 
-  const total = filteredDespesas.reduce((acc, curr) => acc + parseFloat(curr.valor), 0);
+ const maiorDespesa=useMemo(
+  ()=>filteredDespesas.reduce(
+   (max,d)=>Number(d.valor||0)>Number(max.valor||0)?d:max,
+   {valor:0}
+  ),
+  [filteredDespesas]
+ );
 
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setFiltros(prev => ({ ...prev, [name]: value }));
-  };
-  
-  const handleSelectChange = (value) => {
-    setFiltros(prev => ({ ...prev, tipoDespesa: value }));
-  };
+ const handleFilterChange=e=>{
+  const{name,value}=e.target;
 
-  return (
-    <>
-      <Helmet>
-        <title>Relatório de Despesas - Módulo Pessoal</title>
-      </Helmet>
-      <div className="space-y-6">
-        <header className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-foreground">Relatório de Despesas</h1>
-          <Button variant="outline" onClick={() => toast({ title: 'Em breve!', description: 'Exportação de relatórios será implementada.' })}>
-            <FileDown className="mr-2 h-4 w-4" />
-            Exportar
-          </Button>
-        </header>
+  setFiltros(prev=>({
+   ...prev,
+   [name]:value
+  }));
+ };
 
-        <div className="p-6 bg-card rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4 text-foreground">Filtros</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Input type="date" name="dataInicio" value={filtros.dataInicio} onChange={handleFilterChange} className="bg-background/70 text-white" />
-            <Input type="date" name="dataFim" value={filtros.dataFim} onChange={handleFilterChange} className="bg-background/70 text-white" />
-            <Select onValueChange={handleSelectChange} value={filtros.tipoDespesa}>
-              <SelectTrigger className="bg-background/70 text-white">
-                <SelectValue placeholder="Tipo de Despesa" />
-              </SelectTrigger>
-              <SelectContent className="dark-pessoal">
-                <ScrollArea className="h-48">
-                  <SelectItem value="todos">Todos os Tipos</SelectItem>
-                  {tiposDespesa.map(tipo => (
-                    <SelectItem key={tipo.id} value={tipo.nome_despesa}>{tipo.nome_despesa}</SelectItem>
-                  ))}
-                </ScrollArea>
-              </SelectContent>
-            </Select>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input 
-                placeholder="Pesquisar..." 
-                name="pesquisa"
-                value={filtros.pesquisa}
-                onChange={handleFilterChange}
-                className="pl-10 bg-background/70 text-white"
-              />
-            </div>
-          </div>
-        </div>
+ const clearFilters=()=>{
+  setFiltros({
+   dataInicio:'',
+   dataFim:'',
+   tipoDespesa:'todos',
+   pesquisa:''
+  });
+ };
 
-        <div className="p-6 bg-card rounded-lg shadow-md">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-foreground">Resultados</h2>
-            <div className="text-right">
-              <p className="text-muted-foreground">Total das Despesas</p>
-              <p className="text-2xl font-bold text-red-400">
-                {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </p>
-            </div>
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Tipo de Despesa</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Forma de Pagamento</TableHead>
-                <TableHead>Parcelas</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan="5" className="text-center">Carregando...</TableCell>
-                </TableRow>
-              ) : filteredDespesas.length > 0 ? (
-                filteredDespesas.map((despesa) => (
-                  <TableRow key={despesa.id}>
-                    <TableCell>{new Date(despesa.data).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</TableCell>
-                    <TableCell>{despesa.despesa}</TableCell>
-                    <TableCell className="text-red-400">{parseFloat(despesa.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
-                    <TableCell>{despesa.forma_pagamento}</TableCell>
-                    <TableCell>{despesa.parcelas || 'N/A'}</TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan="5" className="text-center">Nenhuma despesa encontrada.</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-    </>
+ const handleExport=()=>{
+  if(!filteredDespesas.length){
+   toast({
+    title:'Aviso',
+    description:'Nenhuma despesa para exportar.',
+    variant:'destructive'
+   });
+   return;
+  }
+
+  exportToExcel(
+   filteredDespesas.map(d=>({
+    Data:dateBR(d.data),
+    'Tipo de Despesa':d.despesa||'-',
+    Valor:Number(d.valor||0),
+    'Forma de Pagamento':d.forma_pagamento||'-',
+    Parcelas:d.parcelas||'-'
+   })),
+   'Relatorio_Despesas',
+   'Despesas'
   );
+ };
+
+ return(
+  <div className="dark-pessoal space-y-4">
+
+   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex items-center gap-3">
+     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10">
+      <Receipt className="h-5 w-5 text-red-400"/>
+     </div>
+
+     <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-red-400">
+       Relatórios
+      </p>
+
+      <h1 className="text-2xl font-bold tracking-tight">
+       Relatório de Despesas
+      </h1>
+
+      <p className="text-sm text-muted-foreground">
+       Consulte e analise suas despesas realizadas.
+      </p>
+     </div>
+    </div>
+
+    <div className="flex flex-wrap gap-2">
+     <Button
+      variant="outline"
+      onClick={handleExport}
+      disabled={!filteredDespesas.length}
+     >
+      <Download className="mr-2 h-4 w-4"/>
+      Exportar
+     </Button>
+
+     <Button
+      variant="outline"
+      onClick={fetchData}
+     >
+      <RefreshCw className="mr-2 h-4 w-4"/>
+      Atualizar
+     </Button>
+    </div>
+   </div>
+
+   <Card className="border-border bg-card/80">
+    <CardContent className="grid gap-4 p-4 md:grid-cols-2 lg:grid-cols-4">
+
+     <div className="space-y-2">
+      <Label className="text-xs">Data inicial</Label>
+      <Input
+       type="date"
+       name="dataInicio"
+       value={filtros.dataInicio}
+       onChange={handleFilterChange}
+       className="bg-input"
+      />
+     </div>
+
+     <div className="space-y-2">
+      <Label className="text-xs">Data final</Label>
+      <Input
+       type="date"
+       name="dataFim"
+       value={filtros.dataFim}
+       onChange={handleFilterChange}
+       className="bg-input"
+      />
+     </div>
+
+     <div className="space-y-2">
+      <Label className="text-xs">Tipo de despesa</Label>
+
+      <Select
+       value={filtros.tipoDespesa}
+       onValueChange={value=>
+        setFiltros(prev=>({...prev,tipoDespesa:value}))
+       }
+      >
+       <SelectTrigger className="bg-input">
+        <SelectValue placeholder="Tipo de Despesa"/>
+       </SelectTrigger>
+
+       <SelectContent className="dark-pessoal border-border bg-card">
+        <ScrollArea className="h-48">
+         <SelectItem value="todos">Todos os tipos</SelectItem>
+
+         {tiposDespesa.map(tipo=>(
+          <SelectItem
+           key={tipo.id}
+           value={tipo.nome_despesa}
+          >
+           {tipo.nome_despesa}
+          </SelectItem>
+         ))}
+        </ScrollArea>
+       </SelectContent>
+      </Select>
+     </div>
+
+     <div className="space-y-2">
+      <Label className="text-xs">Pesquisar</Label>
+
+      <div className="relative">
+       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+
+       <Input
+        name="pesquisa"
+        value={filtros.pesquisa}
+        onChange={handleFilterChange}
+        placeholder="Descrição ou pagamento..."
+        className="bg-input pl-9"
+       />
+      </div>
+     </div>
+    </CardContent>
+
+    <div className="flex justify-end border-t border-border/50 px-4 py-3">
+     <Button
+      variant="ghost"
+      size="sm"
+      onClick={clearFilters}
+     >
+      Limpar filtros
+     </Button>
+    </div>
+   </Card>
+
+   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <StatCard
+     label="Total das Despesas"
+     value={money(total)}
+     icon={TrendingDown}
+    />
+
+    <StatCard
+     label="Quantidade"
+     value={quantidade}
+     icon={Receipt}
+     type="blue"
+    />
+
+    <StatCard
+     label="Média por Despesa"
+     value={money(media)}
+     icon={WalletCards}
+     type="red"
+    />
+
+    <StatCard
+     label="Maior Despesa"
+     value={money(maiorDespesa.valor)}
+     icon={CalendarDays}
+     type="red"
+    />
+   </div>
+
+   <Card className="border-border bg-card">
+    <CardHeader className="pb-3">
+     <CardTitle className="text-lg text-red-400">
+      Resultados
+     </CardTitle>
+    </CardHeader>
+
+    <CardContent className="p-0">
+     <ScrollArea className="h-[500px]">
+      <Table>
+       <TableHeader>
+        <TableRow>
+         <TableHead>Data</TableHead>
+         <TableHead>Tipo de Despesa</TableHead>
+         <TableHead className="text-right">Valor</TableHead>
+         <TableHead>Forma de Pagamento</TableHead>
+         <TableHead className="text-center">Parcelas</TableHead>
+        </TableRow>
+       </TableHeader>
+
+       <TableBody>
+        {loading?(
+         <TableRow>
+          <TableCell
+           colSpan={5}
+           className="py-8 text-center text-muted-foreground"
+          >
+           Carregando...
+          </TableCell>
+         </TableRow>
+        ):filteredDespesas.length===0?(
+         <TableRow>
+          <TableCell
+           colSpan={5}
+           className="py-8 text-center text-muted-foreground"
+          >
+           Nenhuma despesa encontrada.
+          </TableCell>
+         </TableRow>
+        ):(
+         filteredDespesas.map(d=>(
+          <TableRow
+           key={d.id}
+           className="hover:bg-red-500/5"
+          >
+           <TableCell className="text-sm">
+            {dateBR(d.data)}
+           </TableCell>
+
+           <TableCell className="font-medium">
+            {d.despesa||'—'}
+           </TableCell>
+
+           <TableCell className="text-right font-semibold text-red-400">
+            {money(d.valor)}
+           </TableCell>
+
+           <TableCell className="text-sm text-muted-foreground">
+            {d.forma_pagamento||'—'}
+           </TableCell>
+
+           <TableCell className="text-center text-sm text-muted-foreground">
+            {d.parcelas||'—'}
+           </TableCell>
+          </TableRow>
+         ))
+        )}
+       </TableBody>
+      </Table>
+     </ScrollArea>
+    </CardContent>
+   </Card>
+
+  </div>
+ );
 };
 
 export default RelatorioDespesas;
