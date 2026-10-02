@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Home, DollarSign, BookOpen, ChevronLeft, ChevronRight,
   LayoutGrid, LogOut, TrendingUp, Target, List,
-  CreditCard, Users, Receipt, Zap, ChevronDown
+  CreditCard, Users, Receipt, Zap
 } from 'lucide-react';
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger
@@ -39,7 +39,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
   const { isAdmin, signOut } = useAuth();
 
   const triggerClass =
-    'flex min-h-10 w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-[background-color,color] duration-200 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-blue))] motion-reduce:transition-none';
+    'flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-[background-color,color] duration-200 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-blue))] motion-reduce:transition-none';
 
   return (
     <aside
@@ -116,18 +116,11 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
               value="cadastros"
               className="mb-0 border-b-0"
             >
-              <AccordionTrigger
-                className={triggerClass}
-                chevron={false}
-              >
+              <AccordionTrigger className={triggerClass}>
                 <span className="flex items-center gap-3">
                   <span className="text-base">📋</span>
                   {(isOpen || isMobile) && 'Cadastros'}
                 </span>
-
-                {(isOpen || isMobile) && (
-                  <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                )}
               </AccordionTrigger>
 
               <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
@@ -172,18 +165,11 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
               value="lancamentos"
               className="mb-0 border-b-0"
             >
-              <AccordionTrigger
-                className={triggerClass}
-                chevron={false}
-              >
+              <AccordionTrigger className={triggerClass}>
                 <span className="flex items-center gap-3">
                   <span className="text-base">↔️</span>
                   {(isOpen || isMobile) && 'Lançamentos'}
                 </span>
-
-                {(isOpen || isMobile) && (
-                  <ChevronDown className="h-4 w-4 shrink-0" />
-                )}
               </AccordionTrigger>
 
               <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
@@ -242,18 +228,11 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
               value="investimentos"
               className="mb-0 border-b-0"
             >
-              <AccordionTrigger
-                className={triggerClass}
-                chevron={false}
-              >
+              <AccordionTrigger className={triggerClass}>
                 <span className="flex items-center gap-3">
                   <span className="text-base">📈</span>
                   {(isOpen || isMobile) && 'Investimento'}
                 </span>
-
-                {(isOpen || isMobile) && (
-                  <ChevronDown className="h-4 w-4 shrink-0" />
-                )}
               </AccordionTrigger>
 
               <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
@@ -277,18 +256,11 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
               value="leitura"
               className="mb-0 border-b-0"
             >
-              <AccordionTrigger
-                className={triggerClass}
-                chevron={false}
-              >
+              <AccordionTrigger className={triggerClass}>
                 <span className="flex items-center gap-3">
                   <span className="text-base">📖</span>
                   {(isOpen || isMobile) && 'Leitura Bíblica'}
                 </span>
-
-                {(isOpen || isMobile) && (
-                  <ChevronDown className="h-4 w-4 shrink-0" />
-                )}
               </AccordionTrigger>
 
               <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
@@ -305,18 +277,11 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
               value="planejamento"
               className="mb-0 border-b-0"
             >
-              <AccordionTrigger
-                className={triggerClass}
-                chevron={false}
-              >
+              <AccordionTrigger className={triggerClass}>
                 <span className="flex items-center gap-3">
                   <span className="text-base">🎯</span>
                   {(isOpen || isMobile) && 'Planejamento'}
                 </span>
-
-                {(isOpen || isMobile) && (
-                  <ChevronDown className="h-4 w-4 shrink-0" />
-                )}
               </AccordionTrigger>
 
               <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
@@ -340,18 +305,11 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
               value="consultas"
               className="mb-0 border-b-0"
             >
-              <AccordionTrigger
-                className={triggerClass}
-                chevron={false}
-              >
+              <AccordionTrigger className={triggerClass}>
                 <span className="flex items-center gap-3">
                   <span className="text-base">🔎</span>
                   {(isOpen || isMobile) && 'Consultas'}
                 </span>
-
-                {(isOpen || isMobile) && (
-                  <ChevronDown className="h-4 w-4 shrink-0" />
-                )}
               </AccordionTrigger>
 
               <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
@@ -382,18 +340,11 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
               value="relatorios"
               className="mb-0 border-b-0"
             >
-              <AccordionTrigger
-                className={triggerClass}
-                chevron={false}
-              >
+              <AccordionTrigger className={triggerClass}>
                 <span className="flex items-center gap-3">
                   <span className="text-base">📊</span>
                   {(isOpen || isMobile) && 'Relatórios'}
                 </span>
-
-                {(isOpen || isMobile) && (
-                  <ChevronDown className="h-4 w-4 shrink-0" />
-                )}
               </AccordionTrigger>
 
               <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
@@ -453,18 +404,11 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
                 value="admin"
                 className="mb-0 border-b-0"
               >
-                <AccordionTrigger
-                  className={triggerClass}
-                  chevron={false}
-                >
+                <AccordionTrigger className={triggerClass}>
                   <span className="flex items-center gap-3">
                     <span className="text-base">🛡️</span>
                     {(isOpen || isMobile) && 'Administração'}
                   </span>
-
-                  {(isOpen || isMobile) && (
-                    <ChevronDown className="h-4 w-4 shrink-0" />
-                  )}
                 </AccordionTrigger>
 
                 <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
