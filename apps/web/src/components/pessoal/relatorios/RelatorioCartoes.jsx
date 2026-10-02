@@ -1,206 +1,554 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { CreditCard, TrendingUp, AlertCircle } from 'lucide-react';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Label } from '@/components/ui/label';
-import { competenciaFatura } from '@/lib/cartaoCompetencia';
-import { getInstallmentValue } from '@/lib/cartaoParcelas';
+import React,{useState,useEffect,useCallback,useMemo}from'react';
+import{CreditCard,TrendingUp,AlertCircle,Download,RefreshCw}from'lucide-react';
+import{supabase}from'@/lib/customSupabaseClient';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
+import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
+import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
+import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
+import{Badge}from'@/components/ui/badge';
+import{ScrollArea}from'@/components/ui/scroll-area';
+import{Label}from'@/components/ui/label';
+import{Button}from'@/components/ui/button';
+import{competenciaFatura}from'@/lib/cartaoCompetencia';
+import{getInstallmentValue}from'@/lib/cartaoParcelas';
+import{exportToExcel}from'@/lib/ExportUtils';
 
-const formatBRL = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
+const YEARS=[2024,2025,2026];
 
-const STATUS_STYLE = {
-  aberta: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
-  fechada: 'bg-blue-500/20 text-blue-400 border-blue-500/40',
-  paga: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+const money=v=>new Intl.NumberFormat('pt-BR',{
+ style:'currency',
+ currency:'BRL'
+}).format(Number(v||0));
+
+const STATUS_STYLE={
+ aberta:'bg-amber-500/20 text-amber-400 border-amber-500/40',
+ fechada:'bg-blue-500/20 text-blue-400 border-blue-500/40',
+ paga:'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
 };
 
-const RelatorioCartoes = () => {
-  const { user } = useAuth();
-  const [cartoes, setCartoes] = useState([]);
-  const [lancamentos, setLancamentos] = useState([]);
-  const [faturas, setFaturas] = useState([]);
-  const [pagamentos, setPagamentos] = useState([]);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
-  const [loading, setLoading] = useState(true);
+const StatCard=({label,value,icon:Icon,type='blue',note})=>{
+ const styles={
+  blue:{
+   border:'border-blue-500/20',
+   bg:'from-blue-500/10 to-blue-700/10',
+   icon:'bg-blue-500/10',
+   text:'text-blue-400'
+  },
+  red:{
+   border:'border-red-500/20',
+   bg:'from-red-500/10 to-red-700/10',
+   icon:'bg-red-500/10',
+   text:'text-red-400'
+  },
+  green:{
+   border:'border-emerald-500/20',
+   bg:'from-emerald-500/10 to-emerald-700/10',
+   icon:'bg-emerald-500/10',
+   text:'text-emerald-400'
+  },
+  amber:{
+   border:'border-amber-500/20',
+   bg:'from-amber-500/10 to-amber-700/10',
+   icon:'bg-amber-500/10',
+   text:'text-amber-400'
+  }
+ };
 
-  const fetchAll = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    const ano = parseInt(selectedYear, 10);
-    // Inclui dezembro do ano anterior para abranger compras de final de dezembro
-    // cuja competência cai em janeiro do ano selecionado.
-    const startDate = `${ano - 1}-12-01`;
-    const endDate = `${ano}-12-31`;
-    const [c, l, f, p] = await Promise.all([
-      supabase.from('pessoal_cartoes').select('*').eq('user_id', user.id).order('nome', { ascending: true }),
-      supabase.from('pessoal_cartao_lancamentos').select('cartao_id, valor, parcelas, data').eq('user_id', user.id).gte('data', startDate).lte('data', endDate),
-      supabase.from('pessoal_faturas').select('*').eq('user_id', user.id).eq('ano', ano),
-      supabase.from('pessoal_cartao_pagamentos').select('fatura_id, valor').in('fatura_id', (await supabase.from('pessoal_faturas').select('id').eq('user_id', user.id).eq('ano', ano)).data?.map(x => x.id) || []),
-    ]);
-    setCartoes(c.data || []);
-    setLancamentos(l.data || []);
-    setFaturas(f.data || []);
-    setPagamentos(p.data || []);
-    setLoading(false);
-  }, [user, selectedYear]);
+ const s=styles[type];
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
-
-  // Pagamentos por fatura e por cartão (apenas faturas do ano selecionado).
-  const pagamentosPorFatura = {};
-  pagamentos.forEach((p) => {
-    pagamentosPorFatura[p.fatura_id] = (pagamentosPorFatura[p.fatura_id] || 0) + Number(p.valor || 0);
-  });
-  const pagamentosPorCartao = {};
-  faturas.forEach((f) => {
-    const pago = pagamentosPorFatura[f.id] || 0;
-    pagamentosPorCartao[f.cartao_id] = (pagamentosPorCartao[f.cartao_id] || 0) + pago;
-  });
-
-  // Total de compras do ano (valor bruto das parcelas cuja competência cai no ano).
-  const comprasPorCartao = (cartaoId) =>
-    lancamentos
-      .filter((l) => l.cartao_id === cartaoId)
-      .filter((l) => {
-        const cartao = cartoes.find((c) => c.id === cartaoId);
-        const comp = competenciaFatura(l.data, cartao?.dia_fechamento || 1);
-        return comp && comp.ano === parseInt(selectedYear, 10);
-      })
-      .reduce((acc, l) => acc + getInstallmentValue(l.valor, l.parcelas, l.parcela_atual), 0);
-
-  // Limite utilizado = compras do ano menos os pagamentos computados nas faturas
-  // do ano. Quando uma fatura é paga (total ou parcialmente), o valor pago libera
-  // o limite correspondente, retornando ao limite disponível do cartão.
-  const utilizadoPorCartao = (cartaoId) =>
-    Math.max(0, comprasPorCartao(cartaoId) - (pagamentosPorCartao[cartaoId] || 0));
-
-  const totalGastoAno = cartoes.reduce((acc, c) => acc + comprasPorCartao(c.id), 0);
-  const totalPagoAno = cartoes.reduce((acc, c) => acc + (pagamentosPorCartao[c.id] || 0), 0);
-  const totalLimite = cartoes.reduce((acc, c) => acc + Number(c.limite || 0), 0);
-  const totalUtilizado = cartoes.reduce((acc, c) => acc + utilizadoPorCartao(c.id), 0);
-  const faturasAbertas = faturas.filter((f) => f.status === 'aberta' || f.status === 'fechada');
-  const totalFaturasEmAberto = faturasAbertas.reduce((acc, f) => {
-    const pago = pagamentosPorFatura[f.id] || 0;
-    return acc + Math.max(0, Number(f.valor_total) - pago);
-  }, 0);
-
-  const resumoCartoes = cartoes.map((c) => {
-    const utilizado = utilizadoPorCartao(c.id);
-    const limite = Number(c.limite || 0);
-    const pct = limite > 0 ? (utilizado / limite) * 100 : 0;
-    const fatCartao = faturas.filter((f) => f.cartao_id === c.id);
-    const totalFat = fatCartao.reduce((s, f) => s + Number(f.valor_total), 0);
-    const totalPagoFat = fatCartao.reduce((s, f) => s + (pagamentosPorFatura[f.id] || 0), 0);
-    return { ...c, utilizado, limite, pct, totalFat, totalPagoFat };
-  });
-
-  return (
-    <div className="dark-pessoal space-y-6">
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-bold tracking-tight text-blue-500">Relatório de Cartões</h1>
-        <p className="text-muted-foreground">Visão geral de limite, faturas e pagamentos.</p>
-      </motion.div>
-
-      <div className="w-full md:w-[140px]">
-        <Label className="text-xs">Ano</Label>
-        <Select value={selectedYear} onValueChange={setSelectedYear}>
-          <SelectTrigger className="bg-input"><SelectValue /></SelectTrigger>
-          <SelectContent className="dark-pessoal bg-card border-border"><SelectItem value="2024">2024</SelectItem><SelectItem value="2025">2025</SelectItem><SelectItem value="2026">2026</SelectItem></SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-700/10 border-blue-500/20">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-blue-400 flex items-center gap-2"><CreditCard className="w-4 h-4" /> Limite Total</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-foreground">{formatBRL(totalLimite)}</div></CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-red-500/10 to-red-700/10 border-red-500/20">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-red-400 flex items-center gap-2"><TrendingUp className="w-4 h-4" /> Limite Utilizado</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-red-400">{formatBRL(totalUtilizado)}</div><p className="text-xs text-muted-foreground mt-1">Compras - pagamentos</p></CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-emerald-500/10 to-emerald-700/10 border-emerald-500/20">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-emerald-400">Pago no Ano</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-emerald-400">{formatBRL(totalPagoAno)}</div><p className="text-xs text-muted-foreground mt-1">Limite liberado</p></CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-700/10 border-blue-500/20">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-blue-400">Gasto no Ano</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-foreground">{formatBRL(totalGastoAno)}</div></CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-amber-500/10 to-amber-700/10 border-amber-500/20">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-amber-400 flex items-center gap-2"><AlertCircle className="w-4 h-4" /> Faturas em Aberto</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold text-amber-400">{formatBRL(totalFaturasEmAberto)}</div></CardContent>
-        </Card>
-      </div>
-
-      <Card className="border-border bg-card">
-        <CardHeader><CardTitle className="text-lg text-blue-500">Limite por Cartão</CardTitle></CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[400px]">
-            <Table>
-              <TableHeader><TableRow><TableHead>Cartão</TableHead><TableHead>Bandeira</TableHead><TableHead>Limite</TableHead><TableHead>Utilizado</TableHead><TableHead>Disponível</TableHead><TableHead>Uso</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {loading ? <TableRow><TableCell colSpan={6} className="text-center py-8">Carregando...</TableCell></TableRow> : resumoCartoes.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhum cartão cadastrado.</TableCell></TableRow> : (
-                  resumoCartoes.map((c) => (
-                    <TableRow key={c.id} className="hover:bg-muted/50">
-                      <TableCell className="p-4 font-medium text-foreground">{c.nome}</TableCell>
-                      <TableCell className="p-4 text-sm text-muted-foreground">{c.bandeira || '—'}</TableCell>
-                      <TableCell className="p-4 text-sm">{formatBRL(c.limite)}</TableCell>
-                      <TableCell className="p-4 text-sm text-red-400">{formatBRL(c.utilizado)}</TableCell>
-                      <TableCell className="p-4 text-sm text-emerald-400">{formatBRL(Math.max(0, c.limite - c.utilizado))}</TableCell>
-                      <TableCell className="p-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-24 h-2 rounded-full bg-muted overflow-hidden"><div className={`h-full rounded-full ${c.pct > 80 ? 'bg-red-500' : c.pct > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, c.pct)}%` }} /></div>
-                          <span className="text-xs text-muted-foreground">{c.pct.toFixed(0)}%</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
-
-      <Card className="border-border bg-card">
-        <CardHeader><CardTitle className="text-lg text-blue-500">Faturas do Ano</CardTitle></CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[400px]">
-            <Table>
-              <TableHeader><TableRow><TableHead>Cartão</TableHead><TableHead>Referência</TableHead><TableHead>Vencimento</TableHead><TableHead>Valor</TableHead><TableHead>Pago</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {faturas.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma fatura fechada neste ano.</TableCell></TableRow> : (
-                  faturas
-                    .slice()
-                    .sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes))
-                    .map((f) => {
-                      const nomeCartao = cartoes.find((c) => c.id === f.cartao_id)?.nome || '—';
-                      const pago = pagamentosPorFatura[f.id] || 0;
-                      return (
-                        <TableRow key={f.id} className="hover:bg-muted/50">
-                          <TableCell className="p-4 font-medium text-foreground">{nomeCartao}</TableCell>
-                          <TableCell className="p-4 text-sm">{String(f.mes + 1).padStart(2, '0')}/{f.ano}</TableCell>
-                          <TableCell className="p-4 text-sm">{f.data_vencimento ? new Date(f.data_vencimento).toLocaleDateString('pt-BR') : '—'}</TableCell>
-                          <TableCell className="p-4 text-sm font-semibold">{formatBRL(f.valor_total)}</TableCell>
-                          <TableCell className="p-4 text-sm text-emerald-400">{formatBRL(pago)}</TableCell>
-                          <TableCell className="p-4"><Badge className={STATUS_STYLE[f.status] || STATUS_STYLE.aberta} variant="outline">{(f.status || 'aberta').toUpperCase()}</Badge></TableCell>
-                        </TableRow>
-                      );
-                    })
-                )}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+ return(
+  <Card className={`${s.border} bg-gradient-to-br ${s.bg}`}>
+   <CardContent className="p-4">
+    <div className="flex items-center gap-3">
+     <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${s.icon}`}>
+      <Icon className={`h-5 w-5 ${s.text}`}/>
+     </div>
+     <div className="min-w-0">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`mt-1 truncate text-xl font-bold ${s.text}`}>{value}</p>
+      {note&&<p className="mt-1 text-xs text-muted-foreground">{note}</p>}
+     </div>
     </div>
+   </CardContent>
+  </Card>
+ );
+};
+
+const RelatorioCartoes=()=>{
+ const{user}=useAuth();
+ const[cartoes,setCartoes]=useState([]);
+ const[lancamentos,setLancamentos]=useState([]);
+ const[faturas,setFaturas]=useState([]);
+ const[pagamentos,setPagamentos]=useState([]);
+ const[selectedYear,setSelectedYear]=useState(String(new Date().getFullYear()));
+ const[loading,setLoading]=useState(true);
+
+ const fetchAll=useCallback(async()=>{
+  if(!user)return;
+
+  setLoading(true);
+
+  const ano=Number(selectedYear);
+  const startDate=`${ano-1}-12-01`;
+  const endDate=`${ano}-12-31`;
+
+  const[cRes,lRes,fRes]=await Promise.all([
+   supabase
+    .from('pessoal_cartoes')
+    .select('*')
+    .eq('user_id',user.id)
+    .order('nome',{ascending:true}),
+
+   supabase
+    .from('pessoal_cartao_lancamentos')
+    .select('cartao_id,valor,parcelas,parcela_atual,data')
+    .eq('user_id',user.id)
+    .gte('data',startDate)
+    .lte('data',endDate),
+
+   supabase
+    .from('pessoal_faturas')
+    .select('*')
+    .eq('user_id',user.id)
+    .eq('ano',ano)
+  ]);
+
+  const ids=(fRes.data||[]).map(f=>f.id);
+
+  let pagamentosData=[];
+
+  if(ids.length){
+   const{data}=await supabase
+    .from('pessoal_cartao_pagamentos')
+    .select('fatura_id,valor')
+    .in('fatura_id',ids);
+
+   pagamentosData=data||[];
+  }
+
+  setCartoes(cRes.data||[]);
+  setLancamentos(lRes.data||[]);
+  setFaturas(fRes.data||[]);
+  setPagamentos(pagamentosData);
+  setLoading(false);
+ },[user,selectedYear]);
+
+ useEffect(()=>{
+  fetchAll();
+ },[fetchAll]);
+
+ const pagamentosPorFatura=useMemo(()=>{
+  const map={};
+
+  pagamentos.forEach(p=>{
+   map[p.fatura_id]=(map[p.fatura_id]||0)+Number(p.valor||0);
+  });
+
+  return map;
+ },[pagamentos]);
+
+ const pagamentosPorCartao=useMemo(()=>{
+  const map={};
+
+  faturas.forEach(f=>{
+   map[f.cartao_id]=(map[f.cartao_id]||0)+(pagamentosPorFatura[f.id]||0);
+  });
+
+  return map;
+ },[faturas,pagamentosPorFatura]);
+
+ const comprasPorCartao=useCallback(cartaoId=>{
+  const cartao=cartoes.find(c=>c.id===cartaoId);
+
+  return lancamentos
+   .filter(l=>l.cartao_id===cartaoId)
+   .filter(l=>{
+    const comp=competenciaFatura(
+     l.data,
+     cartao?.dia_fechamento||1
+    );
+
+    return comp&&comp.ano===Number(selectedYear);
+   })
+   .reduce(
+    (sum,l)=>sum+getInstallmentValue(
+     l.valor,
+     l.parcelas,
+     l.parcela_atual
+    ),
+    0
+   );
+ },[cartoes,lancamentos,selectedYear]);
+
+ const resumoCartoes=useMemo(()=>{
+  return cartoes.map(c=>{
+   const limite=Number(c.limite||0);
+   const utilizado=Math.max(
+    0,
+    comprasPorCartao(c.id)-(pagamentosPorCartao[c.id]||0)
+   );
+   const percentual=limite>0?(utilizado/limite)*100:0;
+
+   return{
+    ...c,
+    limite,
+    utilizado,
+    disponivel:Math.max(0,limite-utilizado),
+    percentual
+   };
+  });
+ },[cartoes,comprasPorCartao,pagamentosPorCartao]);
+
+ const totalLimite=useMemo(
+  ()=>resumoCartoes.reduce((sum,c)=>sum+c.limite,0),
+  [resumoCartoes]
+ );
+
+ const totalUtilizado=useMemo(
+  ()=>resumoCartoes.reduce((sum,c)=>sum+c.utilizado,0),
+  [resumoCartoes]
+ );
+
+ const totalGastoAno=useMemo(
+  ()=>cartoes.reduce((sum,c)=>sum+comprasPorCartao(c.id),0),
+  [cartoes,comprasPorCartao]
+ );
+
+ const totalPagoAno=useMemo(
+  ()=>cartoes.reduce((sum,c)=>sum+(pagamentosPorCartao[c.id]||0),0),
+  [cartoes,pagamentosPorCartao]
+ );
+
+ const totalFaturasEmAberto=useMemo(
+  ()=>faturas
+   .filter(f=>f.status==='aberta'||f.status==='fechada')
+   .reduce(
+    (sum,f)=>sum+Math.max(
+     0,
+     Number(f.valor_total||0)-(pagamentosPorFatura[f.id]||0)
+    ),
+    0
+   ),
+  [faturas,pagamentosPorFatura]
+ );
+
+ const handleExport=()=>{
+  if(!resumoCartoes.length)return;
+
+  exportToExcel(
+   resumoCartoes.map(c=>({
+    Cartão:c.nome,
+    Bandeira:c.bandeira||'-',
+    Limite:c.limite,
+    Utilizado:c.utilizado,
+    Disponível:c.disponivel,
+    'Uso (%)':Number(c.percentual.toFixed(2))
+   })),
+   `Relatorio_Cartoes_${selectedYear}`,
+   'Cartoes'
   );
+ };
+
+ return(
+  <div className="dark-pessoal space-y-4">
+
+   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex items-center gap-3">
+     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-pessoal)/.20)] bg-[hsl(var(--neon-pessoal)/.08)]">
+      <CreditCard className="h-5 w-5 text-[hsl(var(--neon-pessoal))]"/>
+     </div>
+
+     <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-[hsl(var(--neon-pessoal))]">
+       Relatórios
+      </p>
+      <h1 className="text-2xl font-bold tracking-tight">
+       Relatório de Cartões
+      </h1>
+      <p className="text-sm text-muted-foreground">
+       Visão geral de limites, utilização, faturas e pagamentos.
+      </p>
+     </div>
+    </div>
+
+    <div className="flex flex-wrap gap-2">
+     <Button
+      variant="outline"
+      onClick={handleExport}
+      disabled={!resumoCartoes.length}
+     >
+      <Download className="mr-2 h-4 w-4"/>
+      Exportar
+     </Button>
+
+     <Button
+      variant="outline"
+      onClick={fetchAll}
+     >
+      <RefreshCw className="mr-2 h-4 w-4"/>
+      Atualizar
+     </Button>
+    </div>
+   </div>
+
+   <Card className="border-border bg-card/80">
+    <CardContent className="p-4">
+     <div className="max-w-[160px] space-y-2">
+      <Label className="text-xs">Ano</Label>
+
+      <Select
+       value={selectedYear}
+       onValueChange={setSelectedYear}
+      >
+       <SelectTrigger className="bg-input">
+        <SelectValue/>
+       </SelectTrigger>
+
+       <SelectContent className="dark-pessoal border-border bg-card">
+        {YEARS.map(year=>(
+         <SelectItem
+          key={year}
+          value={String(year)}
+         >
+          {year}
+         </SelectItem>
+        ))}
+       </SelectContent>
+      </Select>
+     </div>
+    </CardContent>
+   </Card>
+
+   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    <StatCard
+     label="Limite Total"
+     value={money(totalLimite)}
+     icon={CreditCard}
+    />
+
+    <StatCard
+     label="Limite Utilizado"
+     value={money(totalUtilizado)}
+     icon={TrendingUp}
+     type="red"
+     note="Compras - pagamentos"
+    />
+
+    <StatCard
+     label="Pago no Ano"
+     value={money(totalPagoAno)}
+     icon={CreditCard}
+     type="green"
+     note="Valor já pago"
+    />
+
+    <StatCard
+     label="Gasto no Ano"
+     value={money(totalGastoAno)}
+     icon={CreditCard}
+     type="red"
+    />
+
+    <StatCard
+     label="Faturas em Aberto"
+     value={money(totalFaturasEmAberto)}
+     icon={AlertCircle}
+     type="amber"
+    />
+   </div>
+
+   <Card className="border-border bg-card">
+    <CardHeader className="pb-3">
+     <CardTitle className="text-lg text-[hsl(var(--neon-pessoal))]">
+      Limite por Cartão
+     </CardTitle>
+    </CardHeader>
+
+    <CardContent className="p-0">
+     <ScrollArea className="h-[400px]">
+      <Table>
+       <TableHeader>
+        <TableRow>
+         <TableHead>Cartão</TableHead>
+         <TableHead>Bandeira</TableHead>
+         <TableHead className="text-right">Limite</TableHead>
+         <TableHead className="text-right">Utilizado</TableHead>
+         <TableHead className="text-right">Disponível</TableHead>
+         <TableHead>Uso</TableHead>
+        </TableRow>
+       </TableHeader>
+
+       <TableBody>
+        {loading?(
+         <TableRow>
+          <TableCell
+           colSpan={6}
+           className="py-8 text-center text-muted-foreground"
+          >
+           Carregando...
+          </TableCell>
+         </TableRow>
+        ):resumoCartoes.length===0?(
+         <TableRow>
+          <TableCell
+           colSpan={6}
+           className="py-8 text-center text-muted-foreground"
+          >
+           Nenhum cartão cadastrado.
+          </TableCell>
+         </TableRow>
+        ):(
+         resumoCartoes.map(c=>{
+          const barra=c.percentual>80
+           ?'bg-red-500'
+           :c.percentual>50
+            ?'bg-amber-500'
+            :'bg-emerald-500';
+
+          return(
+           <TableRow
+            key={c.id}
+            className="hover:bg-muted/50"
+           >
+            <TableCell className="font-medium">
+             {c.nome}
+            </TableCell>
+
+            <TableCell className="text-sm text-muted-foreground">
+             {c.bandeira||'—'}
+            </TableCell>
+
+            <TableCell className="text-right">
+             {money(c.limite)}
+            </TableCell>
+
+            <TableCell className="text-right font-semibold text-red-400">
+             {money(c.utilizado)}
+            </TableCell>
+
+            <TableCell className="text-right font-semibold text-emerald-400">
+             {money(c.disponivel)}
+            </TableCell>
+
+            <TableCell>
+             <div className="flex items-center gap-2">
+              <div className="h-2 w-24 overflow-hidden rounded-full bg-muted">
+               <div
+                className={`h-full rounded-full ${barra}`}
+                style={{width:`${Math.min(100,c.percentual)}%`}}
+               />
+              </div>
+
+              <span className="text-xs text-muted-foreground">
+               {c.percentual.toFixed(0)}%
+              </span>
+             </div>
+            </TableCell>
+           </TableRow>
+          );
+         })
+        )}
+       </TableBody>
+      </Table>
+     </ScrollArea>
+    </CardContent>
+   </Card>
+
+   <Card className="border-border bg-card">
+    <CardHeader className="pb-3">
+     <CardTitle className="text-lg text-[hsl(var(--neon-pessoal))]">
+      Faturas do Ano
+     </CardTitle>
+    </CardHeader>
+
+    <CardContent className="p-0">
+     <ScrollArea className="h-[400px]">
+      <Table>
+       <TableHeader>
+        <TableRow>
+         <TableHead>Cartão</TableHead>
+         <TableHead>Referência</TableHead>
+         <TableHead>Vencimento</TableHead>
+         <TableHead className="text-right">Valor</TableHead>
+         <TableHead className="text-right">Pago</TableHead>
+         <TableHead>Status</TableHead>
+        </TableRow>
+       </TableHeader>
+
+       <TableBody>
+        {loading?(
+         <TableRow>
+          <TableCell
+           colSpan={6}
+           className="py-8 text-center text-muted-foreground"
+          >
+           Carregando...
+          </TableCell>
+         </TableRow>
+        ):faturas.length===0?(
+         <TableRow>
+          <TableCell
+           colSpan={6}
+           className="py-8 text-center text-muted-foreground"
+          >
+           Nenhuma fatura encontrada neste ano.
+          </TableCell>
+         </TableRow>
+        ):(
+         faturas
+          .slice()
+          .sort((a,b)=>(a.ano-b.ano)||(a.mes-b.mes))
+          .map(f=>{
+           const cartao=cartoes.find(c=>c.id===f.cartao_id);
+           const pago=pagamentosPorFatura[f.id]||0;
+
+           return(
+            <TableRow
+             key={f.id}
+             className="hover:bg-muted/50"
+            >
+             <TableCell className="font-medium">
+              {cartao?.nome||'—'}
+             </TableCell>
+
+             <TableCell className="text-sm">
+              {String(f.mes+1).padStart(2,'0')}/{f.ano}
+             </TableCell>
+
+             <TableCell className="text-sm">
+              {f.data_vencimento
+               ?new Date(`${f.data_vencimento}T00:00:00`).toLocaleDateString('pt-BR')
+               :'—'}
+             </TableCell>
+
+             <TableCell className="text-right font-semibold text-red-400">
+              {money(f.valor_total)}
+             </TableCell>
+
+             <TableCell className="text-right font-semibold text-emerald-400">
+              {money(pago)}
+             </TableCell>
+
+             <TableCell>
+              <Badge
+               className={STATUS_STYLE[f.status]||STATUS_STYLE.aberta}
+               variant="outline"
+              >
+               {(f.status||'aberta').toUpperCase()}
+              </Badge>
+             </TableCell>
+            </TableRow>
+           );
+          })
+        )}
+       </TableBody>
+      </Table>
+     </ScrollArea>
+    </CardContent>
+   </Card>
+
+  </div>
+ );
 };
 
 export default RelatorioCartoes;
