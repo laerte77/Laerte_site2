@@ -24,7 +24,6 @@ import Rendimentos from'@/components/pessoal/investimentos/Rendimentos';
 import Metas from'@/components/pessoal/planejamento/Metas';
 import ContasMes from'@/components/pessoal/consultas/ContasMes';
 import Faturas from'@/components/pessoal/consultas/Faturas';
-import ConsultaDespesasPrevisadasMesAMes from'@/components/pessoal/consultas/ConsultaDespesasPrevisadasMesAMes';
 import ConsultaDividasPrevisadasMesAMes from'@/components/pessoal/consultas/ConsultaDividasPrevisadasMesAMes';
 import RelatorioReceitas from'@/components/pessoal/relatorios/RelatorioReceitas';
 import RelatorioDespesas from'@/components/pessoal/relatorios/RelatorioDespesas';
@@ -90,7 +89,6 @@ const PessoalDashboard=()=>{
 
       <Route path="consultas/contas-mes" element={<ContasMes/>}/>
       <Route path="consultas/faturas" element={<Faturas/>}/>
-      <Route path="consultas/despesas-previstas-mes-a-mes" element={<ConsultaDespesasPrevisadasMesAMes/>}/>
       <Route path="consultas/dividas-previstas-mes-a-mes" element={<ConsultaDividasPrevisadasMesAMes/>}/>
 
       <Route path="cadastros/tipos-receita" element={<TiposReceita/>}/>
