@@ -1,133 +1,463 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { Search, FileText, FileDown } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { useToast } from '@/components/ui/use-toast';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
+import React,{useState,useEffect,useCallback,useMemo}from'react';
+import{Search,Download,RefreshCw,TrendingUp,Receipt,CalendarDays,WalletCards}from'lucide-react';
+import{Input}from'@/components/ui/input';
+import{Label}from'@/components/ui/label';
+import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
+import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
+import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
+import{Button}from'@/components/ui/button';
+import{supabase}from'@/lib/customSupabaseClient';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
+import{useToast}from'@/components/ui/use-toast';
+import{ScrollArea}from'@/components/ui/scroll-area';
+import{exportToExcel}from'@/lib/ExportUtils';
 
-const RelatorioReceitas = () => {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [receitas, setReceitas] = useState([]);
-  const [tiposReceita, setTiposReceita] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filtros, setFiltros] = useState({
-    dataInicial: '',
-    dataFinal: '',
-    tipo: 'all'
-  });
+const money=v=>new Intl.NumberFormat('pt-BR',{
+ style:'currency',
+ currency:'BRL'
+}).format(Number(v||0));
 
-  const fetchData = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    const [receitasRes, tiposRes] = await Promise.all([
-      supabase.from('receitas').select('*').eq('user_id', user.id).order('data', { ascending: false }),
-      supabase.from('tipos_receita').select('*').eq('user_id', user.id),
-    ]);
-    if (receitasRes.error) toast({ title: 'Erro ao buscar receitas', variant: 'destructive' });
-    else setReceitas(receitasRes.data);
-    if (tiposRes.error) toast({ title: 'Erro ao buscar tipos', variant: 'destructive' });
-    else setTiposReceita(tiposRes.data);
-    setLoading(false);
-  }, [user, toast]);
+const dateBR=v=>{
+ if(!v)return'—';
+ const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+ return m?`${m[3]}/${m[2]}/${m[1]}`:new Date(v).toLocaleDateString('pt-BR');
+};
 
-  useEffect(() => {
-    fetchData();
-    if (!user) return;
-    const channel = supabase.channel('pessoal_relatorio_receitas_changes')
-      .on('postgres_changes', { event: '*', schema: 'public' }, fetchData)
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [user, fetchData]);
+const StatCard=({label,value,icon:Icon,type='blue',note})=>{
+ const styles={
+  blue:{
+   border:'border-blue-500/20',
+   bg:'from-blue-500/10 to-blue-700/10',
+   icon:'bg-blue-500/10',
+   text:'text-blue-400'
+  },
+  green:{
+   border:'border-emerald-500/20',
+   bg:'from-emerald-500/10 to-emerald-700/10',
+   icon:'bg-emerald-500/10',
+   text:'text-emerald-400'
+  }
+ };
 
-  const receitasFiltradas = useMemo(() => {
-    return receitas.filter(r => {
-      const dataReceita = new Date(r.data);
-      const dataInicial = filtros.dataInicial ? new Date(filtros.dataInicial) : null;
-      const dataFinal = filtros.dataFinal ? new Date(filtros.dataFinal) : null;
-      if (dataInicial && dataReceita < dataInicial) return false;
-      if (dataFinal && dataReceita > dataFinal) return false;
-      if (filtros.tipo !== 'all' && r.receita !== filtros.tipo) return false;
-      return true;
-    });
-  }, [receitas, filtros]);
+ const s=styles[type];
 
-  const totalReceitas = receitasFiltradas.reduce((sum, r) => sum + parseFloat(r.valor || 0), 0);
+ return(
+  <Card className={`${s.border} bg-gradient-to-br ${s.bg}`}>
+   <CardContent className="p-4">
+    <div className="flex items-center gap-3">
+     <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${s.icon}`}>
+      <Icon className={`h-5 w-5 ${s.text}`}/>
+     </div>
 
-  return (
-    <div className="space-y-6">
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-3xl font-bold text-foreground mb-2">Relatório de Receitas</h2>
-            <p className="text-muted-foreground">Visualize e filtre suas receitas</p>
-          </div>
-          <Button variant="outline" onClick={() => toast({ title: 'Em breve!', description: 'Exportação de relatórios será implementada.' })}>
-            <FileDown className="mr-2 h-4 w-4" />
-            Exportar
-          </Button>
-        </div>
-      </motion.div>
+     <div className="min-w-0">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+       {label}
+      </p>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-xl shadow-lg p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Search className="w-5 h-5 text-muted-foreground" />
-          <h3 className="text-lg font-semibold text-foreground">Filtros</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2"><Label htmlFor="dataInicial">Data Inicial</Label><Input id="dataInicial" type="date" value={filtros.dataInicial} onChange={(e) => setFiltros({ ...filtros, dataInicial: e.target.value })} className="bg-background/70 text-white" /></div>
-          <div className="space-y-2"><Label htmlFor="dataFinal">Data Final</Label><Input id="dataFinal" type="date" value={filtros.dataFinal} onChange={(e) => setFiltros({ ...filtros, dataFinal: e.target.value })} className="bg-background/70 text-white" /></div>
-          <div className="space-y-2">
-            <Label htmlFor="tipo">Tipo de Receita</Label>
-            <Select value={filtros.tipo} onValueChange={(value) => setFiltros({ ...filtros, tipo: value })}>
-              <SelectTrigger className="bg-background/70 text-white"><SelectValue placeholder="Todos" /></SelectTrigger>
-              <SelectContent className="dark-pessoal">
-                <ScrollArea className="h-48">
-                  <SelectItem value="all">Todos</SelectItem>
-                  {tiposReceita.map((tipo) => (<SelectItem key={tipo.id} value={tipo.nome_receita}>{tipo.nome_receita}</SelectItem>))}
-                </ScrollArea>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </motion.div>
+      <p className={`mt-1 truncate text-xl font-bold ${s.text}`}>
+       {value}
+      </p>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-gradient-to-r from-green-500 to-blue-500 rounded-xl shadow-lg p-6 text-white">
-        <div className="flex items-center gap-3 mb-2"><FileText className="w-6 h-6" /><p className="text-sm opacity-90">Total de Receitas</p></div>
-        <p className="text-4xl font-bold">R$ {totalReceitas.toFixed(2)}</p>
-        <p className="text-sm opacity-90 mt-2">{receitasFiltradas.length} registro(s) encontrado(s)</p>
-      </motion.div>
-
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-card rounded-xl shadow-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-secondary/50 border-b border-border">
-              <tr><th className="p-4 text-left text-sm font-semibold text-muted-foreground">Data</th><th className="p-4 text-left text-sm font-semibold text-muted-foreground">Tipo</th><th className="p-4 text-left text-sm font-semibold text-muted-foreground">Origem</th><th className="p-4 text-left text-sm font-semibold text-muted-foreground">Valor</th></tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {loading ? (<tr><td colSpan="4" className="p-8 text-center">Carregando...</td></tr>) : receitasFiltradas.length === 0 ? (
-                <tr><td colSpan="4" className="p-8 text-center text-muted-foreground">Nenhuma receita encontrada</td></tr>
-              ) : (
-                receitasFiltradas.map((receita) => (
-                  <tr key={receita.id} className="hover:bg-accent">
-                    <td className="p-4 text-foreground">{new Date(receita.data).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                    <td className="p-4 text-foreground">{receita.receita}</td>
-                    <td className="p-4 text-foreground">{receita.origem}</td>
-                    <td className="p-4 text-green-400 font-semibold">R$ {parseFloat(receita.valor).toFixed(2)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
+      {note&&(
+       <p className="mt-1 text-xs text-muted-foreground">
+        {note}
+       </p>
+      )}
+     </div>
     </div>
+   </CardContent>
+  </Card>
+ );
+};
+
+const RelatorioReceitas=()=>{
+ const{user}=useAuth();
+ const{toast}=useToast();
+
+ const[receitas,setReceitas]=useState([]);
+ const[tiposReceita,setTiposReceita]=useState([]);
+ const[loading,setLoading]=useState(true);
+
+ const[filtros,setFiltros]=useState({
+  dataInicial:'',
+  dataFinal:'',
+  tipo:'all',
+  pesquisa:''
+ });
+
+ const fetchData=useCallback(async()=>{
+  if(!user)return;
+
+  setLoading(true);
+
+  const[receitasRes,tiposRes]=await Promise.all([
+   supabase
+    .from('receitas')
+    .select('*')
+    .eq('user_id',user.id)
+    .order('data',{ascending:false}),
+
+   supabase
+    .from('tipos_receita')
+    .select('*')
+    .eq('user_id',user.id)
+    .order('nome_receita',{ascending:true})
+  ]);
+
+  if(receitasRes.error){
+   toast({
+    title:'Erro ao buscar receitas',
+    variant:'destructive'
+   });
+  }else{
+   setReceitas(receitasRes.data||[]);
+  }
+
+  if(tiposRes.error){
+   toast({
+    title:'Erro ao buscar tipos',
+    variant:'destructive'
+   });
+  }else{
+   setTiposReceita(tiposRes.data||[]);
+  }
+
+  setLoading(false);
+ },[user,toast]);
+
+ useEffect(()=>{
+  fetchData();
+
+  if(!user)return;
+
+  const channel=supabase
+   .channel('pessoal_relatorio_receitas_changes')
+   .on(
+    'postgres_changes',
+    {event:'*',schema:'public'},
+    fetchData
+   )
+   .subscribe();
+
+  return()=>supabase.removeChannel(channel);
+ },[user,fetchData]);
+
+ const receitasFiltradas=useMemo(()=>{
+  const pesquisa=filtros.pesquisa.trim().toLowerCase();
+
+  return receitas.filter(r=>{
+   const data=String(r.data||'').slice(0,10);
+
+   if(filtros.dataInicial&&data<filtros.dataInicial)return false;
+   if(filtros.dataFinal&&data>filtros.dataFinal)return false;
+
+   if(
+    filtros.tipo!=='all'&&
+    r.receita!==filtros.tipo
+   )return false;
+
+   if(pesquisa){
+    const tipo=String(r.receita||'').toLowerCase();
+    const origem=String(r.origem||'').toLowerCase();
+
+    if(!tipo.includes(pesquisa)&&!origem.includes(pesquisa)){
+     return false;
+    }
+   }
+
+   return true;
+  });
+ },[receitas,filtros]);
+
+ const totalReceitas=useMemo(
+  ()=>receitasFiltradas.reduce(
+   (sum,r)=>sum+Number(r.valor||0),
+   0
+  ),
+  [receitasFiltradas]
+ );
+
+ const quantidade=receitasFiltradas.length;
+
+ const media=quantidade?totalReceitas/quantidade:0;
+
+ const maiorReceita=useMemo(
+  ()=>receitasFiltradas.reduce(
+   (max,r)=>Number(r.valor||0)>Number(max.valor||0)?r:max,
+   {valor:0}
+  ),
+  [receitasFiltradas]
+ );
+
+ const handleExport=()=>{
+  if(!receitasFiltradas.length){
+   toast({
+    title:'Aviso',
+    description:'Nenhuma receita para exportar.',
+    variant:'destructive'
+   });
+   return;
+  }
+
+  exportToExcel(
+   receitasFiltradas.map(r=>({
+    Data:dateBR(r.data),
+    Tipo:r.receita||'-',
+    Origem:r.origem||'-',
+    Valor:Number(r.valor||0)
+   })),
+   'Relatorio_Receitas',
+   'Receitas'
   );
+ };
+
+ const clearFilters=()=>{
+  setFiltros({
+   dataInicial:'',
+   dataFinal:'',
+   tipo:'all',
+   pesquisa:''
+  });
+ };
+
+ return(
+  <div className="dark-pessoal space-y-4">
+
+   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex items-center gap-3">
+     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-pessoal)/.20)] bg-[hsl(var(--neon-pessoal)/.08)]">
+      <TrendingUp className="h-5 w-5 text-[hsl(var(--neon-pessoal))]"/>
+     </div>
+
+     <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-[hsl(var(--neon-pessoal))]">
+       Relatórios
+      </p>
+
+      <h1 className="text-2xl font-bold tracking-tight">
+       Relatório de Receitas
+      </h1>
+
+      <p className="text-sm text-muted-foreground">
+       Consulte e analise suas receitas realizadas.
+      </p>
+     </div>
+    </div>
+
+    <div className="flex flex-wrap gap-2">
+     <Button
+      variant="outline"
+      onClick={handleExport}
+      disabled={!receitasFiltradas.length}
+     >
+      <Download className="mr-2 h-4 w-4"/>
+      Exportar
+     </Button>
+
+     <Button
+      variant="outline"
+      onClick={fetchData}
+     >
+      <RefreshCw className="mr-2 h-4 w-4"/>
+      Atualizar
+     </Button>
+    </div>
+   </div>
+
+   <Card className="border-border bg-card/80">
+    <CardContent className="grid gap-4 p-4 md:grid-cols-2 lg:grid-cols-4">
+
+     <div className="space-y-2">
+      <Label className="text-xs">Data inicial</Label>
+
+      <Input
+       type="date"
+       value={filtros.dataInicial}
+       onChange={e=>setFiltros(prev=>({
+        ...prev,
+        dataInicial:e.target.value
+       }))}
+       className="bg-input"
+      />
+     </div>
+
+     <div className="space-y-2">
+      <Label className="text-xs">Data final</Label>
+
+      <Input
+       type="date"
+       value={filtros.dataFinal}
+       onChange={e=>setFiltros(prev=>({
+        ...prev,
+        dataFinal:e.target.value
+       }))}
+       className="bg-input"
+      />
+     </div>
+
+     <div className="space-y-2">
+      <Label className="text-xs">Tipo de receita</Label>
+
+      <Select
+       value={filtros.tipo}
+       onValueChange={value=>setFiltros(prev=>({
+        ...prev,
+        tipo:value
+       }))}
+      >
+       <SelectTrigger className="bg-input">
+        <SelectValue placeholder="Todos"/>
+       </SelectTrigger>
+
+       <SelectContent className="dark-pessoal border-border bg-card">
+        <ScrollArea className="h-48">
+         <SelectItem value="all">
+          Todos os tipos
+         </SelectItem>
+
+         {tiposReceita.map(tipo=>(
+          <SelectItem
+           key={tipo.id}
+           value={tipo.nome_receita}
+          >
+           {tipo.nome_receita}
+          </SelectItem>
+         ))}
+        </ScrollArea>
+       </SelectContent>
+      </Select>
+     </div>
+
+     <div className="space-y-2">
+      <Label className="text-xs">Pesquisar</Label>
+
+      <div className="relative">
+       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+
+       <Input
+        value={filtros.pesquisa}
+        onChange={e=>setFiltros(prev=>({
+         ...prev,
+         pesquisa:e.target.value
+        }))}
+        placeholder="Tipo ou origem..."
+        className="bg-input pl-9"
+       />
+      </div>
+     </div>
+    </CardContent>
+
+    <div className="flex justify-end border-t border-border/50 px-4 py-3">
+     <Button
+      variant="ghost"
+      size="sm"
+      onClick={clearFilters}
+     >
+      Limpar filtros
+     </Button>
+    </div>
+   </Card>
+
+   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <StatCard
+     label="Total de Receitas"
+     value={money(totalReceitas)}
+     icon={TrendingUp}
+     type="blue"
+    />
+
+    <StatCard
+     label="Quantidade"
+     value={quantidade}
+     icon={Receipt}
+     type="blue"
+    />
+
+    <StatCard
+     label="Média por Receita"
+     value={money(media)}
+     icon={WalletCards}
+     type="blue"
+    />
+
+    <StatCard
+     label="Maior Receita"
+     value={money(maiorReceita.valor)}
+     icon={CalendarDays}
+     type="blue"
+    />
+   </div>
+
+   <Card className="border-border bg-card">
+    <CardHeader className="pb-3">
+     <CardTitle className="text-lg text-[hsl(var(--neon-pessoal))]">
+      Resultados
+     </CardTitle>
+    </CardHeader>
+
+    <CardContent className="p-0">
+     <div className="overflow-x-auto">
+      <Table>
+       <TableHeader>
+        <TableRow>
+         <TableHead>Data</TableHead>
+         <TableHead>Tipo</TableHead>
+         <TableHead>Origem</TableHead>
+         <TableHead className="text-right">Valor</TableHead>
+        </TableRow>
+       </TableHeader>
+
+       <TableBody>
+        {loading?(
+         <TableRow>
+          <TableCell
+           colSpan={4}
+           className="py-8 text-center text-muted-foreground"
+          >
+           Carregando...
+          </TableCell>
+         </TableRow>
+        ):receitasFiltradas.length===0?(
+         <TableRow>
+          <TableCell
+           colSpan={4}
+           className="py-10 text-center text-muted-foreground"
+          >
+           Nenhuma receita encontrada.
+          </TableCell>
+         </TableRow>
+        ):(
+         receitasFiltradas.map(receita=>(
+          <TableRow
+           key={receita.id}
+           className="hover:bg-blue-500/5"
+          >
+           <TableCell className="text-sm">
+            {dateBR(receita.data)}
+           </TableCell>
+
+           <TableCell className="font-medium">
+            {receita.receita||'—'}
+           </TableCell>
+
+           <TableCell className="text-sm text-muted-foreground">
+            {receita.origem||'—'}
+           </TableCell>
+
+           <TableCell className="text-right font-semibold text-[hsl(var(--neon-pessoal))]">
+            {money(receita.valor)}
+           </TableCell>
+          </TableRow>
+         ))
+        )}
+       </TableBody>
+      </Table>
+     </div>
+    </CardContent>
+   </Card>
+
+  </div>
+ );
 };
 
 export default RelatorioReceitas;
