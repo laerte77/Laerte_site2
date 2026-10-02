@@ -1,9 +1,9 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  Home, DollarSign, BookOpen, ShieldCheck, ChevronLeft, ChevronRight,
-  LayoutGrid, LogOut, ArrowLeftRight, TrendingUp, PieChart, Zap,
-  Target, List, CreditCard, Users, Receipt, Search
+  Home, DollarSign, BookOpen, ChevronLeft, ChevronRight,
+  LayoutGrid, LogOut, TrendingUp, Target, List,
+  CreditCard, Users, Receipt, Zap
 } from 'lucide-react';
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger
@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 const NavLink = ({ to, icon: Icon, children }) => {
   const location = useLocation();
+
   const active = to === '/pessoal/dashboard'
     ? location.pathname === to
     : location.pathname.startsWith(to);
@@ -36,21 +37,26 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
   const { isAdmin, signOut } = useAuth();
 
   return (
-    <aside className={cn(
-      'fixed inset-y-0 left-0 z-40 flex flex-col border-r bg-card transition-all duration-300',
-      isMobile
-        ? isOpen ? 'translate-x-0 w-60' : '-translate-x-full w-60'
-        : isOpen ? 'w-60' : 'w-20'
-    )}>
-
+    <aside
+      className={cn(
+        'fixed inset-y-0 left-0 z-40 flex flex-col border-r bg-card transition-all duration-300',
+        isMobile
+          ? isOpen ? 'translate-x-0 w-60' : '-translate-x-full w-60'
+          : isOpen ? 'w-60' : 'w-20'
+      )}
+    >
       <div className="flex h-16 items-center justify-between border-b px-4">
-        <Link to="/" className={cn(
-          'flex items-center gap-2 font-semibold text-primary',
-          !(isOpen || isMobile) && 'pointer-events-none opacity-0'
-        )}>
+        <Link
+          to="/"
+          className={cn(
+            'flex items-center gap-2 font-semibold text-primary',
+            !(isOpen || isMobile) && 'pointer-events-none opacity-0'
+          )}
+        >
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">
             <DollarSign className="h-4 w-4" />
           </div>
+
           <span className="text-sm font-bold uppercase">PESSOAL</span>
         </Link>
 
@@ -84,76 +90,181 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
           <Accordion type="single" collapsible className="w-full">
 
             <AccordionItem value="cadastros" className="border-b-0">
-              <AccordionTrigger><span>📋 Cadastros</span></AccordionTrigger>
+              <AccordionTrigger>
+                <span>📋 Cadastros</span>
+              </AccordionTrigger>
+
               <AccordionContent>
-                <NavLink to="/pessoal/dashboard/cadastros/tipos-receita" icon={List}>Tipos de Receita</NavLink>
-                <NavLink to="/pessoal/dashboard/cadastros/tipos-despesa" icon={List}>Tipos de Despesa</NavLink>
-                <NavLink to="/pessoal/dashboard/cadastros/cartoes-credito" icon={CreditCard}>Cartões de Crédito</NavLink>
-                <NavLink to="/pessoal/dashboard/cadastros/cartao-usuarios" icon={Users}>Pessoas do Cartão</NavLink>
-                <NavLink to="/pessoal/dashboard/cadastros/livros" icon={List}>Livros</NavLink>
+                <NavLink to="/pessoal/dashboard/cadastros/tipos-receita" icon={List}>
+                  Tipos de Receita
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/cadastros/tipos-despesa" icon={List}>
+                  Tipos de Despesa
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/cadastros/cartoes-credito" icon={CreditCard}>
+                  Cartões de Crédito
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/cadastros/cartao-usuarios" icon={Users}>
+                  Pessoas do Cartão
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/cadastros/livros" icon={List}>
+                  Livros
+                </NavLink>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="lancamentos" className="border-b-0">
-              <AccordionTrigger><span>↔️ Lançamentos</span></AccordionTrigger>
+              <AccordionTrigger>
+                <span>↔️ Lançamentos</span>
+              </AccordionTrigger>
+
               <AccordionContent>
-                <NavLink to="/pessoal/dashboard/lancamentos/receitas" icon={DollarSign}>Receitas</NavLink>
-                <NavLink to="/pessoal/dashboard/lancamentos/despesas" icon={List}>Despesas</NavLink>
-                <NavLink to="/pessoal/dashboard/lancamentos/despesa-prevista" icon={Target}>Despesas Previstas</NavLink>
-                <NavLink to="/pessoal/dashboard/lancamentos/faturas" icon={CreditCard}>Faturas do Cartão</NavLink>
-                <NavLink to="/pessoal/dashboard/lancamentos/cartao-lancamentos" icon={Receipt}>Lanç. do Cartão</NavLink>
-                <NavLink to="/pessoal/dashboard/lancamentos/devedores" icon={List}>Devedores</NavLink>
-                <NavLink to="/pessoal/dashboard/lancamentos/dizimos-e-ofertas" icon={DollarSign}>Dízimos/Ofertas</NavLink>
+                <NavLink to="/pessoal/dashboard/lancamentos/receitas" icon={DollarSign}>
+                  Receitas
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/lancamentos/despesas" icon={List}>
+                  Despesas
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/lancamentos/despesa-prevista" icon={Target}>
+                  Despesas Previstas
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/lancamentos/faturas" icon={CreditCard}>
+                  Faturas do Cartão
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/lancamentos/cartao-lancamentos" icon={Receipt}>
+                  Lanç. do Cartão
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/lancamentos/devedores" icon={List}>
+                  Devedores
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/lancamentos/dizimos-e-ofertas" icon={DollarSign}>
+                  Dízimos/Ofertas
+                </NavLink>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="investimentos" className="border-b-0">
-              <AccordionTrigger><span>📈 Investimento</span></AccordionTrigger>
+              <AccordionTrigger>
+                <span>📈 Investimento</span>
+              </AccordionTrigger>
+
               <AccordionContent>
-                <NavLink to="/pessoal/dashboard/investimentos/aportes" icon={DollarSign}>Aportes</NavLink>
-                <NavLink to="/pessoal/dashboard/investimentos/rendimentos" icon={TrendingUp}>Rendimentos</NavLink>
+                <NavLink to="/pessoal/dashboard/investimentos/aportes" icon={DollarSign}>
+                  Aportes
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/investimentos/rendimentos" icon={TrendingUp}>
+                  Rendimentos
+                </NavLink>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="leitura" className="border-b-0">
-              <AccordionTrigger><span>📖 Leitura Bíblica</span></AccordionTrigger>
+              <AccordionTrigger>
+                <span>📖 Leitura Bíblica</span>
+              </AccordionTrigger>
+
               <AccordionContent>
-                <NavLink to="/pessoal/dashboard/lancamentos/leitura" icon={BookOpen}>Lançamentos</NavLink>
+                <NavLink to="/pessoal/dashboard/lancamentos/leitura" icon={BookOpen}>
+                  Lançamentos
+                </NavLink>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="planejamento" className="border-b-0">
-              <AccordionTrigger><span>🎯 Planejamento</span></AccordionTrigger>
+              <AccordionTrigger>
+                <span>🎯 Planejamento</span>
+              </AccordionTrigger>
+
               <AccordionContent>
-                <NavLink to="/pessoal/dashboard/planejamento" icon={Target}>Planejamento Financeiro</NavLink>
-                <NavLink to="/pessoal/dashboard/lancamentos/metas" icon={Target}>Metas</NavLink>
+                <NavLink to="/pessoal/dashboard/planejamento" icon={Target}>
+                  Planejamento Financeiro
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/planejamento/metas" icon={Target}>
+                  Metas
+                </NavLink>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="consultas" className="border-b-0">
-              <AccordionTrigger><span>🔎 Consultas</span></AccordionTrigger>
+              <AccordionTrigger>
+                <span>🔎 Consultas</span>
+              </AccordionTrigger>
+
               <AccordionContent>
-                <NavLink to="/pessoal/dashboard/contas-mes" icon={Receipt}>Contas do Mês</NavLink>
-                <NavLink to="/pessoal/dashboard/lancamentos/dividas-previstas-mes-a-mes" icon={List}>Dívidas Mês a Mês</NavLink>
+                <NavLink to="/pessoal/dashboard/consultas/contas-mes" icon={Receipt}>
+                  Contas do Mês
+                </NavLink>
+
+                <NavLink
+                  to="/pessoal/dashboard/consultas/despesas-previstas-mes-a-mes"
+                  icon={Target}
+                >
+                  Despesas Previstas Mês a Mês
+                </NavLink>
+
+                <NavLink
+                  to="/pessoal/dashboard/consultas/dividas-previstas-mes-a-mes"
+                  icon={List}
+                >
+                  Dívidas Previstas Mês a Mês
+                </NavLink>
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="relatorios" className="border-b-0">
-              <AccordionTrigger><span>📊 Relatórios</span></AccordionTrigger>
+              <AccordionTrigger>
+                <span>📊 Relatórios</span>
+              </AccordionTrigger>
+
               <AccordionContent>
-                <NavLink to="/pessoal/dashboard/relatorios/receitas" icon={DollarSign}>Receitas</NavLink>
-                <NavLink to="/pessoal/dashboard/relatorios/despesas" icon={List}>Despesas</NavLink>
-                <NavLink to="/pessoal/dashboard/relatorios/despesas-previstas" icon={Target}>Despesas Previstas</NavLink>
-                <NavLink to="/pessoal/dashboard/relatorios/cartoes" icon={CreditCard}>Cartões de Crédito</NavLink>
-                <NavLink to="/pessoal/dashboard/relatorios/cartoes-pessoas" icon={Users}>Cartões por Pessoa</NavLink>
-                <NavLink to="/pessoal/dashboard/relatorios/devedores" icon={List}>Devedores</NavLink>
-                <NavLink to="/pessoal/dashboard/relatorios/leitura" icon={BookOpen}>Leitura</NavLink>
+                <NavLink to="/pessoal/dashboard/relatorios/receitas" icon={DollarSign}>
+                  Receitas
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/relatorios/despesas" icon={List}>
+                  Despesas
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/relatorios/despesas-previstas" icon={Target}>
+                  Despesas Previstas
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/relatorios/cartoes" icon={CreditCard}>
+                  Cartões de Crédito
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/relatorios/cartoes-pessoas" icon={Users}>
+                  Cartões por Pessoa
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/relatorios/devedores" icon={List}>
+                  Devedores
+                </NavLink>
+
+                <NavLink to="/pessoal/dashboard/relatorios/leitura" icon={BookOpen}>
+                  Leitura
+                </NavLink>
               </AccordionContent>
             </AccordionItem>
 
             {isAdmin && (
               <AccordionItem value="admin" className="border-b-0">
-                <AccordionTrigger><span>🛡️ Administração</span></AccordionTrigger>
+                <AccordionTrigger>
+                  <span>🛡️ Administração</span>
+                </AccordionTrigger>
+
                 <AccordionContent>
                   <NavLink to="/pessoal/dashboard/admin/gerenciar-usuarios">
                     Gerenciar Usuários
@@ -167,7 +278,10 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
       </nav>
 
       <div className="space-y-1 border-t p-2">
-        <Link to="/" className="flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground hover:bg-accent">
+        <Link
+          to="/"
+          className="flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground hover:bg-accent"
+        >
           <LayoutGrid className="h-4 w-4" />
           {(isOpen || isMobile) && 'Módulos'}
         </Link>
@@ -181,7 +295,6 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
           {(isOpen || isMobile) && 'Sair'}
         </button>
       </div>
-
     </aside>
   );
 };
