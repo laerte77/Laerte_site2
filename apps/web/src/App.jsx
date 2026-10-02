@@ -7,7 +7,6 @@ import Login from'@/pages/Login.jsx';
 import Register from'@/pages/Register.jsx';
 import LoadingScreen from'@/pages/LoadingScreen.jsx';
 import ModuleSelectionScreen from'@/pages/ModuleSelectionScreen.jsx';
-import PessoalDashboardHome from'@/components/pessoal/PessoalDashboardHome.jsx';
 import PessoalDashboard from'@/pages/pessoal/PessoalDashboard.jsx';
 import LmImpressoesDashboardHome from'@/components/lanhouse/LmImpressoesDashboardHome.jsx';
 import LmImpressoesDashboard from'@/pages/lanhouse/LmImpressoesDashboard.jsx';
@@ -84,7 +83,7 @@ function App(){
         <Route path="/login" element={<Login/>}/>
         <Route path="/register" element={<PrivateRoute adminOnly><Register/></PrivateRoute>}/>
 
-        <Route path="/pessoal/dashboard/home" element={<PrivateRoute requiredModule="pessoal"><PessoalDashboardHome/></PrivateRoute>}/>
+        <Route path="/pessoal/dashboard/home" element={<Navigate to="/pessoal/dashboard" replace/>}/>
         <Route path="/lm-impressoes/dashboard/home" element={<PrivateRoute requiredModule="lm-impressoes"><LmImpressoesDashboardHome/></PrivateRoute>}/>
         <Route path="/igreja/tesouraria/home" element={<PrivateRoute requiredModule="igreja:tesouraria"><IgrejaDashboardHome/></PrivateRoute>}/>
         <Route path="/entretenimento/dashboard/home" element={<PrivateRoute requiredModule="entretenimento"><EntretenimentoDashboardHome/></PrivateRoute>}/>
