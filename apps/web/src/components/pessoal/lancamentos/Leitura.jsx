@@ -1,64 +1,65 @@
-import React,{useState,useEffect,useCallback,useRef}from'react';
+import React,{useState,useEffect,useCallback,useMemo,useRef}from'react';
 import{motion}from'framer-motion';
-import{Plus,Edit,Trash,Search,BookOpen}from'lucide-react';
+import{Plus,Edit,Trash,Search,BookOpen,Download,BookMarked,Hash,CalendarDays,RotateCcw}from'lucide-react';
+import{format,parseISO,getMonth,getYear}from'date-fns';
+import{ptBR}from'date-fns/locale';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
+import{Card,CardContent}from'@/components/ui/card';
+import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{useToast}from'@/components/ui/use-toast';
 import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle}from'@/components/ui/alert-dialog';
-import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
-import{ScrollArea}from'@/components/ui/scroll-area';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import SearchableModal from'@/components/SearchableModal';
 import ModalLancamentoPadrao from'@/components/pessoal/ModalLancamentoPadrao';
+import{exportToExcel}from'@/lib/ExportUtils';
 
+const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const TZ='America/Sao_Paulo';
+const BLUE='hsl(var(--neon-pessoal))';
 
 const getBRDate=()=>{
  const p=new Intl.DateTimeFormat('en-CA',{
-  timeZone:TZ,
-  year:'numeric',
-  month:'2-digit',
-  day:'2-digit'
+  timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'
  }).formatToParts(new Date()),v={};
 
- p.forEach(x=>{
-  if(x.type!=='literal')v[x.type]=x.value;
- });
-
+ p.forEach(x=>{if(x.type!=='literal')v[x.type]=x.value});
  return`${v.year}-${v.month}-${v.day}`;
 };
 
 const brDate=d=>d
  ?new Date(d).toLocaleDateString('pt-BR',{timeZone:'UTC'})
- :'-';
+ :'—';
 
 const Leitura=()=>{
- const{toast}=useToast();
- const{user}=useAuth();
- const isMountedRef=useRef(true);
+ const{toast}=useToast(),{user}=useAuth(),mounted=useRef(true);
 
  const[leituras,setLeituras]=useState([]);
  const[livros,setLivros]=useState([]);
  const[loading,setLoading]=useState(true);
+ const[searchTerm,setSearchTerm]=useState('');
+ const[selectedMonth,setSelectedMonth]=useState('all');
+ const[selectedYear,setSelectedYear]=useState('all');
+ const[currentPage,setCurrentPage]=useState(1);
  const[isDialogOpen,setIsDialogOpen]=useState(false);
  const[isSearchModalOpen,setIsSearchModalOpen]=useState(false);
- const[currentLeitura,setCurrentLeitura]=useState(null);
  const[itemToDelete,setItemToDelete]=useState(null);
+ const[currentLeitura,setCurrentLeitura]=useState(null);
 
- const[formData,setFormData]=useState({
+ const initialForm=()=>({
   data:getBRDate(),
   livro:'',
   capitulos_lidos:''
  });
 
- useEffect(()=>{
-  isMountedRef.current=true;
+ const[formData,setFormData]=useState(initialForm);
+ const pageSize=10;
 
-  return()=>{
-   isMountedRef.current=false;
-  };
+ useEffect(()=>{
+  mounted.current=true;
+  return()=>{mounted.current=false};
  },[]);
 
  const fetchData=useCallback(async()=>{
@@ -78,25 +79,25 @@ const Leitura=()=>{
      .from('livros')
      .select('nome_livro')
      .eq('user_id',user.id)
+     .order('nome_livro')
    ]);
-
-   if(!isMountedRef.current)return;
 
    if(leiturasRes.error)throw leiturasRes.error;
    if(livrosRes.error)throw livrosRes.error;
+   if(!mounted.current)return;
 
    setLeituras(leiturasRes.data||[]);
    setLivros(livrosRes.data||[]);
   }catch(error){
-   if(isMountedRef.current){
-    toast({
-     title:'Erro',
-     variant:'destructive',
-     description:error.message||'Não foi possível carregar os dados.'
-    });
-   }
+   if(!mounted.current)return;
+
+   toast({
+    title:'Erro',
+    description:error.message||'Não foi possível carregar os dados.',
+    variant:'destructive'
+   });
   }finally{
-   if(isMountedRef.current)setLoading(false);
+   if(mounted.current)setLoading(false);
   }
  },[user,toast]);
 
@@ -109,11 +110,7 @@ const Leitura=()=>{
    .channel('pessoal_leitura_changes')
    .on(
     'postgres_changes',
-    {
-     event:'*',
-     schema:'public',
-     table:'leituras'
-    },
+    {event:'*',schema:'public',table:'leituras'},
     fetchData
    )
    .subscribe();
@@ -121,73 +118,62 @@ const Leitura=()=>{
   return()=>supabase.removeChannel(channel);
  },[user,fetchData]);
 
+ const availableYears=useMemo(()=>{
+  const years=leituras.map(item=>getYear(parseISO(item.data)));
+  years.push(new Date().getFullYear());
+  return[...new Set(years)].sort((a,b)=>b-a);
+ },[leituras]);
+
+ const filtered=useMemo(()=>{
+  let result=leituras;
+
+  if(selectedYear!=='all'){
+   result=result.filter(
+    item=>String(getYear(parseISO(item.data)))===selectedYear
+   );
+  }
+
+  if(selectedMonth!=='all'){
+   result=result.filter(
+    item=>String(getMonth(parseISO(item.data)))===selectedMonth
+   );
+  }
+
+  if(searchTerm.trim()){
+   const term=searchTerm.toLowerCase();
+
+   result=result.filter(item=>
+    (item.livro||'').toLowerCase().includes(term)
+   );
+  }
+
+  return result;
+ },[leituras,selectedYear,selectedMonth,searchTerm]);
+
+ useEffect(()=>{
+  setCurrentPage(1);
+ },[selectedYear,selectedMonth,searchTerm]);
+
+ const totalCapitulos=useMemo(
+  ()=>filtered.reduce((sum,item)=>sum+Number(item.capitulos_lidos||0),0),
+  [filtered]
+ );
+
+ const totalLivros=new Set(filtered.map(item=>item.livro).filter(Boolean)).size;
+
+ const totalPages=Math.max(
+  1,
+  Math.ceil(filtered.length/pageSize)
+ );
+
+ const paginated=filtered.slice(
+  (currentPage-1)*pageSize,
+  currentPage*pageSize
+ );
+
  const resetForm=()=>{
-  setFormData({
-   data:getBRDate(),
-   livro:'',
-   capitulos_lidos:''
-  });
-
+  setFormData(initialForm());
   setCurrentLeitura(null);
- };
-
- const handleSave=async()=>{
-  if(
-   !formData.data||
-   !formData.livro||
-   !formData.capitulos_lidos
-  ){
-   toast({
-    title:'Erro',
-    description:'Todos os campos são obrigatórios.',
-    variant:'destructive'
-   });
-   return;
-  }
-
-  try{
-   const dataToSave={
-    data:formData.data,
-    livro:formData.livro,
-    capitulos_lidos:formData.capitulos_lidos,
-    user_id:user.id
-   };
-
-   if(currentLeitura){
-    const{error}=await supabase
-     .from('leituras')
-     .update(dataToSave)
-     .eq('id',currentLeitura.id);
-
-    if(error)throw error;
-   }else{
-    const{error}=await supabase
-     .from('leituras')
-     .insert(dataToSave);
-
-    if(error)throw error;
-   }
-
-   if(!isMountedRef.current)return;
-
-   toast({
-    title:'Sucesso',
-    description:currentLeitura
-     ?'Leitura atualizada.'
-     :'Leitura registrada.'
-   });
-
-   resetForm();
-   fetchData();
-  }catch(error){
-   if(isMountedRef.current){
-    toast({
-     title:'Erro',
-     description:error.message||'Não foi possível salvar.',
-     variant:'destructive'
-    });
-   }
-  }
  };
 
  const openDialog=item=>{
@@ -211,6 +197,57 @@ const Leitura=()=>{
   resetForm();
  };
 
+ const handleSave=async()=>{
+  if(!formData.data||!formData.livro||!formData.capitulos_lidos){
+   toast({
+    title:'Campos obrigatórios',
+    description:'Preencha todos os campos.',
+    variant:'destructive'
+   });
+   return;
+  }
+
+  try{
+   const dataToSave={
+    data:formData.data,
+    livro:formData.livro,
+    capitulos_lidos:formData.capitulos_lidos,
+    user_id:user.id
+   };
+
+   const result=currentLeitura
+    ?await supabase
+      .from('leituras')
+      .update(dataToSave)
+      .eq('id',currentLeitura.id)
+      .eq('user_id',user.id)
+    :await supabase
+      .from('leituras')
+      .insert(dataToSave);
+
+   if(result.error)throw result.error;
+   if(!mounted.current)return;
+
+   toast({
+    title:'Sucesso',
+    description:currentLeitura
+     ?'Leitura atualizada.'
+     :'Leitura registrada.'
+   });
+
+   closeDialog();
+   fetchData();
+  }catch(error){
+   if(!mounted.current)return;
+
+   toast({
+    title:'Erro',
+    description:error.message||'Não foi possível salvar.',
+    variant:'destructive'
+   });
+  }
+ };
+
  const handleDelete=async()=>{
   if(!itemToDelete)return;
 
@@ -218,164 +255,238 @@ const Leitura=()=>{
    const{error}=await supabase
     .from('leituras')
     .delete()
-    .eq('id',itemToDelete.id);
+    .eq('id',itemToDelete.id)
+    .eq('user_id',user.id);
 
    if(error)throw error;
+   if(!mounted.current)return;
 
-   if(isMountedRef.current){
-    toast({
-     title:'Removido',
-     description:'Leitura removida.'
-    });
+   toast({
+    title:'Removido',
+    description:'Leitura removida.'
+   });
 
-    setItemToDelete(null);
-    fetchData();
-   }
+   setItemToDelete(null);
+   fetchData();
   }catch(error){
-   if(isMountedRef.current){
-    toast({
-     title:'Erro',
-     description:error.message||'Não foi possível remover.',
-     variant:'destructive'
-    });
-   }
+   toast({
+    title:'Erro',
+    description:error.message||'Não foi possível remover.',
+    variant:'destructive'
+   });
   }
  };
 
+ const handleExport=()=>{
+  if(!filtered.length){
+   toast({
+    title:'Sem dados',
+    description:'Não há leituras para exportar.',
+    variant:'destructive'
+   });
+   return;
+  }
+
+  exportToExcel(
+   filtered.map(item=>({
+    DATA:brDate(item.data),
+    LIVRO:item.livro,
+    CAPÍTULOS:Number(item.capitulos_lidos||0)
+   })),
+   'Leituras_Biblicas',
+   'Leituras'
+  );
+ };
+
+ const limparFiltros=()=>{
+  setSearchTerm('');
+  setSelectedMonth('all');
+  setSelectedYear('all');
+ };
+
+ const stats=[
+  {
+   label:'Leituras',
+   value:filtered.length,
+   icon:BookMarked
+  },
+  {
+   label:'Capítulos',
+   value:totalCapitulos,
+   icon:Hash
+  },
+  {
+   label:'Livros',
+   value:totalLivros,
+   icon:BookOpen
+  },
+  {
+   label:'Período',
+   value:selectedMonth==='all'
+    ?'Todos'
+    :meses[Number(selectedMonth)],
+   icon:CalendarDays
+  }
+ ];
+
  return(
-  <React.Fragment>
+  <motion.div
+   initial={{opacity:0,y:20}}
+   animate={{opacity:1,y:0}}
+   className="dark-pessoal space-y-5"
+  >
 
-   <motion.div
-    initial={{opacity:0,y:20}}
-    animate={{opacity:1,y:0}}
-    className="dark-pessoal space-y-6"
-   >
+   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
-    <div className="flex items-center justify-between">
+    <div>
+     <p
+      className="text-xs font-semibold uppercase tracking-[.2em]"
+      style={{color:BLUE}}
+     >
+      Vida Pessoal
+     </p>
 
-     <div>
-      <h2 className="text-3xl font-bold text-blue-500">
-       Lançamento de Leitura
-      </h2>
-     </div>
+     <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">
+      Lançamento de Leitura
+     </h1>
 
-     <div className="flex gap-2">
-
-      <Button
-       onClick={()=>setIsSearchModalOpen(true)}
-       variant="outline"
-       className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
-      >
-       <Search className="mr-2 h-4 w-4"/>
-       Buscar
-      </Button>
-
-      <Button
-       onClick={()=>openDialog()}
-       className="bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700"
-      >
-       <Plus className="mr-2 h-4 w-4"/>
-       Nova Leitura
-      </Button>
-
-     </div>
+     <p className="text-sm text-muted-foreground">
+      Registre e acompanhe suas leituras bíblicas.
+     </p>
     </div>
 
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+    <div className="flex flex-wrap gap-2">
 
-     <div className="overflow-x-auto">
+     <Button
+      variant="outline"
+      onClick={handleExport}
+      className="border-border hover:bg-blue-500/10"
+      style={{color:BLUE}}
+     >
+      <Download className="mr-2 h-4 w-4"/>
+      Exportar
+     </Button>
 
-      <table className="w-full text-sm">
+     <Button
+      variant="outline"
+      onClick={()=>setIsSearchModalOpen(true)}
+      className="border-border hover:bg-blue-500/10"
+      style={{color:BLUE}}
+     >
+      <Search className="mr-2 h-4 w-4"/>
+      Selecionar
+     </Button>
 
-       <thead>
-        <tr className="border-b border-border bg-secondary/50">
+     <Button
+      onClick={()=>openDialog()}
+      className="text-white shadow-lg hover:opacity-90"
+      style={{
+       background:BLUE,
+       boxShadow:'0 0 18px hsl(var(--neon-pessoal)/.2)'
+      }}
+     >
+      <Plus className="mr-2 h-4 w-4"/>
+      Nova Leitura
+     </Button>
 
-         <th className="p-4 text-left font-semibold text-muted-foreground">
-          Data
-         </th>
-
-         <th className="p-4 text-left font-semibold text-muted-foreground">
-          Livro
-         </th>
-
-         <th className="p-4 text-right font-semibold text-muted-foreground">
-          Capítulos
-         </th>
-
-         <th className="p-4 text-right font-semibold text-muted-foreground">
-          Ações
-         </th>
-
-        </tr>
-       </thead>
-
-       <tbody>
-
-        {loading?(
-         <tr>
-          <td colSpan="4" className="p-8 text-center">
-           Carregando...
-          </td>
-         </tr>
-        ):leituras.length===0?(
-         <tr>
-          <td
-           colSpan="4"
-           className="p-8 text-center text-muted-foreground"
-          >
-           Nenhuma leitura registrada.
-          </td>
-         </tr>
-        ):(
-         leituras.map(item=>(
-          <tr
-           key={item.id}
-           className="border-b border-border hover:bg-secondary/50"
-          >
-
-           <td className="p-4">
-            {brDate(item.data)}
-           </td>
-
-           <td className="p-4">
-            {item.livro}
-           </td>
-
-           <td className="p-4 text-right font-semibold text-blue-500">
-            {item.capitulos_lidos}
-           </td>
-
-           <td className="flex justify-end gap-2 p-4">
-
-            <Button
-             variant="ghost"
-             size="icon"
-             onClick={()=>openDialog(item)}
-            >
-             <Edit className="h-4 w-4 text-blue-500"/>
-            </Button>
-
-            <Button
-             variant="ghost"
-             size="icon"
-             onClick={()=>setItemToDelete(item)}
-            >
-             <Trash className="h-4 w-4 text-red-500"/>
-            </Button>
-
-           </td>
-
-          </tr>
-         ))
-        )}
-
-       </tbody>
-      </table>
-
-     </div>
     </div>
+   </div>
 
-   </motion.div>
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+
+    {stats.map(({label,value,icon:Icon})=>(
+     <Card key={label} className="border-border bg-card">
+      <CardContent className="flex items-center justify-between p-4">
+
+       <div>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+         {label}
+        </p>
+
+        <p
+         className="mt-1 text-xl font-bold tabular-nums"
+         style={{color:BLUE}}
+        >
+         {value}
+        </p>
+       </div>
+
+       <div
+        className="rounded-xl bg-blue-500/10 p-2.5"
+        style={{color:BLUE}}
+       >
+        <Icon className="h-5 w-5"/>
+       </div>
+
+      </CardContent>
+     </Card>
+    ))}
+
+   </div>
+
+   <Card className="border-border bg-card">
+    <CardContent className="p-4">
+
+     <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+
+      <div className="relative min-w-0 flex-1">
+       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+
+       <Input
+        placeholder="Buscar por livro..."
+        value={searchTerm}
+        onChange={e=>setSearchTerm(e.target.value)}
+        className="h-10 bg-input pl-9"
+       />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+
+       <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+        <SelectTrigger className="h-10 w-[140px] bg-input">
+         <SelectValue/>
+        </SelectTrigger>
+
+        <SelectContent>
+         <SelectItem value="all">Todos os meses</SelectItem>
+
+         {meses.map((mes,i)=>(
+          <SelectItem key={i} value={String(i)}>
+           {mes}
+          </SelectItem>
+         ))}
+        </SelectContent>
+       </Select>
+
+       <Select value={selectedYear} onValueChange={setSelectedYear}>
+        <SelectTrigger className="h-10 w-[110px] bg-input">
+         <SelectValue/>
+        </SelectTrigger>
+
+        <SelectContent>
+         <SelectItem value="all">Todos os anos</SelectItem>
+
+         {availableYears.map(year=>(
+          <SelectItem key={year} value={String(year)}>
+           {year}
+          </SelectItem>
+         ))}
+        </SelectContent>
+       </Select>
+
+       <Button
+        variant="outline"
+        onClick={limparFiltros}
+        className="h-10 border-border"
+       >
+        <RotateCcw className="mr-2 h-4 w-4"/>
+        Limpar
+       </Button>
+
+      </div>
+     </div>
+    </CardContent>
+   </Card>
 
    <SearchableModal
     isOpen={isSearchModalOpen}
@@ -387,19 +498,9 @@ const Leitura=()=>{
     tableName="leituras"
     searchField="livro"
     displayFields={[
-     {
-      key:'data',
-      label:'Data',
-      format:brDate
-     },
-     {
-      key:'livro',
-      label:'Livro'
-     },
-     {
-      key:'capitulos_lidos',
-      label:'Capítulos'
-     }
+     {key:'data',label:'Data',format:brDate},
+     {key:'livro',label:'Livro'},
+     {key:'capitulos_lidos',label:'Capítulos'}
     ]}
     title="Buscar Leitura"
    />
@@ -408,7 +509,7 @@ const Leitura=()=>{
     open={isDialogOpen}
     onClose={closeDialog}
     title={currentLeitura?'Editar Leitura':'Nova Leitura'}
-    description="Registre a data, o livro e a quantidade de capítulos lidos."
+    description="Registre a data, o livro e os capítulos lidos."
     icon={BookOpen}
     theme="blue"
     footer={
@@ -423,81 +524,216 @@ const Leitura=()=>{
 
       <Button
        onClick={handleSave}
-       className="h-10 rounded-xl bg-blue-600 px-7 font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700"
+       className="h-10 rounded-xl px-7 font-semibold text-white hover:opacity-90"
+       style={{background:BLUE}}
       >
-       Salvar
+       {currentLeitura?'Salvar Alterações':'Salvar Leitura'}
       </Button>
      </>
     }
    >
 
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+    <div className="space-y-5">
 
-     <div className="space-y-2">
-      <Label>Data</Label>
+     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
-      <Input
-       type="date"
-       value={formData.data}
-       onChange={e=>setFormData({
-        ...formData,
-        data:e.target.value
-       })}
-       className="h-11 rounded-xl bg-input"
-      />
+      <div className="space-y-2">
+       <Label>Data</Label>
+
+       <Input
+        type="date"
+        value={formData.data}
+        onChange={e=>setFormData(p=>({...p,data:e.target.value}))}
+        className="h-11 rounded-xl bg-input"
+       />
+      </div>
+
+      <div className="space-y-2">
+       <Label>Capítulos</Label>
+
+       <Input
+        type="number"
+        min="1"
+        value={formData.capitulos_lidos}
+        onChange={e=>setFormData(p=>({...p,capitulos_lidos:e.target.value}))}
+        className="h-11 rounded-xl bg-input"
+       />
+      </div>
+
      </div>
 
      <div className="space-y-2">
-      <Label>Capítulos</Label>
+      <Label>Livro</Label>
 
-      <Input
-       type="number"
-       min="1"
-       value={formData.capitulos_lidos}
-       onChange={e=>setFormData({
-        ...formData,
-        capitulos_lidos:e.target.value
-       })}
-       className="h-11 rounded-xl bg-input"
-      />
+      <Select
+       value={formData.livro}
+       onValueChange={v=>setFormData(p=>({...p,livro:v}))}
+      >
+       <SelectTrigger className="h-11 rounded-xl bg-input">
+        <SelectValue placeholder="Selecione o livro"/>
+       </SelectTrigger>
+
+       <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
+        <ScrollArea className="h-48">
+
+         {livros.map(l=>(
+          <SelectItem
+           key={l.nome_livro}
+           value={l.nome_livro}
+          >
+           {l.nome_livro}
+          </SelectItem>
+         ))}
+
+        </ScrollArea>
+       </SelectContent>
+      </Select>
      </div>
 
     </div>
-
-    <div className="space-y-2">
-
-     <Label>Livro</Label>
-
-     <Select
-      value={formData.livro}
-      onValueChange={v=>setFormData({
-       ...formData,
-       livro:v
-      })}
-     >
-      <SelectTrigger className="h-11 rounded-xl bg-input">
-       <SelectValue placeholder="Selecione o livro"/>
-      </SelectTrigger>
-
-      <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
-       <ScrollArea className="h-48">
-
-        {livros.map(l=>(
-         <SelectItem
-          key={l.nome_livro}
-          value={l.nome_livro}
-         >
-          {l.nome_livro}
-         </SelectItem>
-        ))}
-
-       </ScrollArea>
-      </SelectContent>
-     </Select>
-
-    </div>
-
    </ModalLancamentoPadrao>
+
+   <Card className="border-border bg-card">
+    <CardContent className="p-0">
+
+     <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+
+       <thead>
+        <tr className="border-b border-border bg-secondary/30">
+
+         <th className="p-4 text-left font-semibold text-muted-foreground">
+          Data
+         </th>
+
+         <th className="p-4 text-left font-semibold text-muted-foreground">
+          Livro
+         </th>
+
+         <th className="p-4 text-right font-semibold text-muted-foreground">
+          Capítulos
+         </th>
+
+         <th className="p-4 text-center font-semibold text-muted-foreground">
+          Ações
+         </th>
+
+        </tr>
+       </thead>
+
+       <tbody>
+
+        {loading?(
+         <tr>
+          <td colSpan={4} className="p-12 text-center text-muted-foreground">
+           Carregando leituras...
+          </td>
+         </tr>
+        ):paginated.length===0?(
+         <tr>
+          <td colSpan={4} className="p-12 text-center">
+
+           <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <BookOpen className="h-8 w-8 opacity-40"/>
+            <span>Nenhuma leitura encontrada.</span>
+           </div>
+
+          </td>
+         </tr>
+        ):(
+         paginated.map(item=>(
+          <tr
+           key={item.id}
+           className="border-b border-border transition-colors hover:bg-muted/40"
+          >
+
+           <td className="p-4 text-muted-foreground">
+            {brDate(item.data)}
+           </td>
+
+           <td className="p-4 font-medium">
+            {item.livro}
+           </td>
+
+           <td
+            className="p-4 text-right font-bold tabular-nums"
+            style={{color:BLUE}}
+           >
+            {item.capitulos_lidos}
+           </td>
+
+           <td className="p-4">
+            <div className="flex justify-center gap-1">
+
+             <Button
+              variant="ghost"
+              size="icon"
+              onClick={()=>openDialog(item)}
+              className="hover:bg-blue-500/10"
+              style={{color:BLUE}}
+             >
+              <Edit className="h-4 w-4"/>
+             </Button>
+
+             <Button
+              variant="ghost"
+              size="icon"
+              onClick={()=>setItemToDelete(item)}
+              className="text-red-500 hover:bg-red-500/10"
+             >
+              <Trash className="h-4 w-4"/>
+             </Button>
+
+            </div>
+           </td>
+
+          </tr>
+         ))
+        )}
+
+       </tbody>
+      </table>
+     </div>
+
+     {!loading&&filtered.length>0&&(
+      <div className="flex flex-col gap-2 border-t border-border px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+
+       <span>
+        Mostrando {((currentPage-1)*pageSize)+1}–{Math.min(currentPage*pageSize,filtered.length)} de {filtered.length}
+       </span>
+
+       <div className="flex items-center gap-1">
+
+        <Button
+         variant="outline"
+         size="sm"
+         disabled={currentPage===1}
+         onClick={()=>setCurrentPage(p=>Math.max(1,p-1))}
+         className="h-8"
+        >
+         Anterior
+        </Button>
+
+        <span className="px-2 text-xs">
+         {currentPage} / {totalPages}
+        </span>
+
+        <Button
+         variant="outline"
+         size="sm"
+         disabled={currentPage===totalPages}
+         onClick={()=>setCurrentPage(p=>Math.min(totalPages,p+1))}
+         className="h-8"
+        >
+         Próxima
+        </Button>
+
+       </div>
+      </div>
+     )}
+
+    </CardContent>
+   </Card>
 
    <AlertDialog
     open={!!itemToDelete}
@@ -521,16 +757,17 @@ const Leitura=()=>{
 
       <AlertDialogAction
        onClick={handleDelete}
-       className="bg-red-600"
+       className="bg-red-600 hover:bg-red-700"
       >
        Deletar
       </AlertDialogAction>
 
      </AlertDialogFooter>
+
     </AlertDialogContent>
    </AlertDialog>
 
-  </React.Fragment>
+  </motion.div>
  );
 };
 
