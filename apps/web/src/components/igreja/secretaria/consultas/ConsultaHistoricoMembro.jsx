@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useMemo,useState}from'react';
-import{Clock,Download,FileText,History,Printer,RefreshCw,UserRound,ArrowRight,PlusCircle,Trash2,Edit3}from'lucide-react';
+import{Clock,Download,FileText,History,Printer,RefreshCw,User,ArrowRight,PlusCircle,Trash2,Edit3}from'lucide-react';
 import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
 import{Button}from'@/components/ui/button';
 import{Badge}from'@/components/ui/badge';
@@ -14,11 +14,13 @@ const LOGO='https://horizons-cdn.hostinger.com/23ae9372-1ce3-488a-9be5-00d3fa6b6
 const NAVY=[15,23,42],BLUE=[37,99,235],YELLOW=[234,179,8],GREEN=[22,163,74],RED=[220,38,38],TEXT=[30,41,59],MUTED=[100,116,139],LINE=[203,213,225],LIGHT=[239,246,255];
 
 const formatDateTime=v=>v?new Date(v).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'medium'}):'-';
+
 const safeText=v=>{
  if(v===null||v===undefined||v==='')return'Não informado';
  if(typeof v==='object')return JSON.stringify(v);
  return String(v);
 };
+
 const img64=url=>new Promise(resolve=>{
  let done=false;
  const finish=v=>{if(done)return;done=true;resolve(v)};
@@ -28,13 +30,20 @@ const img64=url=>new Promise(resolve=>{
  i.onload=()=>{
   try{
    const c=document.createElement('canvas');
-   c.width=i.naturalWidth||i.width;c.height=i.naturalHeight||i.height;
+   c.width=i.naturalWidth||i.width;
+   c.height=i.naturalHeight||i.height;
    c.getContext('2d').drawImage(i,0,0);
    clearTimeout(tm);
    finish({data:c.toDataURL('image/png'),width:c.width,height:c.height});
-  }catch{clearTimeout(tm);finish(null)}
+  }catch{
+   clearTimeout(tm);
+   finish(null);
+  }
  };
- i.onerror=()=>{clearTimeout(tm);finish(null)};
+ i.onerror=()=>{
+  clearTimeout(tm);
+  finish(null);
+ };
  i.src=url;
 });
 
@@ -47,12 +56,18 @@ const ConsultaHistoricoMembro=({membro,open,onOpenChange})=>{
   if(!membro?.id)return;
   setLoading(true);
   try{
-   const{data,error}=await supabase.from('igreja_membros_historico').select('*').eq('membro_id',membro.id).order('alterado_em',{ascending:false});
+   const{data,error}=await supabase
+    .from('igreja_membros_historico')
+    .select('*')
+    .eq('membro_id',membro.id)
+    .order('alterado_em',{ascending:false});
    if(error)throw error;
    setHistorico(data||[]);
   }catch(e){
    toast({title:'Erro ao carregar histórico',description:e.message,variant:'destructive'});
-  }finally{setLoading(false)}
+  }finally{
+   setLoading(false);
+  }
  },[membro?.id,toast]);
 
  useEffect(()=>{if(open)carregar()},[open,carregar]);
@@ -86,23 +101,41 @@ const ConsultaHistoricoMembro=({membro,open,onOpenChange})=>{
   try{
    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
    const logo=await img64(LOGO);
-   doc.setFillColor(...NAVY);doc.rect(0,0,210,36,'F');
+
+   doc.setFillColor(...NAVY);
+   doc.rect(0,0,210,36,'F');
+
    if(logo){
     const s=Math.min(27/logo.width,22/logo.height);
     doc.addImage(logo.data,'PNG',11,6+(22-logo.height*s)/2,logo.width*s,logo.height*s);
    }
-   doc.setTextColor(255,255,255);
-   doc.setFont('helvetica','bold');doc.setFontSize(12);
-   doc.text('IGREJA ASSEMBLEIA DE DEUS',105,12,{align:'center'});
-   doc.setFontSize(9);doc.text('MINISTÉRIO PLANTAR • LEROLÂNDIA',105,18,{align:'center'});
-   doc.setFillColor(...YELLOW);doc.roundedRect(61,24,88,7,2,2,'F');
-   doc.setTextColor(...NAVY);doc.setFontSize(8);doc.text('HISTÓRICO DO MEMBRO',105,28.7,{align:'center'});
 
-   doc.setTextColor(...TEXT);doc.setFont('helvetica','bold');doc.setFontSize(11);
+   doc.setTextColor(255,255,255);
+   doc.setFont('helvetica','bold');
+   doc.setFontSize(12);
+   doc.text('IGREJA ASSEMBLEIA DE DEUS',105,12,{align:'center'});
+   doc.setFontSize(9);
+   doc.text('MINISTÉRIO PLANTAR • LEROLÂNDIA',105,18,{align:'center'});
+
+   doc.setFillColor(...YELLOW);
+   doc.roundedRect(61,24,88,7,2,2,'F');
+   doc.setTextColor(...NAVY);
+   doc.setFontSize(8);
+   doc.text('HISTÓRICO DO MEMBRO',105,28.7,{align:'center'});
+
+   doc.setTextColor(...TEXT);
+   doc.setFont('helvetica','bold');
+   doc.setFontSize(11);
    doc.text(membro?.nome_completo||'Membro',12,47);
-   doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
+
+   doc.setFont('helvetica','normal');
+   doc.setFontSize(7);
+   doc.setTextColor(...MUTED);
    doc.text(`Registros: ${historico.length} • Alterações: ${totalAlteracoes}`,12,53);
-   if(ultimoRegistro)doc.text(`Último registro: ${formatDateTime(ultimoRegistro)}`,198,53,{align:'right'});
+
+   if(ultimoRegistro){
+    doc.text(`Último registro: ${formatDateTime(ultimoRegistro)}`,198,53,{align:'right'});
+   }
 
    const body=historico.map(h=>[
     formatDateTime(h.alterado_em),
@@ -119,8 +152,21 @@ const ConsultaHistoricoMembro=({membro,open,onOpenChange})=>{
     startY:59,
     margin:{left:12,right:12,bottom:18},
     theme:'grid',
-    styles:{fontSize:6.5,cellPadding:2.4,textColor:TEXT,lineColor:LINE,lineWidth:.2,overflow:'linebreak',valign:'middle'},
-    headStyles:{fillColor:BLUE,textColor:[255,255,255],fontStyle:'bold',fontSize:6.5},
+    styles:{
+     fontSize:6.5,
+     cellPadding:2.4,
+     textColor:TEXT,
+     lineColor:LINE,
+     lineWidth:.2,
+     overflow:'linebreak',
+     valign:'middle'
+    },
+    headStyles:{
+     fillColor:BLUE,
+     textColor:[255,255,255],
+     fontStyle:'bold',
+     fontSize:6.5
+    },
     alternateRowStyles:{fillColor:[248,250,252]},
     columnStyles:{
      0:{cellWidth:25},
@@ -133,14 +179,20 @@ const ConsultaHistoricoMembro=({membro,open,onOpenChange})=>{
    });
 
    const p=doc.getNumberOfPages();
+
    for(let i=1;i<=p;i++){
     doc.setPage(i);
-    doc.setDrawColor(...LINE);doc.line(12,286,198,286);
-    doc.setFont('helvetica','normal');doc.setFontSize(5.5);doc.setTextColor(...MUTED);
+    doc.setDrawColor(...LINE);
+    doc.line(12,286,198,286);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(5.5);
+    doc.setTextColor(...MUTED);
     doc.text('Histórico emitido eletronicamente pelo sistema da Secretaria.',12,291);
-    doc.setFont('helvetica','bold');doc.setTextColor(...BLUE);
+    doc.setFont('helvetica','bold');
+    doc.setTextColor(...BLUE);
     doc.text('SECRETARIA • HISTÓRICO DO MEMBRO',105,291,{align:'center'});
-    doc.setFont('helvetica','normal');doc.setTextColor(...MUTED);
+    doc.setFont('helvetica','normal');
+    doc.setTextColor(...MUTED);
     doc.text(`Página ${i} de ${p}`,198,291,{align:'right'});
    }
 
@@ -153,6 +205,7 @@ const ConsultaHistoricoMembro=({membro,open,onOpenChange})=>{
 
  const imprimir=()=>{
   const w=window.open('','_blank','width=1000,height=1100');
+
   if(!w){
    toast({title:'Impressão bloqueada',description:'Permita pop-ups para imprimir.',variant:'destructive'});
    return;
@@ -187,11 +240,39 @@ const ConsultaHistoricoMembro=({membro,open,onOpenChange})=>{
   tbody tr:nth-child(even) td{background:#f8fafc}
   .footer{margin-top:12px;border-top:1px solid #e2e8f0;padding-top:5px;font-size:5.5px;color:#64748b;display:flex;justify-content:space-between}
   </style></head><body>
-  <div class="header"><img src="${LOGO}" class="logo"><div class="inst">IGREJA ASSEMBLEIA DE DEUS</div><div class="sub">MINISTÉRIO PLANTAR • LEROLÂNDIA</div><div class="title">HISTÓRICO DO MEMBRO</div></div>
-  <div class="member"><h2>${membro?.nome_completo||'Membro'}</h2><div class="meta">Registros: ${historico.length} • Alterações: ${totalAlteracoes}${ultimoRegistro?` • Último registro: ${formatDateTime(ultimoRegistro)}`:''}</div></div>
-  <table><thead><tr><th>DATA / HORA</th><th>AÇÃO</th><th>CAMPO</th><th>VALOR ANTERIOR</th><th>NOVO VALOR</th><th>USUÁRIO</th></tr></thead><tbody>${rows||'<tr><td colspan="6">Nenhum histórico registrado.</td></tr>'}</tbody></table>
-  <div class="footer"><span>Histórico emitido pelo sistema da Secretaria.</span><b>SECRETARIA • HISTÓRICO DO MEMBRO</b><span>${new Date().toLocaleDateString('pt-BR')}</span></div>
-  <script>window.onload=()=>setTimeout(()=>window.print(),150)<\\/script></body></html>`);
+  <div class="header">
+   <img src="${LOGO}" class="logo">
+   <div class="inst">IGREJA ASSEMBLEIA DE DEUS</div>
+   <div class="sub">MINISTÉRIO PLANTAR • LEROLÂNDIA</div>
+   <div class="title">HISTÓRICO DO MEMBRO</div>
+  </div>
+
+  <div class="member">
+   <h2>${membro?.nome_completo||'Membro'}</h2>
+   <div class="meta">
+    Registros: ${historico.length} • Alterações: ${totalAlteracoes}
+    ${ultimoRegistro?` • Último registro: ${formatDateTime(ultimoRegistro)}`:''}
+   </div>
+  </div>
+
+  <table>
+   <thead>
+    <tr><th>DATA / HORA</th><th>AÇÃO</th><th>CAMPO</th><th>VALOR ANTERIOR</th><th>NOVO VALOR</th><th>USUÁRIO</th></tr>
+   </thead>
+   <tbody>
+    ${rows||'<tr><td colspan="6">Nenhum histórico registrado.</td></tr>'}
+   </tbody>
+  </table>
+
+  <div class="footer">
+   <span>Histórico emitido pelo sistema da Secretaria.</span>
+   <b>SECRETARIA • HISTÓRICO DO MEMBRO</b>
+   <span>${new Date().toLocaleDateString('pt-BR')}</span>
+  </div>
+
+  <script>window.onload=()=>setTimeout(()=>window.print(),150)<\/script>
+  </body></html>`);
+
   w.document.close();
  };
 
@@ -205,21 +286,26 @@ const ConsultaHistoricoMembro=({membro,open,onOpenChange})=>{
         <History className="h-5 w-5 text-blue-400"/>
         Histórico do Membro
        </DialogTitle>
+
        <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-        <UserRound className="h-4 w-4"/>
+        <User className="h-4 w-4"/>
         <span className="font-medium text-foreground">{membro?.nome_completo||'Membro'}</span>
        </div>
       </div>
+
       <div className="flex flex-wrap gap-2">
        <Button variant="outline" size="sm" onClick={carregar} disabled={loading}>
         <RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>Atualizar
        </Button>
+
        <Button variant="outline" size="sm" onClick={excel} disabled={!historico.length}>
         <Download className="mr-2 h-4 w-4"/>Excel
        </Button>
+
        <Button variant="outline" size="sm" onClick={pdf} disabled={!historico.length}>
         <FileText className="mr-2 h-4 w-4"/>PDF
        </Button>
+
        <Button size="sm" onClick={imprimir} disabled={!historico.length} className="bg-indigo-600 hover:bg-indigo-700">
         <Printer className="mr-2 h-4 w-4"/>Imprimir
        </Button>
@@ -240,28 +326,41 @@ const ConsultaHistoricoMembro=({membro,open,onOpenChange})=>{
        <div className="h-9 w-9 rounded-full border-4 border-blue-500 border-t-transparent animate-spin"/>
       </div>
      ):historico.length===0?(
-      <Card><CardContent className="py-20 text-center"><History className="mx-auto h-12 w-12 text-muted-foreground"/><p className="mt-4 font-medium">Nenhum histórico registrado</p><p className="mt-1 text-sm text-muted-foreground">As próximas alterações feitas neste membro aparecerão aqui automaticamente.</p></CardContent></Card>
+      <Card>
+       <CardContent className="py-20 text-center">
+        <History className="mx-auto h-12 w-12 text-muted-foreground"/>
+        <p className="mt-4 font-medium">Nenhum histórico registrado</p>
+        <p className="mt-1 text-sm text-muted-foreground">As próximas alterações feitas neste membro aparecerão aqui automaticamente.</p>
+       </CardContent>
+      </Card>
      ):(
       <div className="relative">
        <div className="absolute left-[20px] top-3 bottom-3 w-px bg-border"/>
+
        <div className="space-y-4">
         {historico.map((h,i)=>{
          const t=tipo(h.acao),Icon=t.icon;
+
          return(
           <div key={h.id||i} className="relative pl-12">
            <div className="absolute left-0 top-2 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card shadow-sm">
             <Icon className={`h-4 w-4 ${h.acao==='CADASTRO'?'text-green-400':h.acao==='EXCLUSÃO'?'text-red-400':'text-blue-400'}`}/>
            </div>
+
            <Card className="overflow-hidden">
             <CardContent className="p-4">
              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-1">
                <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className={t.className}>{t.label}</Badge>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="h-3.5 w-3.5"/>{formatDateTime(h.alterado_em)}</span>
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                 <Clock className="h-3.5 w-3.5"/>
+                 {formatDateTime(h.alterado_em)}
+                </span>
                </div>
                <p className="text-sm font-semibold">{h.campo_label||h.campo||'Alteração no cadastro'}</p>
               </div>
+
               {h.alterado_por&&<span className="text-[10px] text-muted-foreground">Usuário: {String(h.alterado_por).slice(0,12)}…</span>}
              </div>
 
@@ -271,7 +370,9 @@ const ConsultaHistoricoMembro=({membro,open,onOpenChange})=>{
                 <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-red-400">Valor anterior</p>
                 <p className="break-words text-sm">{h.valor_anterior_texto||safeText(h.valor_anterior)}</p>
                </div>
+
                <ArrowRight className="hidden h-5 w-5 text-muted-foreground md:block"/>
+
                <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3">
                 <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-green-400">Novo valor</p>
                 <p className="break-words text-sm font-medium">{h.valor_novo_texto||safeText(h.valor_novo)}</p>
