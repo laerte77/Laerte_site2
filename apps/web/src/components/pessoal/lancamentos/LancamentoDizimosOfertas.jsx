@@ -1,6 +1,6 @@
 import React,{useState,useEffect,useCallback,useMemo,useRef}from'react';
 import{motion}from'framer-motion';
-import{Plus,Edit,Trash2,Heart,Search,Download}from'lucide-react';
+import{Plus,Edit,Trash2,Heart,Search,Download,Receipt,DollarSign,TrendingDown,CalendarDays,RotateCcw}from'lucide-react';
 import{format,parseISO,getMonth,getYear}from'date-fns';
 import{ptBR}from'date-fns/locale';
 import{Button}from'@/components/ui/button';
@@ -10,19 +10,22 @@ import{useToast}from'@/components/ui/use-toast';
 import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{ScrollArea}from'@/components/ui/scroll-area';
-import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
+import{Card,CardContent}from'@/components/ui/card';
 import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import SearchableModal from'@/components/SearchableModal';
 import ModalLancamentoPadrao from'@/components/pessoal/ModalLancamentoPadrao';
-import*as XLSX from'xlsx';
+import{exportToExcel}from'@/lib/ExportUtils';
 
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const TZ='America/Sao_Paulo';
+const GREEN='hsl(142 70% 45%)';
 
 const getBRDate=()=>{
- const p=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()),v={};
+ const p=new Intl.DateTimeFormat('en-CA',{
+  timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'
+ }).formatToParts(new Date()),v={};
  p.forEach(x=>{if(x.type!=='literal')v[x.type]=x.value});
  return`${v.year}-${v.month}-${v.day}`;
 };
@@ -37,20 +40,45 @@ const moneyNum=v=>{
  return d?Number(d)/100:0;
 };
 
-const moneyShow=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)||0);
-const brDate=d=>new Date(d).toLocaleDateString('pt-BR',{timeZone:'UTC'});
+const moneyShow=v=>new Intl.NumberFormat('pt-BR',{
+ style:'currency',
+ currency:'BRL'
+}).format(Number(v)||0);
+
+const brDate=d=>d?new Date(d).toLocaleDateString('pt-BR',{timeZone:'UTC'}):'—';
 
 const LancamentoDizimosOfertas=()=>{
- const{toast}=useToast(),{user}=useAuth(),isMountedRef=useRef(true);
- const[lancamentos,setLancamentos]=useState([]),[filteredLancamentos,setFilteredLancamentos]=useState([]),[loading,setLoading]=useState(true);
+ const{toast}=useToast(),{user}=useAuth(),mounted=useRef(true);
+
+ const[lancamentos,setLancamentos]=useState([]);
+ const[loading,setLoading]=useState(true);
  const[searchTerm,setSearchTerm]=useState('');
  const[selectedMonth,setSelectedMonth]=useState(String(new Date().getMonth()));
  const[selectedYear,setSelectedYear]=useState(String(new Date().getFullYear()));
- const[isDialogOpen,setIsDialogOpen]=useState(false),[isSearchModalOpen,setIsSearchModalOpen]=useState(false),[isExportOpen,setIsExportOpen]=useState(false);
- const[exportFilters,setExportFilters]=useState({month:new Date().getMonth(),year:new Date().getFullYear()});
+ const[currentPage,setCurrentPage]=useState(1);
+ const[isDialogOpen,setIsDialogOpen]=useState(false);
+ const[isSearchModalOpen,setIsSearchModalOpen]=useState(false);
+ const[isExportOpen,setIsExportOpen]=useState(false);
  const[currentLancamentoId,setCurrentLancamentoId]=useState(null);
- const initialFormState={data:getBRDate(),valor:'',tipo_movimento:'DÍZIMO'};
- const[formData,setFormData]=useState(initialFormState);
+
+ const[exportFilters,setExportFilters]=useState({
+  month:new Date().getMonth(),
+  year:new Date().getFullYear()
+ });
+
+ const initialForm=()=>({
+  data:getBRDate(),
+  valor:'',
+  tipo_movimento:'DÍZIMO'
+ });
+
+ const[formData,setFormData]=useState(initialForm);
+ const pageSize=10;
+
+ useEffect(()=>{
+  mounted.current=true;
+  return()=>{mounted.current=false};
+ },[]);
 
  const availableYears=useMemo(()=>{
   const years=lancamentos.map(d=>getYear(parseISO(d.data)));
@@ -61,6 +89,7 @@ const LancamentoDizimosOfertas=()=>{
  const fetchData=useCallback(async()=>{
   if(!user)return;
   setLoading(true);
+
   try{
    const{data,error}=await supabase
     .from('pessoal_dizimos_ofertas')
@@ -68,72 +97,100 @@ const LancamentoDizimosOfertas=()=>{
     .eq('user_id',user.id)
     .order('data',{ascending:false});
 
-   if(!isMountedRef.current)return;
    if(error)throw error;
+   if(!mounted.current)return;
    setLancamentos(data||[]);
   }catch(error){
-   if(!isMountedRef.current)return;
+   if(!mounted.current)return;
+
    toast({
-    title:'Erro ao buscar lançamentos',
-    variant:'destructive',
-    description:error.message
+    title:'Erro ao carregar lançamentos',
+    description:error.message||'Não foi possível carregar os registros.',
+    variant:'destructive'
    });
   }finally{
-   if(isMountedRef.current)setLoading(false);
+   if(mounted.current)setLoading(false);
   }
  },[user,toast]);
 
  useEffect(()=>{
-  isMountedRef.current=true;
   fetchData();
-
   if(!user)return;
 
   const channel=supabase
    .channel('pessoal_dizimos_changes')
    .on(
     'postgres_changes',
-    {event:'*',schema:'public',table:'pessoal_dizimos_ofertas'},
-    ()=>{if(isMountedRef.current)fetchData()}
+    {
+     event:'*',
+     schema:'public',
+     table:'pessoal_dizimos_ofertas'
+    },
+    ()=>fetchData()
    )
    .subscribe();
 
-  return()=>{
-   isMountedRef.current=false;
-   supabase.removeChannel(channel);
-  };
+  return()=>supabase.removeChannel(channel);
  },[user,fetchData]);
 
- useEffect(()=>{
-  let results=lancamentos;
+ const filtered=useMemo(()=>{
+  let result=lancamentos;
 
   if(selectedYear!=='all'){
-   results=results.filter(
-    item=>String(getYear(parseISO(item.data)))===selectedYear
-   );
+   result=result.filter(item=>String(getYear(parseISO(item.data)))===selectedYear);
   }
 
   if(selectedMonth!=='all'){
-   results=results.filter(
-    item=>String(getMonth(parseISO(item.data)))===selectedMonth
+   result=result.filter(item=>String(getMonth(parseISO(item.data)))===selectedMonth);
+  }
+
+  if(searchTerm.trim()){
+   const term=searchTerm.toLowerCase();
+
+   result=result.filter(item=>
+    (item.tipo_movimento||'').toLowerCase().includes(term)
    );
   }
 
-  if(searchTerm){
-   const search=searchTerm.toLowerCase();
-   results=results.filter(
-    item=>item.tipo_movimento?.toLowerCase().includes(search)
-   );
-  }
+  return result;
+ },[lancamentos,selectedYear,selectedMonth,searchTerm]);
 
-  setFilteredLancamentos(results);
- },[searchTerm,selectedMonth,selectedYear,lancamentos]);
+ useEffect(()=>{setCurrentPage(1)},[selectedYear,selectedMonth,searchTerm]);
+
+ const total=useMemo(
+  ()=>filtered.reduce((sum,item)=>sum+Number(item.valor||0),0),
+  [filtered]
+ );
+
+ const average=filtered.length?total/filtered.length:0;
+
+ const biggest=filtered.length
+  ?Math.max(...filtered.map(item=>Number(item.valor||0)))
+  :0;
+
+ const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
+
+ const paginated=filtered.slice(
+  (currentPage-1)*pageSize,
+  currentPage*pageSize
+ );
 
  const handleSave=async()=>{
   if(!formData.data||!formData.valor||!formData.tipo_movimento){
    toast({
-    title:'Erro',
-    description:'Todos os campos são obrigatórios.',
+    title:'Campos obrigatórios',
+    description:'Preencha todos os campos.',
+    variant:'destructive'
+   });
+   return;
+  }
+
+  const valor=moneyNum(formData.valor);
+
+  if(valor<=0){
+   toast({
+    title:'Valor inválido',
+    description:'Informe um valor maior que zero.',
     variant:'destructive'
    });
    return;
@@ -142,43 +199,34 @@ const LancamentoDizimosOfertas=()=>{
   const dataToSave={
    ...formData,
    user_id:user.id,
-   valor:moneyNum(formData.valor)
+   valor
   };
 
   try{
-   if(currentLancamentoId){
-    const{error}=await supabase
-     .from('pessoal_dizimos_ofertas')
-     .update(dataToSave)
-     .eq('id',currentLancamentoId);
+   const result=currentLancamentoId
+    ?await supabase
+      .from('pessoal_dizimos_ofertas')
+      .update(dataToSave)
+      .eq('id',currentLancamentoId)
+      .eq('user_id',user.id)
+    :await supabase
+      .from('pessoal_dizimos_ofertas')
+      .insert(dataToSave);
 
-    if(error)throw error;
+   if(result.error)throw result.error;
 
-    toast({
-     title:'Sucesso',
-     description:'Lançamento atualizado.'
-    });
-   }else{
-    const{error}=await supabase
-     .from('pessoal_dizimos_ofertas')
-     .insert(dataToSave);
+   toast({
+    title:'Sucesso',
+    description:currentLancamentoId?'Lançamento atualizado.':'Lançamento registrado.'
+   });
 
-    if(error)throw error;
-
-    toast({
-     title:'Sucesso',
-     description:'Lançamento registrado.'
-    });
-   }
-
-   setCurrentLancamentoId(null);
-   setFormData(initialFormState);
+   closeDialog();
    fetchData();
   }catch(error){
    toast({
     title:'Erro ao salvar',
-    variant:'destructive',
-    description:error.message
+    description:error.message||'Não foi possível salvar o lançamento.',
+    variant:'destructive'
    });
   }
  };
@@ -193,7 +241,7 @@ const LancamentoDizimosOfertas=()=>{
    });
   }else{
    setCurrentLancamentoId(null);
-   setFormData(initialFormState);
+   setFormData(initialForm());
   }
 
   setIsDialogOpen(true);
@@ -202,17 +250,16 @@ const LancamentoDizimosOfertas=()=>{
  const closeDialog=()=>{
   setIsDialogOpen(false);
   setCurrentLancamentoId(null);
-  setFormData(initialFormState);
+  setFormData(initialForm());
  };
-
- const closeExport=()=>setIsExportOpen(false);
 
  const handleDelete=async id=>{
   try{
    const{error}=await supabase
     .from('pessoal_dizimos_ofertas')
     .delete()
-    .eq('id',id);
+    .eq('id',id)
+    .eq('user_id',user.id);
 
    if(error)throw error;
 
@@ -225,89 +272,93 @@ const LancamentoDizimosOfertas=()=>{
   }catch(error){
    toast({
     title:'Erro ao remover',
-    variant:'destructive',
-    description:error.message
+    description:error.message||'Não foi possível remover.',
+    variant:'destructive'
    });
   }
  };
 
  const handleExport=()=>{
-  const filteredData=lancamentos.filter(item=>{
+  const exportData=lancamentos.filter(item=>{
    const d=parseISO(item.data);
    return getMonth(d)===exportFilters.month&&getYear(d)===exportFilters.year;
   });
 
-  if(!filteredData.length){
+  if(!exportData.length){
    toast({
-    title:'Nenhum dado para exportar',
+    title:'Sem dados',
     description:'Não há registros para o período selecionado.',
     variant:'destructive'
    });
    return;
   }
 
-  const dataToExport=filteredData.map(item=>({
-   DATA:brDate(item.data),
-   TIPO:item.tipo_movimento,
-   VALOR:parseFloat(item.valor)
-  }));
-
-  const worksheet=XLSX.utils.json_to_sheet(dataToExport);
-  const workbook=XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(
-   workbook,
-   worksheet,
-   'Dizimos e Ofertas'
-  );
-
-  XLSX.writeFile(
-   workbook,
-   `Dizimos_Ofertas_Pessoal_${meses[exportFilters.month]}_${exportFilters.year}.xlsx`
+  exportToExcel(
+   exportData.map(item=>({
+    DATA:brDate(item.data),
+    TIPO:item.tipo_movimento,
+    VALOR:Number(item.valor||0)
+   })),
+   `Dizimos_Ofertas_${meses[exportFilters.month]}_${exportFilters.year}`,
+   'Dízimos e Ofertas'
   );
 
   setIsExportOpen(false);
  };
 
- const totalPeriodo=useMemo(
-  ()=>filteredLancamentos.reduce(
-   (acc,curr)=>acc+parseFloat(curr.valor||0),
-   0
-  ),
-  [filteredLancamentos]
- );
+ const limparFiltros=()=>{
+  setSearchTerm('');
+  setSelectedMonth(String(new Date().getMonth()));
+  setSelectedYear(String(new Date().getFullYear()));
+ };
+
+ const stats=[
+  {label:'Lançamentos',value:filtered.length,icon:Receipt},
+  {label:'Total no Período',value:moneyShow(total),icon:DollarSign},
+  {label:'Média',value:moneyShow(average),icon:TrendingDown},
+  {label:'Maior Lançamento',value:moneyShow(biggest),icon:CalendarDays}
+ ];
 
  return(
   <motion.div
    initial={{opacity:0,y:20}}
    animate={{opacity:1,y:0}}
-   className="space-y-8 py-8 dark-pessoal"
+   className="dark-pessoal space-y-5"
   >
 
-   <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+
     <div>
-     <h1 className="text-3xl font-extrabold tracking-tight text-blue-500">
+     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:GREEN}}>
+      Finanças Pessoais
+     </p>
+
+     <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">
       Dízimos e Ofertas
      </h1>
-     <p className="mt-1 text-lg text-muted-foreground">
-      Registre e gerencie suas contribuições.
+
+     <p className="text-sm text-muted-foreground">
+      Registre e acompanhe suas contribuições.
      </p>
     </div>
 
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-wrap gap-2">
+
      <Button
-      onClick={()=>setIsExportOpen(true)}
       variant="outline"
-      className="border-blue-500/50 text-blue-500 hover:bg-blue-500/10"
+      onClick={()=>setIsExportOpen(true)}
+      className="border-border hover:bg-green-500/10"
+      style={{color:GREEN}}
      >
       <Download className="mr-2 h-4 w-4"/>
       Exportar
      </Button>
 
      <Button
-      onClick={()=>setIsSearchModalOpen(true)}
       variant="outline"
-      className="border-blue-500/50 text-blue-500 hover:bg-blue-500/10"
+      onClick={()=>setIsSearchModalOpen(true)}
+      className="border-border hover:bg-green-500/10"
+      style={{color:GREEN}}
      >
       <Search className="mr-2 h-4 w-4"/>
       Selecionar
@@ -315,92 +366,111 @@ const LancamentoDizimosOfertas=()=>{
 
      <Button
       onClick={()=>openDialog()}
-      className="bg-blue-600 text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700"
-     >
+      className="text-white shadow-lg"
+      style={{background:GREEN,boxShadow:'0 0 18px hsl(142 70% 45% / .20)'}}
+    >
       <Plus className="mr-2 h-4 w-4"/>
-      Novo Registro
+      Novo Lançamento
      </Button>
+
     </div>
    </div>
 
-   <ModalLancamentoPadrao
-    open={isExportOpen}
-    onClose={closeExport}
-    title="Exportar Dízimos e Ofertas"
-    description="Selecione o mês e o ano para exportar."
-    icon={Download}
-    theme="blue"
-    footer={
-     <>
-      <Button
-       variant="outline"
-       onClick={closeExport}
-       className="h-10 rounded-xl"
-      >
-       Cancelar
-      </Button>
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 
-      <Button
-       onClick={handleExport}
-       className="h-10 rounded-xl bg-blue-600 px-6 font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700"
-      >
-       Exportar
-      </Button>
-     </>
-    }
-   >
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+    {stats.map(({label,value,icon:Icon})=>(
+     <Card key={label} className="border-border bg-card">
+      <CardContent className="flex items-center justify-between p-4">
 
-     <div className="space-y-2">
-      <Label>Mês</Label>
-      <Select
-       value={String(exportFilters.month)}
-       onValueChange={v=>setExportFilters(p=>({
-        ...p,
-        month:Number(v)
-       }))}
-      >
-       <SelectTrigger className="h-11 rounded-xl bg-input">
-        <SelectValue/>
-       </SelectTrigger>
+       <div>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+         {label}
+        </p>
 
-       <SelectContent className="z-[200]">
-        <ScrollArea className="h-48">
-         {meses.map((m,i)=>(
+        <p
+         className="mt-1 text-xl font-bold tabular-nums"
+         style={{color:GREEN}}
+        >
+         {value}
+        </p>
+       </div>
+
+       <div
+        className="rounded-xl bg-green-500/10 p-2.5"
+        style={{color:GREEN}}
+       >
+        <Icon className="h-5 w-5"/>
+       </div>
+
+      </CardContent>
+     </Card>
+    ))}
+
+   </div>
+
+   <Card className="border-border bg-card">
+    <CardContent className="p-4">
+
+     <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+
+      <div className="relative min-w-0 flex-1">
+       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+
+       <Input
+        placeholder="Buscar por tipo..."
+        value={searchTerm}
+        onChange={e=>setSearchTerm(e.target.value)}
+        className="h-10 bg-input pl-9"
+       />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+
+       <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+        <SelectTrigger className="h-10 w-[140px] bg-input">
+         <SelectValue/>
+        </SelectTrigger>
+
+        <SelectContent>
+         <SelectItem value="all">Todos os meses</SelectItem>
+
+         {meses.map((mes,i)=>(
           <SelectItem key={i} value={String(i)}>
-           {m}
+           {mes}
           </SelectItem>
          ))}
-        </ScrollArea>
-       </SelectContent>
-      </Select>
+        </SelectContent>
+       </Select>
+
+       <Select value={selectedYear} onValueChange={setSelectedYear}>
+        <SelectTrigger className="h-10 w-[110px] bg-input">
+         <SelectValue/>
+        </SelectTrigger>
+
+        <SelectContent>
+         <SelectItem value="all">Todos os anos</SelectItem>
+
+         {availableYears.map(y=>(
+          <SelectItem key={y} value={String(y)}>
+           {y}
+          </SelectItem>
+         ))}
+        </SelectContent>
+       </Select>
+
+       <Button
+        variant="outline"
+        onClick={limparFiltros}
+        className="h-10 border-border"
+       >
+        <RotateCcw className="mr-2 h-4 w-4"/>
+        Limpar
+       </Button>
+
+      </div>
      </div>
-
-     <div className="space-y-2">
-      <Label>Ano</Label>
-      <Select
-       value={String(exportFilters.year)}
-       onValueChange={v=>setExportFilters(p=>({
-        ...p,
-        year:Number(v)
-       }))}
-      >
-       <SelectTrigger className="h-11 rounded-xl bg-input">
-        <SelectValue/>
-       </SelectTrigger>
-
-       <SelectContent className="z-[200]">
-        {availableYears.map(y=>(
-         <SelectItem key={y} value={String(y)}>
-          {y}
-         </SelectItem>
-        ))}
-       </SelectContent>
-      </Select>
-     </div>
-
-    </div>
-   </ModalLancamentoPadrao>
+    </CardContent>
+   </Card>
 
    <SearchableModal
     isOpen={isSearchModalOpen}
@@ -420,9 +490,85 @@ const LancamentoDizimosOfertas=()=>{
    />
 
    <ModalLancamentoPadrao
+    open={isExportOpen}
+    onClose={()=>setIsExportOpen(false)}
+    title="Exportar Dízimos e Ofertas"
+    description="Selecione o mês e o ano para exportar."
+    icon={Download}
+    theme="blue"
+    footer={
+     <>
+      <Button
+       variant="outline"
+       onClick={()=>setIsExportOpen(false)}
+       className="h-10 rounded-xl"
+      >
+       Cancelar
+      </Button>
+
+      <Button
+       onClick={handleExport}
+       className="h-10 rounded-xl px-6 font-semibold text-white"
+       style={{background:GREEN}}
+      >
+       Exportar
+      </Button>
+     </>
+    }
+   >
+
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+     <div className="space-y-2">
+      <Label>Mês</Label>
+
+      <Select
+       value={String(exportFilters.month)}
+       onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}
+      >
+       <SelectTrigger className="h-11 rounded-xl bg-input">
+        <SelectValue/>
+       </SelectTrigger>
+
+       <SelectContent>
+        {meses.map((mes,i)=>(
+         <SelectItem key={i} value={String(i)}>
+          {mes}
+         </SelectItem>
+        ))}
+       </SelectContent>
+      </Select>
+     </div>
+
+     <div className="space-y-2">
+      <Label>Ano</Label>
+
+      <Select
+       value={String(exportFilters.year)}
+       onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}
+      >
+       <SelectTrigger className="h-11 rounded-xl bg-input">
+        <SelectValue/>
+       </SelectTrigger>
+
+       <SelectContent>
+        {availableYears.map(y=>(
+         <SelectItem key={y} value={String(y)}>
+          {y}
+         </SelectItem>
+        ))}
+       </SelectContent>
+      </Select>
+     </div>
+
+    </div>
+
+   </ModalLancamentoPadrao>
+
+   <ModalLancamentoPadrao
     open={isDialogOpen}
     onClose={closeDialog}
-    title={currentLancamentoId?'Editar Registro':'Novo Registro'}
+    title={currentLancamentoId?'Editar Lançamento':'Novo Lançamento'}
     description="Preencha os dados da contribuição."
     icon={Heart}
     theme="blue"
@@ -440,161 +586,81 @@ const LancamentoDizimosOfertas=()=>{
       <Button
        type="button"
        onClick={handleSave}
-       className="h-10 rounded-xl bg-blue-600 px-7 font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700"
+       className="h-10 rounded-xl px-7 font-semibold text-white"
+       style={{background:GREEN}}
       >
-       Salvar
+       {currentLancamentoId?'Salvar Alterações':'Salvar Lançamento'}
       </Button>
      </>
     }
    >
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
 
-     <div className="space-y-2">
-      <Label>Data</Label>
-      <Input
-       type="date"
-       value={formData.data}
-       onChange={e=>setFormData({
-        ...formData,
-        data:e.target.value
-       })}
-       className="h-11 rounded-xl bg-input"
-       required
-      />
-     </div>
+    <div className="space-y-5">
 
-     <div className="space-y-2">
-      <Label>Valor (R$)</Label>
-      <Input
-       type="text"
-       inputMode="decimal"
-       value={formData.valor}
-       onChange={e=>setFormData({
-        ...formData,
-        valor:money(e.target.value)
-       })}
-       className="h-11 rounded-xl bg-input font-semibold tabular-nums"
-       placeholder="R$ 0,00"
-       required
-      />
-     </div>
+     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
-    </div>
-
-    <div className="space-y-2">
-     <Label>Tipo de Movimento</Label>
-
-     <Select
-      value={formData.tipo_movimento}
-      onValueChange={v=>setFormData({
-       ...formData,
-       tipo_movimento:v
-      })}
-     >
-      <SelectTrigger className="h-11 rounded-xl bg-input">
-       <SelectValue placeholder="Selecione"/>
-      </SelectTrigger>
-
-      <SelectContent className="z-[200]">
-       <SelectItem value="DÍZIMO">
-        Dízimo
-       </SelectItem>
-
-       <SelectItem value="OFERTA">
-        Oferta
-       </SelectItem>
-      </SelectContent>
-     </Select>
-    </div>
-
-   </ModalLancamentoPadrao>
-
-   <div className="grid gap-6 md:grid-cols-4">
-
-    <Card className="col-span-1 rounded-2xl border-border bg-card shadow-md md:col-span-3">
-     <CardContent className="flex flex-col items-center gap-4 p-5 md:flex-row">
-
-      <div className="relative flex w-full flex-1 items-center gap-2">
-       <Search className="absolute left-3 h-5 w-5 text-muted-foreground"/>
+      <div className="space-y-2">
+       <Label>Data</Label>
 
        <Input
-        placeholder="Buscar por tipo..."
-        value={searchTerm}
-        onChange={e=>setSearchTerm(e.target.value)}
-        className="h-12 flex-1 bg-input pl-10 text-base text-foreground"
+        type="date"
+        value={formData.data}
+        onChange={e=>setFormData(p=>({...p,data:e.target.value}))}
+        className="h-11 rounded-xl bg-input"
+        required
        />
       </div>
 
-      <div className="flex w-full gap-3 md:w-auto">
+      <div className="space-y-2">
+       <Label>Valor</Label>
 
-       <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-        <SelectTrigger className="h-12 w-[150px] bg-input text-foreground">
-         <SelectValue/>
-        </SelectTrigger>
-
-        <SelectContent>
-         <SelectItem value="all">
-          Todos os Meses
-         </SelectItem>
-
-         {Array.from({length:12},(_,i)=>(
-          <SelectItem key={i} value={String(i)}>
-           {format(new Date(2024,i,1),'MMMM',{locale:ptBR})}
-          </SelectItem>
-         ))}
-        </SelectContent>
-       </Select>
-
-       <Select value={selectedYear} onValueChange={setSelectedYear}>
-        <SelectTrigger className="h-12 w-[110px] bg-input text-foreground">
-         <SelectValue/>
-        </SelectTrigger>
-
-        <SelectContent>
-         <SelectItem value="all">
-          Todos os Anos
-         </SelectItem>
-
-         {availableYears.map(y=>(
-          <SelectItem key={y} value={String(y)}>
-           {y}
-          </SelectItem>
-         ))}
-        </SelectContent>
-       </Select>
-
+       <Input
+        type="text"
+        inputMode="numeric"
+        value={formData.valor}
+        onChange={e=>setFormData(p=>({...p,valor:money(e.target.value)}))}
+        placeholder="R$ 0,00"
+        className="h-11 rounded-xl bg-input font-semibold tabular-nums"
+        required
+       />
       </div>
-     </CardContent>
-    </Card>
 
-    <Card className="flex flex-col justify-center rounded-2xl border-blue-500/20 bg-blue-500/10 shadow-md">
-     <CardHeader className="pb-1 pt-5">
-      <CardTitle className="text-sm font-semibold uppercase tracking-wide text-blue-500">
-       Total Filtrado
-      </CardTitle>
-     </CardHeader>
+     </div>
 
-     <CardContent>
-      <div className="truncate text-3xl font-black text-blue-500">
-       {moneyShow(totalPeriodo)}
-      </div>
-     </CardContent>
-    </Card>
+     <div className="space-y-2">
+      <Label>Tipo de Movimento</Label>
 
-   </div>
+      <Select
+       value={formData.tipo_movimento}
+       onValueChange={v=>setFormData(p=>({...p,tipo_movimento:v}))}
+      >
+       <SelectTrigger className="h-11 rounded-xl bg-input">
+        <SelectValue placeholder="Selecione"/>
+       </SelectTrigger>
 
-   <Card className="overflow-hidden rounded-2xl border-border bg-card shadow-lg">
+       <SelectContent>
+        <SelectItem value="DÍZIMO">Dízimo</SelectItem>
+        <SelectItem value="OFERTA">Oferta</SelectItem>
+       </SelectContent>
+      </Select>
+     </div>
+
+    </div>
+   </ModalLancamentoPadrao>
+
+   <Card className="border-border bg-card">
     <CardContent className="p-0">
 
      <ScrollArea className="h-[500px]">
+
       <Table>
 
-       <TableHeader className="sticky top-0 z-10 border-b border-border bg-secondary/50 backdrop-blur-sm">
-        <TableRow className="hover:bg-transparent">
-         <TableHead className="py-4 pl-6 font-semibold">Data</TableHead>
-         <TableHead className="py-4 font-semibold">Tipo</TableHead>
-         <TableHead className="py-4 text-right font-semibold">Valor</TableHead>
-         <TableHead className="w-[120px] py-4 pr-6 text-center font-semibold">Ações</TableHead>
+       <TableHeader className="sticky top-0 z-10 bg-secondary/50 backdrop-blur-sm">
+        <TableRow>
+         <TableHead>Data</TableHead>
+         <TableHead>Tipo</TableHead>
+         <TableHead className="text-right">Valor</TableHead>
+         <TableHead className="text-center">Ações</TableHead>
         </TableRow>
        </TableHeader>
 
@@ -602,68 +668,79 @@ const LancamentoDizimosOfertas=()=>{
 
         {loading?(
          <TableRow>
-          <TableCell colSpan="4" className="py-16 text-center text-muted-foreground">
-           Carregando...
+          <TableCell colSpan={4} className="py-12 text-center text-muted-foreground">
+           Carregando lançamentos...
           </TableCell>
          </TableRow>
-        ):filteredLancamentos.length===0?(
+        ):paginated.length===0?(
          <TableRow>
-          <TableCell colSpan="4" className="py-16 text-center text-muted-foreground">
-           <Heart className="mx-auto mb-2 h-10 w-10"/>
-           Nenhum registro encontrado neste período.
+          <TableCell colSpan={4} className="py-12 text-center">
+
+           <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <Heart className="h-8 w-8 opacity-40"/>
+            <span>Nenhum lançamento encontrado.</span>
+           </div>
+
           </TableCell>
          </TableRow>
         ):(
-         filteredLancamentos.map(item=>(
+         paginated.map(item=>(
           <TableRow
            key={item.id}
-           className="border-b border-border transition-colors duration-200 hover:bg-secondary/50"
+           className="transition-colors hover:bg-muted/40"
           >
-           <TableCell className="py-4 pl-6 font-medium">
+
+           <TableCell className="p-4 font-medium">
             {brDate(item.data)}
            </TableCell>
 
-           <TableCell className="py-4">
-            <span className="font-semibold text-foreground">
+           <TableCell className="p-4">
+            <span className="font-medium">
              {item.tipo_movimento}
             </span>
            </TableCell>
 
-           <TableCell className="py-4 text-right font-bold text-green-400">
+           <TableCell
+            className="p-4 text-right font-bold tabular-nums"
+            style={{color:GREEN}}
+           >
             {moneyShow(item.valor)}
            </TableCell>
 
-           <TableCell className="py-4 pr-6 text-center">
-            <div className="flex items-center justify-center gap-2">
+           <TableCell className="p-4">
+            <div className="flex justify-center gap-1">
 
              <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-full text-blue-500 hover:bg-blue-500/10 hover:text-blue-600"
               onClick={()=>openDialog(item)}
+              className="hover:bg-green-500/10"
+              style={{color:GREEN}}
              >
               <Edit className="h-4 w-4"/>
              </Button>
 
              <AlertDialog>
+
               <AlertDialogTrigger asChild>
                <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full text-red-500 hover:bg-red-500/10 hover:text-red-600"
+                className="text-red-500 hover:bg-red-500/10"
                >
                 <Trash2 className="h-4 w-4"/>
                </Button>
               </AlertDialogTrigger>
 
-              <AlertDialogContent className="dark-pessoal z-[150]">
+              <AlertDialogContent className="dark-pessoal">
+
                <AlertDialogHeader>
                 <AlertDialogTitle>
                  Confirmar Exclusão
                 </AlertDialogTitle>
 
                 <AlertDialogDescription>
-                 Deseja remover este registro?
+                 Deseja remover este lançamento?
                 </AlertDialogDescription>
                </AlertDialogHeader>
 
@@ -674,23 +751,63 @@ const LancamentoDizimosOfertas=()=>{
 
                 <AlertDialogAction
                  onClick={()=>handleDelete(item.id)}
-                 className="bg-red-600"
+                 className="bg-red-600 hover:bg-red-700"
                 >
                  Deletar
                 </AlertDialogAction>
                </AlertDialogFooter>
+
               </AlertDialogContent>
              </AlertDialog>
 
             </div>
            </TableCell>
+
           </TableRow>
          ))
         )}
 
        </TableBody>
       </Table>
+
      </ScrollArea>
+
+     {!loading&&filtered.length>0&&(
+      <div className="flex flex-col gap-2 border-t border-border px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+
+       <span>
+        Mostrando {((currentPage-1)*pageSize)+1}–{Math.min(currentPage*pageSize,filtered.length)} de {filtered.length}
+       </span>
+
+       <div className="flex items-center gap-1">
+
+        <Button
+         variant="outline"
+         size="sm"
+         disabled={currentPage===1}
+         onClick={()=>setCurrentPage(p=>Math.max(1,p-1))}
+         className="h-8"
+        >
+         Anterior
+        </Button>
+
+        <span className="px-2 text-xs">
+         {currentPage} / {totalPages}
+        </span>
+
+        <Button
+         variant="outline"
+         size="sm"
+         disabled={currentPage===totalPages}
+         onClick={()=>setCurrentPage(p=>Math.min(totalPages,p+1))}
+         className="h-8"
+        >
+         Próxima
+        </Button>
+
+       </div>
+      </div>
+     )}
 
     </CardContent>
    </Card>
