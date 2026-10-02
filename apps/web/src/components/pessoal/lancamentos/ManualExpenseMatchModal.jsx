@@ -1,5 +1,4 @@
 import React,{useState,useEffect}from'react';
-import{Dialog,DialogContent,DialogHeader,DialogTitle,DialogFooter,DialogDescription}from'@/components/ui/dialog';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -8,7 +7,8 @@ import{supabase}from'@/lib/customSupabaseClient';
 import{formatCurrency}from'@/lib/utils';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{format,parseISO}from'date-fns';
-import{Loader2}from'lucide-react';
+import{Loader2,WalletCards}from'lucide-react';
+import ModalLancamentoPadrao from'../ModalLancamentoPadrao';
 
 const money=v=>{
  const d=String(v??'').replace(/\D/g,'');
@@ -40,6 +40,7 @@ export default function ManualExpenseMatchModal({isOpen,onClose,expense,onSave})
 
  const fetchUnmatchedExpenses=async()=>{
   if(!expense)return;
+
   setFetchingExpenses(true);
 
   try{
@@ -53,6 +54,7 @@ export default function ManualExpenseMatchModal({isOpen,onClose,expense,onSave})
     .order('data',{ascending:false});
 
    if(error)throw error;
+
    setActualExpenses(data||[]);
   }catch(err){
    console.error(err);
@@ -64,6 +66,12 @@ export default function ManualExpenseMatchModal({isOpen,onClose,expense,onSave})
   }finally{
    setFetchingExpenses(false);
   }
+ };
+
+ const resetForm=()=>{
+  setMatchMode('link');
+  setSelectedMatchId('none');
+  setManualAmount(expense?.valor_previsto?money(expense.valor_previsto):'');
  };
 
  const handleSave=async()=>{
@@ -80,7 +88,6 @@ export default function ManualExpenseMatchModal({isOpen,onClose,expense,onSave})
      .eq('id',expense.id);
 
     if(error)throw error;
-
    }else if(matchMode==='manual'){
     const valor=moneyNum(manualAmount);
 
@@ -104,6 +111,14 @@ export default function ManualExpenseMatchModal({isOpen,onClose,expense,onSave})
      .eq('id',expense.id);
 
     if(error)throw error;
+   }else{
+    toast({
+     variant:'destructive',
+     title:'Seleção obrigatória',
+     description:'Selecione um lançamento correspondente ou escolha o modo manual.'
+    });
+    setLoading(false);
+    return;
    }
 
    toast({
@@ -111,12 +126,8 @@ export default function ManualExpenseMatchModal({isOpen,onClose,expense,onSave})
     description:'Status atualizado com sucesso!'
    });
 
-   onSave();
-
-   setMatchMode('link');
-   setSelectedMatchId('none');
-   setManualAmount('');
-
+   onSave?.();
+   resetForm();
   }catch(err){
    toast({
     variant:'destructive',
@@ -131,132 +142,118 @@ export default function ManualExpenseMatchModal({isOpen,onClose,expense,onSave})
  if(!expense)return null;
 
  return(
-  <Dialog
+  <ModalLancamentoPadrao
    open={isOpen}
-   onOpenChange={open=>open?null:onClose()}
-  >
-   <DialogContent
-    className="dark-pessoal w-[calc(100%-2rem)] max-w-[560px] overflow-hidden rounded-2xl border-0 bg-[hsl(var(--card-bg))] p-0 text-foreground shadow-[0_24px_80px_rgba(0,0,0,.58)]"
-    style={{border:'1px solid hsl(0 84% 60% / .28)'}}
-    onInteractOutside={e=>e.preventDefault()}
-    onPointerDownOutside={e=>e.preventDefault()}
-    onEscapeKeyDown={e=>e.preventDefault()}
-   >
-
-    <DialogHeader
-     className="px-6 py-5 pr-14"
-     style={{
-      borderBottom:'1px solid hsl(0 84% 60% / .15)',
-      background:'hsl(0 84% 60% / .045)'
-     }}
-    >
-     <DialogTitle className="text-xl font-bold text-red-400">
-      Atualizar Status da Conta
-     </DialogTitle>
-
-     <DialogDescription className="mt-1 text-sm text-muted-foreground">
-      {expense.descricao} - {formatCurrency(expense.valor_previsto)}
-     </DialogDescription>
-    </DialogHeader>
-
-    <div className="space-y-5 px-6 py-6">
-
-     <div className="space-y-2">
-      <Label>Modo de Atualização</Label>
-
-      <Select
-       value={matchMode}
-       onValueChange={setMatchMode}
-      >
-       <SelectTrigger className="h-11 rounded-xl bg-input text-foreground">
-        <SelectValue/>
-       </SelectTrigger>
-
-       <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
-        <SelectItem value="link">
-         Vincular a um Lançamento Existente
-        </SelectItem>
-        <SelectItem value="manual">
-         Marcar como Pago Manualmente
-        </SelectItem>
-       </SelectContent>
-      </Select>
-     </div>
-
-     {matchMode==='link'?(
-      <div className="space-y-2">
-       <Label>Lançamento Correspondente</Label>
-
-       <Select
-        value={selectedMatchId}
-        onValueChange={setSelectedMatchId}
-       >
-        <SelectTrigger className="h-11 rounded-xl bg-input text-foreground">
-         <SelectValue
-          placeholder={
-           fetchingExpenses
-            ?"Buscando..."
-            :"Selecione o lançamento real"
-          }
-         />
-        </SelectTrigger>
-
-        <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
-         <SelectItem value="none">
-          Nenhum (Remover vínculo)
-         </SelectItem>
-
-         {actualExpenses.map(exp=>(
-          <SelectItem key={exp.id} value={exp.id}>
-           {format(parseISO(exp.data),'dd/MM')} - {exp.despesa} ({formatCurrency(Number(exp.valor))})
-          </SelectItem>
-         ))}
-        </SelectContent>
-       </Select>
-      </div>
-     ):(
-      <div className="space-y-2">
-       <Label>Valor Real Pago (R$)</Label>
-
-       <Input
-        type="text"
-        inputMode="numeric"
-        value={manualAmount}
-        onChange={e=>setManualAmount(money(e.target.value))}
-        placeholder="R$ 0,00"
-        className="h-11 rounded-xl bg-input text-foreground font-semibold tabular-nums"
-       />
-      </div>
-     )}
-
-    </div>
-
-    <DialogFooter className="border-t border-border/70 bg-background/20 px-6 py-4">
+   onClose={onClose}
+   title="Atualizar Status da Conta"
+   description={`${expense.descricao} - ${formatCurrency(expense.valor_previsto)}`}
+   icon={WalletCards}
+   theme="red"
+   footer={
+    <>
      <Button
+      type="button"
       variant="outline"
       onClick={onClose}
       disabled={loading}
-      className="h-10 rounded-xl"
+      className="h-11 rounded-xl border-border px-5"
      >
       Cancelar
      </Button>
 
      <Button
+      type="button"
       onClick={handleSave}
-      disabled={
-       loading||
-       (matchMode==='link'&&selectedMatchId==='none')
-      }
-      className="h-10 rounded-xl bg-red-600 px-6 font-semibold text-white hover:bg-red-700"
+      disabled={loading||(matchMode==='link'&&selectedMatchId==='none')}
+      className="h-11 rounded-xl bg-red-600 px-6 font-semibold text-white shadow-[0_0_18px_hsl(0_84%_60%/.22)] hover:bg-red-700"
      >
-      {loading&&(
-       <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
-      )}
+      {loading&&<Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
       Confirmar
      </Button>
-    </DialogFooter>
+    </>
+   }
+  >
+   <div className="space-y-5">
 
-   </DialogContent>
-  </Dialog>
+    <div className="space-y-2">
+     <Label>Modo de Atualização</Label>
+
+     <Select
+      value={matchMode}
+      onValueChange={setMatchMode}
+      disabled={loading}
+     >
+      <SelectTrigger className="h-11 rounded-xl bg-input text-foreground">
+       <SelectValue/>
+      </SelectTrigger>
+
+      <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
+       <SelectItem value="link">
+        Vincular a um Lançamento Existente
+       </SelectItem>
+
+       <SelectItem value="manual">
+        Marcar como Pago Manualmente
+       </SelectItem>
+      </SelectContent>
+     </Select>
+    </div>
+
+    {matchMode==='link'?(
+     <div className="space-y-2">
+      <Label>Lançamento Correspondente</Label>
+
+      <Select
+       value={selectedMatchId}
+       onValueChange={setSelectedMatchId}
+       disabled={loading||fetchingExpenses}
+      >
+       <SelectTrigger className="h-11 rounded-xl bg-input text-foreground">
+        <SelectValue
+         placeholder={
+          fetchingExpenses
+           ?"Buscando..."
+           :"Selecione o lançamento real"
+         }
+        />
+       </SelectTrigger>
+
+       <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
+        <SelectItem value="none">
+         Nenhum (Remover vínculo)
+        </SelectItem>
+
+        {actualExpenses.map(exp=>(
+         <SelectItem key={exp.id} value={exp.id}>
+          {format(parseISO(exp.data),'dd/MM')} - {exp.despesa} ({formatCurrency(Number(exp.valor))})
+         </SelectItem>
+        ))}
+       </SelectContent>
+      </Select>
+     </div>
+    ):(
+     <div className="space-y-2">
+      <Label>Valor Real Pago (R$)</Label>
+
+      <Input
+       type="text"
+       inputMode="numeric"
+       value={manualAmount}
+       onChange={e=>setManualAmount(money(e.target.value))}
+       placeholder="R$ 0,00"
+       disabled={loading}
+       className="h-11 rounded-xl bg-input font-semibold tabular-nums text-foreground"
+      />
+     </div>
+    )}
+
+    <div className="rounded-xl border border-red-500/15 bg-red-500/5 p-3 text-sm text-muted-foreground">
+     O status será alterado para
+     <span className="ml-1 font-semibold text-red-400">Pago</span>
+     após a confirmação.
+    </div>
+
+   </div>
+  </ModalLancamentoPadrao>
  );
 }
