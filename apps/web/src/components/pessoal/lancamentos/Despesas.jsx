@@ -1,6 +1,6 @@
-import React,{useState,useEffect,useCallback,useRef}from'react';
+import React,{useState,useEffect,useCallback,useRef,useMemo}from'react';
 import{motion}from'framer-motion';
-import{Plus,Trash2,Search,Edit,WalletCards}from'lucide-react';
+import{Plus,Trash2,Search,Edit,WalletCards,Download,FileText,DollarSign,ArrowDownRight,CalendarDays,Filter,ChevronLeft,ChevronRight}from'lucide-react';
 import{format}from'date-fns';
 import{ptBR}from'date-fns/locale';
 import{supabase}from'@/lib/customSupabaseClient';
@@ -8,7 +8,7 @@ import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
-import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
+import{Card,CardContent}from'@/components/ui/card';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
 import{useToast}from'@/components/ui/use-toast';
@@ -17,9 +17,14 @@ import{ScrollArea}from'@/components/ui/scroll-area';
 import OfflineIndicator from'@/components/OfflineIndicator';
 import{useOnlineStatus}from'@/hooks/useOnlineStatus';
 import{saveOfflineData}from'@/lib/offlineStorage';
+import{exportToExcel}from'@/lib/ExportUtils';
 import ModalLancamentoPadrao from'../ModalLancamentoPadrao';
 
 const TZ='America/Sao_Paulo',RED='hsl(0 84% 60%)';
+const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const years=[new Date().getFullYear(),new Date().getFullYear()-1,new Date().getFullYear()-2];
+
+const money=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 
 const getBRDate=()=>{
  const p=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()),v={};
@@ -32,12 +37,12 @@ const formatDateDisplay=v=>{
  const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
  if(m)return`${m[3]}/${m[2]}/${m[1]}`;
  const d=new Date(v);
- return Number.isNaN(d.getTime())?v:new Intl.DateTimeFormat('pt-BR',{timeZone:TZ}).format(d);
+ return Number.isNaN(d.getTime())?'-':new Intl.DateTimeFormat('pt-BR',{timeZone:TZ}).format(d);
 };
 
-const money=v=>{
+const formatMoney=v=>{
  const d=String(v??'').replace(/\D/g,'');
- return d?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(d)/100):'';
+ return d?money.format(Number(d)/100):'';
 };
 
 const moneyNum=v=>{
@@ -56,31 +61,75 @@ const initial=()=>({
  responsavel_id:''
 });
 
+const StatCard=({icon:Icon,label,value})=>(
+ <div className="rounded-xl border border-border bg-card/80 p-4 shadow-sm">
+  <div className="flex items-center gap-3">
+   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-red-500/20 bg-red-500/10">
+    <Icon className="h-5 w-5 text-red-400"/>
+   </div>
+   <div className="min-w-0">
+    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+    <p className="mt-1 truncate text-xl font-bold text-red-400">{value}</p>
+   </div>
+  </div>
+ </div>
+);
+
 const Despesas=()=>{
  const{user}=useAuth(),{toast}=useToast(),{isOnline,checkPending}=useOnlineStatus(),mounted=useRef(true);
- const[loading,setLoading]=useState(true),[despesas,setDespesas]=useState([]),[filtered,setFiltered]=useState([]);
- const[search,setSearch]=useState(''),[month,setMonth]=useState(String(new Date().getMonth())),[year,setYear]=useState(String(new Date().getFullYear()));
- const[open,setOpen]=useState(false),[tipos,setTipos]=useState([]),[cartoes,setCartoes]=useState([]),[usuarios,setUsuarios]=useState([]);
- const[editing,setEditing]=useState(null),[form,setForm]=useState(initial);
 
- useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
+ const[loading,setLoading]=useState(true);
+ const[despesas,setDespesas]=useState([]);
+ const[tipos,setTipos]=useState([]);
+ const[cartoes,setCartoes]=useState([]);
+ const[usuarios,setUsuarios]=useState([]);
+ const[search,setSearch]=useState('');
+ const[month,setMonth]=useState(String(new Date().getMonth()));
+ const[year,setYear]=useState(String(new Date().getFullYear()));
+ const[category,setCategory]=useState('all');
+ const[payment,setPayment]=useState('all');
+ const[open,setOpen]=useState(false);
+ const[editing,setEditing]=useState(null);
+ const[form,setForm]=useState(initial);
+ const[currentPage,setCurrentPage]=useState(1);
+
+ const pageSize=10;
+
+ useEffect(()=>{
+  mounted.current=true;
+  return()=>{mounted.current=false};
+ },[]);
 
  const fetchTipos=useCallback(async()=>{
   if(!user)return;
-  const{data,error}=await supabase.from('tipos_despesa').select('nome_despesa,categoria').eq('user_id',user.id).order('nome_despesa');
-  if(!mounted.current)return;
-  if(!error)setTipos(data||[]);
+  const{data,error}=await supabase
+   .from('tipos_despesa')
+   .select('nome_despesa,categoria')
+   .eq('user_id',user.id)
+   .order('nome_despesa');
+
+  if(!error&&mounted.current)setTipos(data||[]);
  },[user]);
 
  const fetchCartoes=useCallback(async()=>{
   if(!user)return;
-  const{data,error}=await supabase.from('pessoal_cartoes').select('id,nome').eq('user_id',user.id).order('nome');
+  const{data,error}=await supabase
+   .from('pessoal_cartoes')
+   .select('id,nome')
+   .eq('user_id',user.id)
+   .order('nome');
+
   if(!error&&mounted.current)setCartoes(data||[]);
  },[user]);
 
  const fetchUsuarios=useCallback(async()=>{
   if(!user)return;
-  const{data,error}=await supabase.from('pessoal_cartao_usuarios').select('id,nome').eq('user_id',user.id).order('nome');
+  const{data,error}=await supabase
+   .from('pessoal_cartao_usuarios')
+   .select('id,nome')
+   .eq('user_id',user.id)
+   .order('nome');
+
   if(!error&&mounted.current)setUsuarios(data||[]);
  },[user]);
 
@@ -89,15 +138,27 @@ const Despesas=()=>{
   setLoading(true);
 
   try{
-   const ini=format(new Date(+year,+month,1),'yyyy-MM-dd'),fim=format(new Date(+year,+month+1,0),'yyyy-MM-dd');
-   const{data,error}=await supabase.from('despesas').select('*').eq('user_id',user.id).gte('data',ini).lte('data',fim).order('data',{ascending:false});
+   const ini=format(new Date(+year,+month,1),'yyyy-MM-dd');
+   const fim=format(new Date(+year,+month+1,0),'yyyy-MM-dd');
+
+   const{data,error}=await supabase
+    .from('despesas')
+    .select('*')
+    .eq('user_id',user.id)
+    .gte('data',ini)
+    .lte('data',fim)
+    .order('data',{ascending:false});
+
    if(error)throw error;
-   if(mounted.current){
-    setDespesas(data||[]);
-    setFiltered(data||[]);
-   }
+   if(mounted.current)setDespesas(data||[]);
   }catch(e){
-   if(mounted.current)toast({title:'Erro',description:'Não foi possível carregar as despesas.',variant:'destructive'});
+   if(mounted.current){
+    toast({
+     title:'Erro',
+     description:'Não foi possível carregar as despesas.',
+     variant:'destructive'
+    });
+   }
   }finally{
    if(mounted.current)setLoading(false);
   }
@@ -110,10 +171,41 @@ const Despesas=()=>{
   fetchUsuarios();
  },[fetchDespesas,fetchTipos,fetchCartoes,fetchUsuarios]);
 
- useEffect(()=>{
-  const q=search.toLowerCase();
-  setFiltered(despesas.filter(x=>x.despesa?.toLowerCase().includes(q)||x.categoria?.toLowerCase().includes(q)));
- },[search,despesas]);
+ const categories=useMemo(
+  ()=>['all',...tipos.map(t=>t.categoria).filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i)],
+  [tipos]
+ );
+
+ const filtered=useMemo(()=>{
+  const q=search.trim().toLowerCase();
+
+  return despesas.filter(item=>{
+   const searchMatch=
+    !q||
+    item.despesa?.toLowerCase().includes(q)||
+    item.categoria?.toLowerCase().includes(q)||
+    item.forma_pagamento?.toLowerCase().includes(q);
+
+   const categoryMatch=category==='all'||item.categoria===category;
+   const paymentMatch=payment==='all'||item.forma_pagamento===payment;
+
+   return searchMatch&&categoryMatch&&paymentMatch;
+  });
+ },[despesas,search,category,payment]);
+
+ useEffect(()=>setCurrentPage(1),[search,category,payment,month,year]);
+
+ const total=filtered.reduce((a,x)=>a+Number(x.valor||0),0);
+ const media=filtered.length?total/filtered.length:0;
+ const maior=filtered.reduce((max,x)=>Math.max(max,Number(x.valor||0)),0);
+ const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
+
+ const paginated=useMemo(()=>{
+  const start=(currentPage-1)*pageSize;
+  return filtered.slice(start,start+pageSize);
+ },[filtered,currentPage]);
+
+ const responsavel=id=>usuarios.find(x=>x.id===id)?.nome||'';
 
  const reset=useCallback(()=>{
   setForm(initial());
@@ -131,7 +223,7 @@ const Despesas=()=>{
    setForm({
     data:String(item.data||'').slice(0,10)||getBRDate(),
     despesa:item.despesa||'',
-    valor:money(Number(item.valor||0)*100),
+    valor:formatMoney(Number(item.valor||0)*100),
     categoria:item.categoria||'',
     forma_pagamento:item.forma_pagamento||'Débito',
     parcelas:item.parcelas||1,
@@ -151,12 +243,20 @@ const Despesas=()=>{
   const valor=moneyNum(form.valor);
 
   if(!form.data||!form.despesa||valor<=0){
-   toast({title:'Campos obrigatórios',description:'Preencha todos os campos obrigatórios.',variant:'destructive'});
+   toast({
+    title:'Campos obrigatórios',
+    description:'Preencha todos os campos obrigatórios.',
+    variant:'destructive'
+   });
    return;
   }
 
   if(form.forma_pagamento==='Crédito'&&!form.cartao_id){
-   toast({title:'Cartão obrigatório',description:'Selecione o cartão de crédito utilizado.',variant:'destructive'});
+   toast({
+    title:'Cartão obrigatório',
+    description:'Selecione o cartão de crédito utilizado.',
+    variant:'destructive'
+   });
    return;
   }
 
@@ -187,11 +287,19 @@ const Despesas=()=>{
 
    if(editing){
     if(!isOnline){
-     toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});
+     toast({
+      title:'Offline',
+      description:'Edição offline não permitida.',
+      variant:'destructive'
+     });
      return;
     }
 
-    const{error}=await supabase.from('despesas').update(payload).eq('id',editing);
+    const{error}=await supabase
+     .from('despesas')
+     .update(payload)
+     .eq('id',editing);
+
     if(error)throw error;
 
     if(mounted.current){
@@ -199,7 +307,10 @@ const Despesas=()=>{
      reset();
     }
    }else{
-    const{error}=await supabase.from('despesas').insert([payload]);
+    const{error}=await supabase
+     .from('despesas')
+     .insert([payload]);
+
     if(error)throw error;
 
     if(mounted.current){
@@ -210,48 +321,340 @@ const Despesas=()=>{
 
    if(isOnline)fetchDespesas();
   }catch(e){
-   toast({title:'Erro',description:e.message||'Falha ao salvar despesa.',variant:'destructive'});
+   toast({
+    title:'Erro',
+    description:e.message||'Falha ao salvar despesa.',
+    variant:'destructive'
+   });
   }
  };
 
  const del=async id=>{
   if(!isOnline){
-   toast({title:'Offline',description:'Exclusão offline não permitida.',variant:'destructive'});
+   toast({
+    title:'Offline',
+    description:'Exclusão offline não permitida.',
+    variant:'destructive'
+   });
    return;
   }
 
   try{
-   const{error}=await supabase.from('despesas').delete().eq('id',id);
+   const{error}=await supabase
+    .from('despesas')
+    .delete()
+    .eq('id',id);
+
    if(error)throw error;
 
    toast({title:'Sucesso',description:'Despesa removida.'});
    fetchDespesas();
   }catch(e){
-   toast({title:'Erro',description:'Falha ao remover despesa.',variant:'destructive'});
+   toast({
+    title:'Erro',
+    description:'Falha ao remover despesa.',
+    variant:'destructive'
+   });
   }
  };
 
- const total=filtered.reduce((a,x)=>a+Number(x.valor||0),0);
- const responsavel=id=>usuarios.find(x=>x.id===id)?.nome||'';
- const moeda=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
+ const handleExport=()=>{
+  if(!filtered.length){
+   toast({
+    title:'Aviso',
+    description:'Nenhum dado para exportar.',
+    variant:'destructive'
+   });
+   return;
+  }
+
+  exportToExcel(
+   filtered.map(item=>({
+    Data:formatDateDisplay(item.data),
+    Descrição:item.despesa,
+    Categoria:item.categoria||'OUTROS',
+    Pagamento:item.forma_pagamento,
+    Responsável:responsavel(item.responsavel_id)||'-',
+    Valor:Number(item.valor||0)
+   })),
+   'Lançamento_Despesas',
+   'Despesas'
+  );
+ };
+
+ const clearFilters=()=>{
+  setSearch('');
+  setCategory('all');
+  setPayment('all');
+ };
 
  return(
-  <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="dark-pessoal space-y-6">
+  <motion.div
+   initial={{opacity:0,y:20}}
+   animate={{opacity:1,y:0}}
+   className="dark-pessoal space-y-4"
+  >
    <OfflineIndicator/>
 
-   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-    <div>
-     <p className="text-xs font-semibold uppercase tracking-[.2em] text-[hsl(var(--neon-pessoal))]">Finanças Pessoais</p>
-     <h1 className="mt-1 text-3xl font-bold tracking-tight">Despesas</h1>
-     <p className="text-sm text-muted-foreground">Gerencie seus gastos mensais (A-Z).</p>
+   <div className="rounded-xl border border-border bg-card/70">
+    <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+     <div className="flex items-center gap-4">
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-red-500/25 bg-red-500/10">
+       <WalletCards className="h-7 w-7 text-red-400"/>
+      </div>
+
+      <div>
+       <h1 className="text-2xl font-bold tracking-tight text-red-400">Lançamento de Despesas</h1>
+       <p className="text-sm text-muted-foreground">Registre e acompanhe suas saídas financeiras.</p>
+      </div>
+     </div>
+
+     <div className="flex flex-wrap gap-2">
+      <Button
+       variant="outline"
+       onClick={handleExport}
+       className="border-border bg-transparent"
+      >
+       <Download className="mr-2 h-4 w-4"/>Excel
+      </Button>
+
+      <Button
+       onClick={()=>openDialog()}
+       className="bg-red-500 text-white hover:bg-red-600"
+      >
+       <Plus className="mr-2 h-4 w-4"/>Novo Lançamento
+      </Button>
+     </div>
+    </div>
+   </div>
+
+   <div className="rounded-xl border border-border bg-card/70 p-3">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_.65fr_.5fr_.8fr_.8fr_auto]">
+     <div className="relative">
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+      <Input
+       placeholder="Buscar por descrição ou categoria..."
+       value={search}
+       onChange={e=>setSearch(e.target.value)}
+       className="h-11 border-border bg-input pl-10"
+      />
+     </div>
+
+     <Select value={month} onValueChange={setMonth}>
+      <SelectTrigger className="h-11 border-border bg-input">
+       <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground"/>
+       <SelectValue placeholder="Mês"/>
+      </SelectTrigger>
+
+      <SelectContent className="dark-pessoal border-border bg-card">
+       {meses.map((m,i)=>(
+        <SelectItem key={i} value={String(i)}>{m}</SelectItem>
+       ))}
+      </SelectContent>
+     </Select>
+
+     <Select value={year} onValueChange={setYear}>
+      <SelectTrigger className="h-11 border-border bg-input">
+       <SelectValue placeholder="Ano"/>
+      </SelectTrigger>
+
+      <SelectContent className="dark-pessoal border-border bg-card">
+       {years.map(y=>(
+        <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+       ))}
+      </SelectContent>
+     </Select>
+
+     <Select value={category} onValueChange={setCategory}>
+      <SelectTrigger className="h-11 border-border bg-input">
+       <SelectValue placeholder="Categoria"/>
+      </SelectTrigger>
+
+      <SelectContent className="dark-pessoal border-border bg-card">
+       <SelectItem value="all">Todas as Categorias</SelectItem>
+       {categories.filter(c=>c!=='all').map(c=>(
+        <SelectItem key={c} value={c}>{c}</SelectItem>
+       ))}
+      </SelectContent>
+     </Select>
+
+     <Select value={payment} onValueChange={setPayment}>
+      <SelectTrigger className="h-11 border-border bg-input">
+       <SelectValue placeholder="Pagamento"/>
+      </SelectTrigger>
+
+      <SelectContent className="dark-pessoal border-border bg-card">
+       <SelectItem value="all">Todos os Pagamentos</SelectItem>
+       <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+       <SelectItem value="Débito">Débito</SelectItem>
+       <SelectItem value="Crédito">Crédito</SelectItem>
+       <SelectItem value="Pix">Pix</SelectItem>
+       <SelectItem value="Boleto">Boleto</SelectItem>
+      </SelectContent>
+     </Select>
+
+     <Button
+      variant="outline"
+      onClick={clearFilters}
+      className="h-11 border-border"
+     >
+      <Filter className="mr-2 h-4 w-4"/>Limpar
+     </Button>
+    </div>
+   </div>
+
+   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <StatCard icon={FileText} label="Total de Registros" value={filtered.length}/>
+    <StatCard icon={DollarSign} label="Total do Período" value={money.format(total)}/>
+    <StatCard icon={ArrowDownRight} label="Média por Registro" value={money.format(media)}/>
+    <StatCard icon={WalletCards} label="Maior Lançamento" value={money.format(maior)}/>
+   </div>
+
+   <div className="overflow-hidden rounded-xl border border-border bg-card/70">
+    <div className="overflow-x-auto">
+     <Table>
+      <TableHeader>
+       <TableRow className="border-border bg-secondary/30">
+        <TableHead>Descrição</TableHead>
+        <TableHead>Categoria</TableHead>
+        <TableHead>Data</TableHead>
+        <TableHead>Pagamento</TableHead>
+        <TableHead>Responsável</TableHead>
+        <TableHead className="text-right">Valor</TableHead>
+        <TableHead className="text-right">Ações</TableHead>
+       </TableRow>
+      </TableHeader>
+
+      <TableBody>
+       {loading?(
+        <TableRow>
+         <TableCell colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+          Carregando lançamentos...
+         </TableCell>
+        </TableRow>
+       ):paginated.length===0?(
+        <TableRow>
+         <TableCell colSpan={7} className="px-4 py-12">
+          <div className="flex flex-col items-center justify-center gap-2 text-center">
+           <FileText className="h-10 w-10 text-muted-foreground"/>
+           <p className="font-semibold text-foreground">Nenhum lançamento encontrado</p>
+           <p className="text-sm text-muted-foreground">Não existem registros para os filtros selecionados.</p>
+
+           <Button
+            variant="outline"
+            size="sm"
+            onClick={clearFilters}
+            className="mt-2"
+           >
+            <Filter className="mr-2 h-4 w-4"/>Limpar Filtros
+           </Button>
+          </div>
+         </TableCell>
+        </TableRow>
+       ):(
+        paginated.map(item=>(
+         <TableRow
+          key={item.id}
+          className="border-border transition-colors hover:bg-secondary/30"
+         >
+          <TableCell className="px-4 py-4 font-medium">{item.despesa}</TableCell>
+
+          <TableCell className="px-4 py-4">
+           <Badge
+            variant="outline"
+            className="border-red-500/20 bg-red-500/10 text-red-400"
+           >
+            {item.categoria||'OUTROS'}
+           </Badge>
+          </TableCell>
+
+          <TableCell className="px-4 py-4">
+           {formatDateDisplay(item.data)}
+          </TableCell>
+
+          <TableCell className="px-4 py-4 text-sm text-muted-foreground">
+           {item.forma_pagamento}
+           {item.cartao_id&&cartoes.find(c=>c.id===item.cartao_id)?
+            ` • ${cartoes.find(c=>c.id===item.cartao_id).nome}`:
+            ''}
+          </TableCell>
+
+          <TableCell className="px-4 py-4">
+           {item.responsavel_id?
+            <Badge
+             variant="outline"
+             className="border-indigo-500/20 bg-indigo-500/10 text-indigo-400"
+            >
+             {responsavel(item.responsavel_id)}
+            </Badge>:
+            <span className="italic text-muted-foreground">—</span>}
+          </TableCell>
+
+          <TableCell className="px-4 py-4 text-right font-bold text-red-400">
+           {money.format(Number(item.valor||0))}
+          </TableCell>
+
+          <TableCell className="px-4 py-4">
+           <div className="flex justify-end gap-1">
+            <Button
+             variant="ghost"
+             size="icon"
+             title="Editar lançamento"
+             className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
+             onClick={()=>openDialog(item)}
+            >
+             <Edit className="h-4 w-4"/>
+            </Button>
+
+            <Button
+             variant="ghost"
+             size="icon"
+             title="Excluir lançamento"
+             className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
+             onClick={()=>del(item.id)}
+            >
+             <Trash2 className="h-4 w-4"/>
+            </Button>
+           </div>
+          </TableCell>
+         </TableRow>
+        ))
+       )}
+      </TableBody>
+     </Table>
     </div>
 
-    <Button
-     className="bg-[hsl(var(--neon-pessoal))] text-white hover:bg-[hsl(var(--neon-pessoal)/.88)]"
-     onClick={()=>openDialog()}
-    >
-     <Plus className="mr-2 h-4 w-4"/>Nova Despesa
-    </Button>
+    {!loading&&filtered.length>0&&(
+     <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-sm text-muted-foreground">
+       Mostrando {Math.min((currentPage-1)*pageSize+1,filtered.length)} a {Math.min(currentPage*pageSize,filtered.length)} de {filtered.length} registros
+      </div>
+
+      <div className="flex items-center gap-2">
+       <Button
+        variant="outline"
+        size="sm"
+        disabled={currentPage===1}
+        onClick={()=>setCurrentPage(p=>Math.max(1,p-1))}
+       >
+        <ChevronLeft className="mr-1 h-4 w-4"/>Anterior
+       </Button>
+
+       <div className="flex h-9 min-w-9 items-center justify-center rounded-md bg-red-500 px-3 text-sm font-semibold text-white">
+        {currentPage}
+       </div>
+
+       <Button
+        variant="outline"
+        size="sm"
+        disabled={currentPage>=totalPages}
+        onClick={()=>setCurrentPage(p=>Math.min(totalPages,p+1))}
+       >
+        Próxima<ChevronRight className="ml-1 h-4 w-4"/>
+       </Button>
+      </div>
+     </div>
+    )}
    </div>
 
    <ModalLancamentoPadrao
@@ -263,7 +666,12 @@ const Despesas=()=>{
     theme="red"
     footer={
      <>
-      <Button type="button" variant="outline" onClick={closeModal} className="h-11 rounded-xl border-border px-5">
+      <Button
+       type="button"
+       variant="outline"
+       onClick={closeModal}
+       className="h-11 rounded-xl border-border px-5"
+      >
        Cancelar
       </Button>
 
@@ -278,7 +686,11 @@ const Despesas=()=>{
      </>
     }
    >
-    <form id="form-lancamento-despesa" onSubmit={save} className="max-h-[calc(100vh-300px)] overflow-y-auto pr-1">
+    <form
+     id="form-lancamento-despesa"
+     onSubmit={save}
+     className="max-h-[calc(100vh-300px)] overflow-y-auto pr-1"
+    >
      <div className="space-y-5">
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -301,7 +713,7 @@ const Despesas=()=>{
          inputMode="numeric"
          name="valor"
          value={form.valor}
-         onChange={e=>setForm({...form,valor:money(e.target.value)})}
+         onChange={e=>setForm({...form,valor:formatMoney(e.target.value)})}
          required
          placeholder="R$ 0,00"
          className="h-11 rounded-xl bg-input font-semibold tabular-nums"
@@ -405,9 +817,7 @@ const Despesas=()=>{
            <SelectContent className="dark-pessoal rounded-xl bg-card">
             <ScrollArea className="h-40">
              {cartoes.map(c=>(
-              <SelectItem key={c.id} value={c.id}>
-               {c.nome}
-              </SelectItem>
+              <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
              ))}
             </ScrollArea>
            </SelectContent>
@@ -434,9 +844,7 @@ const Despesas=()=>{
             <ScrollArea className="h-40">
              <SelectItem value="nenhum">— Sem responsável —</SelectItem>
              {usuarios.map(u=>(
-              <SelectItem key={u.id} value={u.id}>
-               {u.nome}
-              </SelectItem>
+              <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
              ))}
             </ScrollArea>
            </SelectContent>
@@ -448,155 +856,6 @@ const Despesas=()=>{
      </div>
     </form>
    </ModalLancamentoPadrao>
-
-   <div className="grid gap-4 md:grid-cols-4">
-    <Card className="col-span-1 border-border md:col-span-3">
-     <CardContent className="flex flex-col items-center gap-4 p-4 md:flex-row">
-      <div className="flex w-full flex-1 items-center gap-2">
-       <Search className="h-4 w-4 text-muted-foreground"/>
-       <Input
-        placeholder="Buscar..."
-        value={search}
-        onChange={e=>setSearch(e.target.value)}
-        className="flex-1 bg-input"
-       />
-      </div>
-
-      <div className="flex w-full gap-2 md:w-auto">
-       <Select value={month} onValueChange={setMonth}>
-        <SelectTrigger className="w-[140px] bg-input">
-         <SelectValue/>
-        </SelectTrigger>
-
-        <SelectContent className="dark-pessoal bg-card">
-         {Array.from({length:12},(_,i)=>(
-          <SelectItem key={i} value={String(i)}>
-           {format(new Date(2024,i,1),'MMMM',{locale:ptBR})}
-          </SelectItem>
-         ))}
-        </SelectContent>
-       </Select>
-
-       <Select value={year} onValueChange={setYear}>
-        <SelectTrigger className="w-[100px] bg-input">
-         <SelectValue/>
-        </SelectTrigger>
-
-        <SelectContent className="dark-pessoal bg-card">
-         {[2023,2024,2025,2026].map(y=>(
-          <SelectItem key={y} value={String(y)}>
-           {y}
-          </SelectItem>
-         ))}
-        </SelectContent>
-       </Select>
-      </div>
-     </CardContent>
-    </Card>
-
-    <Card className="border-red-200/20 bg-gradient-to-br from-red-500/10 to-red-400/10">
-     <CardHeader className="pb-2">
-      <CardTitle className="text-sm font-medium text-red-500">
-       Total no Período
-      </CardTitle>
-     </CardHeader>
-
-     <CardContent>
-      <div className="text-2xl font-bold text-red-500">
-       {moeda.format(total)}
-      </div>
-     </CardContent>
-    </Card>
-   </div>
-
-   <Card className="border-border bg-card">
-    <CardContent className="p-0">
-     <ScrollArea className="h-[500px]">
-      <Table>
-       <TableHeader>
-        <TableRow>
-         <TableHead>Descrição</TableHead>
-         <TableHead>Categoria</TableHead>
-         <TableHead>Data</TableHead>
-         <TableHead>Pagamento</TableHead>
-         <TableHead>Responsável</TableHead>
-         <TableHead className="text-right">Valor</TableHead>
-         <TableHead className="text-center">Ações</TableHead>
-        </TableRow>
-       </TableHeader>
-
-       <TableBody>
-        {loading?
-         <TableRow>
-          <TableCell colSpan={7} className="py-8 text-center">
-           Carregando...
-          </TableCell>
-         </TableRow>:
-        filtered.length===0?
-         <TableRow>
-          <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-           Nenhuma despesa encontrada.
-          </TableCell>
-         </TableRow>:
-        filtered.map(item=>(
-         <TableRow key={item.id} className="transition-colors hover:bg-muted/50">
-          <TableCell className="font-medium">{item.despesa}</TableCell>
-
-          <TableCell>
-           <Badge variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-400">
-            {item.categoria||'OUTROS'}
-           </Badge>
-          </TableCell>
-
-          <TableCell>{formatDateDisplay(item.data)}</TableCell>
-
-          <TableCell className="text-sm text-muted-foreground">
-           {item.forma_pagamento}
-           {item.cartao_id&&cartoes.find(c=>c.id===item.cartao_id)?
-            ` • ${cartoes.find(c=>c.id===item.cartao_id).nome}`:
-            ''}
-          </TableCell>
-
-          <TableCell>
-           {item.responsavel_id?
-            <Badge variant="outline" className="border-indigo-500/20 bg-indigo-500/10 text-indigo-400">
-             {responsavel(item.responsavel_id)}
-            </Badge>:
-            <span className="italic text-muted-foreground">—</span>}
-          </TableCell>
-
-          <TableCell className="text-right font-bold text-red-500">
-           {moeda.format(Number(item.valor||0))}
-          </TableCell>
-
-          <TableCell>
-           <div className="flex justify-center gap-2">
-            <Button
-             variant="ghost"
-             size="icon"
-             className="text-red-400 hover:bg-red-500/10"
-             onClick={()=>openDialog(item)}
-            >
-             <Edit className="h-4 w-4"/>
-            </Button>
-
-            <Button
-             variant="ghost"
-             size="icon"
-             className="text-destructive hover:bg-destructive/10"
-             onClick={()=>del(item.id)}
-            >
-             <Trash2 className="h-4 w-4"/>
-            </Button>
-           </div>
-          </TableCell>
-         </TableRow>
-        ))}
-       </TableBody>
-      </Table>
-     </ScrollArea>
-    </CardContent>
-   </Card>
   </motion.div>
  );
 };
