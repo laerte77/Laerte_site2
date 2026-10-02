@@ -1,29 +1,45 @@
 import React,{useState,useEffect,useCallback}from'react';
-import{motion}from'framer-motion';
-import{Plus,Edit,Trash2,CreditCard,Wallet}from'lucide-react';
+import{
+ Plus,Edit,Trash2,CreditCard,Wallet,RefreshCw,Search
+}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
-import{Card,CardContent}from'@/components/ui/card';
+import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{useToast}from'@/components/ui/use-toast';
-import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
+import{
+ AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,
+ AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,
+ AlertDialogTitle,AlertDialogTrigger
+}from'@/components/ui/alert-dialog';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import ModalLancamentoPadrao from'../ModalLancamentoPadrao';
 
-const BANDEIRAS=['Visa','Mastercard','Elo','American Express','Hipercard','Maestro','Outra'];
+const BANDEIRAS=[
+ 'Visa','Mastercard','Elo','American Express',
+ 'Hipercard','Maestro','Outra'
+];
 
-const formatBRL=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
+const moneyBRL=v=>new Intl.NumberFormat('pt-BR',{
+ style:'currency',
+ currency:'BRL'
+}).format(Number(v||0));
 
-const money=v=>{
- const d=String(v??'').replace(/\D/g,'');
- return d?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(d)/100):'';
+const moneyInput=v=>{
+ const digits=String(v??'').replace(/\D/g,'');
+ return digits
+  ?new Intl.NumberFormat('pt-BR',{
+   style:'currency',
+   currency:'BRL'
+  }).format(Number(digits)/100)
+  :'';
 };
 
 const moneyNum=v=>{
- const d=String(v??'').replace(/\D/g,'');
- return d?Number(d)/100:0;
+ const digits=String(v??'').replace(/\D/g,'');
+ return digits?Number(digits)/100:0;
 };
 
 const initialForm=()=>({
@@ -45,6 +61,7 @@ const CartoesCredito=()=>{
  const[isDialogOpen,setIsDialogOpen]=useState(false);
  const[editingId,setEditingId]=useState(null);
  const[formData,setFormData]=useState(initialForm);
+ const[search,setSearch]=useState('');
 
  const fetchCartoes=useCallback(async()=>{
   if(!user)return;
@@ -89,28 +106,24 @@ const CartoesCredito=()=>{
    .select('id,cartao_id')
    .eq('user_id',user.id);
 
-  const faturaIds=(faturas||[]).map(f=>f.id);
+  const ids=(faturas||[]).map(f=>f.id);
 
-  if(faturaIds.length===0){
+  if(!ids.length){
    setPagamentos([]);
    return;
   }
 
-  const{data:pagamentosData}=await supabase
+  const{data}=await supabase
    .from('pessoal_cartao_pagamentos')
    .select('fatura_id,valor')
-   .in('fatura_id',faturaIds);
+   .in('fatura_id',ids);
 
-  const pagamentosPorCartao=(pagamentosData||[]).map(pagamento=>{
-   const fatura=(faturas||[]).find(f=>f.id===pagamento.fatura_id);
-
-   return{
-    cartao_id:fatura?.cartao_id,
-    valor:Number(pagamento.valor||0)
-   };
-  });
-
-  setPagamentos(pagamentosPorCartao);
+  setPagamentos(
+   (data||[]).map(p=>({
+    cartao_id:faturas.find(f=>f.id===p.fatura_id)?.cartao_id,
+    valor:Number(p.valor||0)
+   }))
+  );
  },[user]);
 
  useEffect(()=>{
@@ -122,45 +135,78 @@ const CartoesCredito=()=>{
 
   const channel=supabase
    .channel('pessoal_cartoes_changes')
-   .on('postgres_changes',{event:'*',schema:'public',table:'pessoal_cartoes'},()=>{
-    fetchCartoes();
-    fetchLancamentos();
-   })
-   .on('postgres_changes',{event:'*',schema:'public',table:'pessoal_cartao_lancamentos'},fetchLancamentos)
-   .on('postgres_changes',{event:'*',schema:'public',table:'pessoal_cartao_pagamentos'},fetchPagamentos)
+   .on(
+    'postgres_changes',
+    {
+     event:'*',
+     schema:'public',
+     table:'pessoal_cartoes'
+    },
+    ()=>{
+     fetchCartoes();
+     fetchLancamentos();
+    }
+   )
+   .on(
+    'postgres_changes',
+    {
+     event:'*',
+     schema:'public',
+     table:'pessoal_cartao_lancamentos'
+    },
+    fetchLancamentos
+   )
+   .on(
+    'postgres_changes',
+    {
+     event:'*',
+     schema:'public',
+     table:'pessoal_cartao_pagamentos'
+    },
+    fetchPagamentos
+   )
    .subscribe();
 
   return()=>supabase.removeChannel(channel);
  },[user,fetchCartoes,fetchLancamentos,fetchPagamentos]);
 
  const valorUtilizado=cartaoId=>{
-  const totalLancado=lancamentos
+  const lancado=lancamentos
    .filter(l=>l.cartao_id===cartaoId)
-   .reduce((acc,l)=>acc+(Number(l.valor||0)/Math.max(1,l.parcelas)),0);
+   .reduce(
+    (sum,l)=>
+     sum+
+     Number(l.valor||0)/
+     Math.max(1,Number(l.parcelas)||1),
+    0
+   );
 
-  const totalPago=pagamentos
+  const pago=pagamentos
    .filter(p=>p.cartao_id===cartaoId)
-   .reduce((acc,p)=>acc+Number(p.valor||0),0);
+   .reduce(
+    (sum,p)=>sum+Number(p.valor||0),
+    0
+   );
 
-  return Math.max(0,totalLancado-totalPago);
+  return Math.max(0,lancado-pago);
  };
 
- const resetForm=useCallback(()=>{
+ const resetForm=()=>{
   setFormData(initialForm());
   setEditingId(null);
- },[]);
+ };
 
- const closeDialog=useCallback(()=>{
+ const closeDialog=()=>{
   setIsDialogOpen(false);
   resetForm();
- },[resetForm]);
+ };
 
  const openDialog=cartao=>{
   if(cartao){
    setFormData({
     nome:cartao.nome||'',
     bandeira:cartao.bandeira||'Visa',
-    limite:money(Number(cartao.limite||0)*100),
+    limite:moneyInput(Number(cartao.limite||0)*100),
     dia_fechamento:String(cartao.dia_fechamento??1),
     dia_vencimento:String(cartao.dia_vencimento??10)
    });
@@ -176,25 +222,23 @@ const CartoesCredito=()=>{
   e.preventDefault();
 
   const limite=moneyNum(formData.limite);
-  const diaFech=parseInt(formData.dia_fechamento,10);
-  const diaVenc=parseInt(formData.dia_vencimento,10);
+  const diaFech=Number(formData.dia_fechamento);
+  const diaVenc=Number(formData.dia_vencimento);
 
   if(!formData.nome.trim()||limite<=0){
    toast({
     title:'Campos obrigatórios',
-    description:'Preencha o nome e o limite do cartão.',
+    description:'Informe o nome e o limite do cartão.',
     variant:'destructive'
    });
    return;
   }
 
   if(
+   diaFech<1||diaFech>31||
+   diaVenc<1||diaVenc>31||
    Number.isNaN(diaFech)||
-   diaFech<1||
-   diaFech>31||
-   Number.isNaN(diaVenc)||
-   diaVenc<1||
-   diaVenc>31
+   Number.isNaN(diaVenc)
   ){
    toast({
     title:'Dados inválidos',
@@ -218,7 +262,8 @@ const CartoesCredito=()=>{
     const{error}=await supabase
      .from('pessoal_cartoes')
      .update(payload)
-     .eq('id',editingId);
+     .eq('id',editingId)
+     .eq('user_id',user.id);
 
     if(error)throw error;
 
@@ -239,7 +284,7 @@ const CartoesCredito=()=>{
     });
    }
 
-   resetForm();
+   closeDialog();
    fetchCartoes();
   }catch(error){
    toast({
@@ -254,7 +299,8 @@ const CartoesCredito=()=>{
   const{error}=await supabase
    .from('pessoal_cartoes')
    .delete()
-   .eq('id',id);
+   .eq('id',id)
+   .eq('user_id',user.id);
 
   if(error){
    toast({
@@ -262,41 +308,145 @@ const CartoesCredito=()=>{
     description:'Não foi possível excluir o cartão.',
     variant:'destructive'
    });
-  }else{
-   toast({
-    title:'Sucesso',
-    description:'Cartão excluído.'
-   });
-   fetchCartoes();
+   return;
   }
+
+  toast({
+   title:'Sucesso',
+   description:'Cartão excluído.'
+  });
+
+  fetchCartoes();
  };
 
- return(
-  <div className="dark-pessoal space-y-6">
+ const cartoesFiltrados=cartoes.filter(cartao=>{
+  const termo=search.trim().toLowerCase();
 
-   <motion.div
-    initial={{opacity:0,y:-20}}
-    animate={{opacity:1,y:0}}
-   >
-    <div className="flex items-center justify-between">
-     <div>
-      <h2 className="mb-2 text-3xl font-bold text-[hsl(var(--neon-pessoal))]">
-       Cartões de Crédito
-      </h2>
-      <p className="text-muted-foreground">
-       Cadastre seus cartões e acompanhe o limite (A-Z)
-      </p>
+  if(!termo)return true;
+
+  return(
+   String(cartao.nome||'').toLowerCase().includes(termo)||
+   String(cartao.bandeira||'').toLowerCase().includes(termo)
+  );
+ });
+
+ return(
+  <div className="dark-pessoal space-y-4">
+
+   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
+
+    <div className="flex items-center gap-3">
+     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-pessoal)/.20)] bg-[hsl(var(--neon-pessoal)/.08)]">
+      <CreditCard className="h-5 w-5 text-[hsl(var(--neon-pessoal))]"/>
      </div>
 
+     <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-[hsl(var(--neon-pessoal))]">
+       Cadastros
+      </p>
+
+      <h1 className="text-2xl font-bold tracking-tight">
+       Cartões de Crédito
+      </h1>
+
+      <p className="text-sm text-muted-foreground">
+       Cadastre cartões, limites e ciclos de fechamento.
+      </p>
+     </div>
+    </div>
+
+    <div className="flex flex-wrap gap-2">
      <Button
-      className="bg-[hsl(var(--neon-pessoal))] text-white hover:bg-[hsl(var(--neon-pessoal)/.88)]"
+      variant="outline"
+      onClick={()=>{
+       fetchCartoes();
+       fetchLancamentos();
+       fetchPagamentos();
+      }}
+     >
+      <RefreshCw className="mr-2 h-4 w-4"/>
+      Atualizar
+     </Button>
+
+     <Button
       onClick={()=>openDialog()}
+      className="bg-[hsl(var(--neon-pessoal))] text-slate-950 hover:opacity-90"
      >
       <Plus className="mr-2 h-4 w-4"/>
       Novo Cartão
      </Button>
     </div>
-   </motion.div>
+   </div>
+
+   <Card className="border-border bg-card/80">
+    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+     <div className="relative w-full max-w-md">
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+
+      <Input
+       value={search}
+       onChange={e=>setSearch(e.target.value)}
+       placeholder="Pesquisar cartão ou bandeira..."
+       className="bg-input pl-9"
+      />
+     </div>
+
+     <div className="text-sm text-muted-foreground">
+      {cartoesFiltrados.length} cartão(ões)
+     </div>
+    </CardContent>
+   </Card>
+
+   <div className="grid gap-4 md:grid-cols-3">
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-medium text-muted-foreground">
+       Cartões cadastrados
+      </CardTitle>
+     </CardHeader>
+     <CardContent>
+      <p className="text-2xl font-bold text-[hsl(var(--neon-pessoal))]">
+       {cartoes.length}
+      </p>
+     </CardContent>
+    </Card>
+
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-medium text-muted-foreground">
+       Limite total
+      </CardTitle>
+     </CardHeader>
+     <CardContent>
+      <p className="text-2xl font-bold text-[hsl(var(--neon-pessoal))]">
+       {moneyBRL(
+        cartoes.reduce(
+         (sum,c)=>sum+Number(c.limite||0),
+         0
+        )
+       )}
+      </p>
+     </CardContent>
+    </Card>
+
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-medium text-muted-foreground">
+       Limite utilizado
+      </CardTitle>
+     </CardHeader>
+     <CardContent>
+      <p className="text-2xl font-bold text-red-400">
+       {moneyBRL(
+        cartoes.reduce(
+         (sum,c)=>sum+valorUtilizado(c.id),
+         0
+        )
+       )}
+      </p>
+     </CardContent>
+    </Card>
+   </div>
 
    <ModalLancamentoPadrao
     open={isDialogOpen}
@@ -311,7 +461,6 @@ const CartoesCredito=()=>{
        type="button"
        variant="outline"
        onClick={closeDialog}
-       className="h-11 rounded-xl border-border px-5"
       >
        Cancelar
       </Button>
@@ -319,7 +468,7 @@ const CartoesCredito=()=>{
       <Button
        type="submit"
        form="form-cartao-credito"
-       className="h-11 rounded-xl bg-[hsl(var(--neon-pessoal))] px-6 font-semibold text-white shadow-[0_0_18px_hsl(var(--neon-pessoal)/.22)] hover:bg-[hsl(var(--neon-pessoal)/.88)]"
+       className="bg-[hsl(var(--neon-pessoal))] text-white hover:opacity-90"
       >
        {editingId?'Salvar Alterações':'Salvar Cartão'}
       </Button>
@@ -329,230 +478,264 @@ const CartoesCredito=()=>{
     <form
      id="form-cartao-credito"
      onSubmit={handleSave}
-     className="max-h-[calc(100vh-300px)] overflow-y-auto pr-1"
+     className="space-y-5"
     >
-     <div className="space-y-5">
+     <div className="space-y-2">
+      <Label>Nome / Apelido do Cartão</Label>
+
+      <Input
+       value={formData.nome}
+       onChange={e=>setFormData(prev=>({
+        ...prev,
+        nome:e.target.value
+       }))}
+       placeholder="Ex: Cartão Nubank"
+       className="h-11 rounded-xl bg-input"
+       required
+      />
+     </div>
+
+     <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2">
+       <Label>Bandeira</Label>
+
+       <Select
+        value={formData.bandeira}
+        onValueChange={value=>setFormData(prev=>({
+         ...prev,
+         bandeira:value
+        }))}
+       >
+        <SelectTrigger className="h-11 rounded-xl bg-input">
+         <SelectValue/>
+        </SelectTrigger>
+
+        <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
+         {BANDEIRAS.map(bandeira=>(
+          <SelectItem
+           key={bandeira}
+           value={bandeira}
+          >
+           {bandeira}
+          </SelectItem>
+         ))}
+        </SelectContent>
+       </Select>
+      </div>
 
       <div className="space-y-2">
-       <Label>Nome / Apelido do Cartão</Label>
+       <Label>Limite</Label>
 
        <Input
-        value={formData.nome}
-        onChange={e=>setFormData(p=>({...p,nome:e.target.value}))}
-        placeholder="Ex: Cartão Nubank"
-        className="h-11 rounded-xl bg-input"
+        type="text"
+        inputMode="numeric"
+        value={formData.limite}
+        onChange={e=>setFormData(prev=>({
+         ...prev,
+         limite:moneyInput(e.target.value)
+        }))}
+        placeholder="R$ 0,00"
+        className="h-11 rounded-xl bg-input font-semibold tabular-nums"
         required
        />
       </div>
+     </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-       <div className="space-y-2">
-        <Label>Bandeira</Label>
+     <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-2">
+       <Label>Dia de Fechamento</Label>
 
-        <Select
-         value={formData.bandeira}
-         onValueChange={v=>setFormData(p=>({...p,bandeira:v}))}
-        >
-         <SelectTrigger className="h-11 rounded-xl bg-input">
-          <SelectValue/>
-         </SelectTrigger>
-
-         <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
-          {BANDEIRAS.map(b=>(
-           <SelectItem key={b} value={b}>{b}</SelectItem>
-          ))}
-         </SelectContent>
-        </Select>
-       </div>
-
-       <div className="space-y-2">
-        <Label>Limite (R$)</Label>
-
-        <Input
-         type="text"
-         inputMode="numeric"
-         value={formData.limite}
-         onChange={e=>setFormData(p=>({...p,limite:money(e.target.value)}))}
-         placeholder="R$ 0,00"
-         className="h-11 rounded-xl bg-input font-semibold tabular-nums"
-         required
-        />
-       </div>
+       <Input
+        type="number"
+        min="1"
+        max="31"
+        value={formData.dia_fechamento}
+        onChange={e=>setFormData(prev=>({
+         ...prev,
+         dia_fechamento:e.target.value
+        }))}
+        className="h-11 rounded-xl bg-input"
+       />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-       <div className="space-y-2">
-        <Label>Dia de Fechamento</Label>
+      <div className="space-y-2">
+       <Label>Dia de Vencimento</Label>
 
-        <Input
-         type="number"
-         min="1"
-         max="31"
-         value={formData.dia_fechamento}
-         onChange={e=>setFormData(p=>({...p,dia_fechamento:e.target.value}))}
-         className="h-11 rounded-xl bg-input"
-        />
-       </div>
-
-       <div className="space-y-2">
-        <Label>Dia de Vencimento</Label>
-
-        <Input
-         type="number"
-         min="1"
-         max="31"
-         value={formData.dia_vencimento}
-         onChange={e=>setFormData(p=>({...p,dia_vencimento:e.target.value}))}
-         className="h-11 rounded-xl bg-input"
-        />
-       </div>
+       <Input
+        type="number"
+        min="1"
+        max="31"
+        value={formData.dia_vencimento}
+        onChange={e=>setFormData(prev=>({
+         ...prev,
+         dia_vencimento:e.target.value
+        }))}
+        className="h-11 rounded-xl bg-input"
+       />
       </div>
-
-      <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-3 text-sm text-muted-foreground">
-       O limite é salvo no banco como valor numérico, mesmo sendo exibido no formulário no formato brasileiro.
-      </div>
-
      </div>
     </form>
    </ModalLancamentoPadrao>
 
    {loading?(
-    <div className="py-12 text-center text-muted-foreground">
-     Carregando...
-    </div>
-   ):cartoes.length===0?(
+    <Card className="border-border bg-card">
+     <CardContent className="p-12 text-center text-muted-foreground">
+      Carregando...
+     </CardContent>
+    </Card>
+   ):cartoesFiltrados.length===0?(
     <Card className="border-border bg-card">
      <CardContent className="p-12 text-center text-muted-foreground">
       <CreditCard className="mx-auto mb-3 h-12 w-12 opacity-50"/>
-      <p>Nenhum cartão cadastrado.</p>
-      <p className="mt-1 text-sm">Clique em "Novo Cartão" para começar.</p>
+
+      <p>
+       {cartoes.length
+        ?'Nenhum cartão corresponde à pesquisa.'
+        :'Nenhum cartão cadastrado.'}
+      </p>
+
+      {!cartoes.length&&(
+       <p className="mt-1 text-sm">
+        Clique em "Novo Cartão" para começar.
+       </p>
+      )}
      </CardContent>
     </Card>
    ):(
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-     {cartoes.map(cartao=>{
-      const utilizado=valorUtilizado(cartao.id);
+     {cartoesFiltrados.map(cartao=>{
       const limite=Number(cartao.limite||0);
+      const utilizado=valorUtilizado(cartao.id);
       const disponivel=Math.max(0,limite-utilizado);
-      const pct=limite>0?Math.min(100,(utilizado/limite)*100):0;
+      const percentual=limite>0
+       ?Math.min(100,(utilizado/limite)*100)
+       :0;
 
       return(
-       <motion.div
+       <Card
         key={cartao.id}
-        initial={{opacity:0,y:10}}
-        animate={{opacity:1,y:0}}
+        className="border-border bg-gradient-to-br from-blue-500/10 to-blue-900/20"
        >
-        <Card className="overflow-hidden border-blue-500/30 bg-gradient-to-br from-blue-600/10 to-blue-900/20">
-         <CardContent className="space-y-4 p-5">
+        <CardContent className="space-y-4 p-5">
 
-          <div className="flex items-start justify-between">
-           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600/20">
-             <CreditCard className="h-5 w-5 text-blue-400"/>
-            </div>
-
-            <div>
-             <h3 className="font-bold leading-tight text-foreground">
-              {cartao.nome}
-             </h3>
-
-             <span className="text-xs text-muted-foreground">
-              {cartao.bandeira||'—'}
-             </span>
-            </div>
-           </div>
-
-           <div className="flex gap-1">
-            <Button
-             variant="ghost"
-             size="icon"
-             className="h-8 w-8 text-blue-400 hover:bg-blue-500/10"
-             onClick={()=>openDialog(cartao)}
-            >
-             <Edit className="h-4 w-4"/>
-            </Button>
-
-            <AlertDialog>
-             <AlertDialogTrigger asChild>
-              <Button
-               variant="ghost"
-               size="icon"
-               className="h-8 w-8 text-red-500 hover:bg-red-500/10"
-              >
-               <Trash2 className="h-4 w-4"/>
-              </Button>
-             </AlertDialogTrigger>
-
-             <AlertDialogContent className="dark-pessoal border-border bg-card">
-              <AlertDialogHeader>
-               <AlertDialogTitle>Excluir Cartão</AlertDialogTitle>
-               <AlertDialogDescription>
-                Isso removerá o cartão e seus lançamentos. Deseja continuar?
-               </AlertDialogDescription>
-              </AlertDialogHeader>
-
-              <AlertDialogFooter>
-               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-
-               <AlertDialogAction
-                onClick={()=>handleDelete(cartao.id)}
-                className="bg-red-600 hover:bg-red-700"
-               >
-                Excluir
-               </AlertDialogAction>
-              </AlertDialogFooter>
-             </AlertDialogContent>
-            </AlertDialog>
-           </div>
-          </div>
-
-          <div className="space-y-1">
-           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Utilizado</span>
-            <span>{pct.toFixed(0)}%</span>
-           </div>
-
-           <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div
-             className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400"
-             style={{width:`${pct}%`}}
-            />
-           </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-sm">
-           <div>
-            <p className="text-xs text-muted-foreground">Limite</p>
-            <p className="font-semibold text-foreground">{formatBRL(limite)}</p>
+         <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+            <CreditCard className="h-5 w-5 text-blue-400"/>
            </div>
 
            <div>
-            <p className="text-xs text-muted-foreground">Utilizado</p>
-            <p className="font-semibold text-red-400">{formatBRL(utilizado)}</p>
-           </div>
+            <h3 className="font-bold">
+             {cartao.nome}
+            </h3>
 
-           <div>
-            <p className="text-xs text-muted-foreground">Disponível</p>
-            <p className="font-semibold text-emerald-400">{formatBRL(disponivel)}</p>
-           </div>
-
-           <div>
-            <p className="text-xs text-muted-foreground">Fech./Venc.</p>
-            <p className="flex items-center gap-1 font-semibold text-foreground">
-             <Wallet className="h-3 w-3"/>
-             {cartao.dia_fechamento}/{cartao.dia_vencimento}
+            <p className="text-xs text-muted-foreground">
+             {cartao.bandeira||'—'}
             </p>
            </div>
           </div>
 
-         </CardContent>
-        </Card>
-       </motion.div>
+          <div className="flex gap-1">
+           <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-blue-400 hover:bg-blue-500/10"
+            onClick={()=>openDialog(cartao)}
+            title="Editar"
+           >
+            <Edit className="h-4 w-4"/>
+           </Button>
+
+           <AlertDialog>
+            <AlertDialogTrigger asChild>
+             <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-red-400 hover:bg-red-500/10"
+              title="Excluir"
+             >
+              <Trash2 className="h-4 w-4"/>
+             </Button>
+            </AlertDialogTrigger>
+
+            <AlertDialogContent className="dark-pessoal border-border bg-card">
+             <AlertDialogHeader>
+              <AlertDialogTitle>
+               Excluir Cartão
+              </AlertDialogTitle>
+
+              <AlertDialogDescription>
+               Isso removerá o cartão e poderá afetar os
+               lançamentos relacionados. Deseja continuar?
+              </AlertDialogDescription>
+             </AlertDialogHeader>
+
+             <AlertDialogFooter>
+              <AlertDialogCancel>
+               Cancelar
+              </AlertDialogCancel>
+
+              <AlertDialogAction
+               onClick={()=>handleDelete(cartao.id)}
+               className="bg-red-600 hover:bg-red-700"
+              >
+               Excluir
+              </AlertDialogAction>
+             </AlertDialogFooter>
+            </AlertDialogContent>
+           </AlertDialog>
+          </div>
+         </div>
+
+         <div className="space-y-2">
+          <div className="flex justify-between text-xs text-muted-foreground">
+           <span>Utilizado</span>
+           <span>{percentual.toFixed(0)}%</span>
+          </div>
+
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+           <div
+            className="h-full rounded-full bg-blue-500"
+            style={{width:`${percentual}%`}}
+           />
+          </div>
+         </div>
+
+         <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+           <p className="text-xs text-muted-foreground">Limite</p>
+           <p className="font-semibold">{moneyBRL(limite)}</p>
+          </div>
+
+          <div>
+           <p className="text-xs text-muted-foreground">Utilizado</p>
+           <p className="font-semibold text-red-400">
+            {moneyBRL(utilizado)}
+           </p>
+          </div>
+
+          <div>
+           <p className="text-xs text-muted-foreground">Disponível</p>
+           <p className="font-semibold text-emerald-400">
+            {moneyBRL(disponivel)}
+           </p>
+          </div>
+
+          <div>
+           <p className="text-xs text-muted-foreground">Fechamento / Venc.</p>
+           <p className="flex items-center gap-1 font-semibold">
+            <Wallet className="h-3 w-3"/>
+            {cartao.dia_fechamento}/{cartao.dia_vencimento}
+           </p>
+          </div>
+         </div>
+
+        </CardContent>
+       </Card>
       );
      })}
     </div>
    )}
-
   </div>
  );
 };
