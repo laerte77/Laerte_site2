@@ -6,7 +6,7 @@ import Sidebar from'@/components/pessoal/sidebar';
 import Header from'@/components/pessoal/Header';
 import PessoalDashboardHome from'@/components/pessoal/PessoalDashboardHome';
 import AlertasInteligentes from'@/components/pessoal/AlertasInteligentes';
-import PlanejamentoFinanceiro from'@/components/pessoal/orcamento/PlanejamentoFinanceiro';
+import PlanejamentoFinanceiro from'@/components/pessoal/planejamento/PlanejamentoFinanceiro';
 import TiposReceita from'@/components/pessoal/cadastros/TiposReceita';
 import TiposDespesa from'@/components/pessoal/cadastros/TiposDespesa';
 import Livros from'@/components/pessoal/cadastros/Livros';
