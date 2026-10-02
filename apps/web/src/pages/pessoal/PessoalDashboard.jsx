@@ -15,7 +15,7 @@ import CartaoUsuarios from'@/components/pessoal/cadastros/CartaoUsuarios';
 import Receitas from'@/components/pessoal/lancamentos/Receitas';
 import Despesas from'@/components/pessoal/lancamentos/Despesas';
 import DespesaPrevista from'@/components/pessoal/lancamentos/DespesaPrevista';
-import ContasMes from'@/components/pessoal/relatorios/ContasMes';
+import ContasMes from'@/components/pessoal/consultas/ContasMes';
 import LancamentoDevedores from'@/components/pessoal/lancamentos/LancamentoDevedores';
 import LancamentoDizimosOfertas from'@/components/pessoal/lancamentos/LancamentoDizimosOfertas';
 import Metas from'@/components/pessoal/lancamentos/Metas';
@@ -130,7 +130,6 @@ const PessoalDashboard=()=>{
       <Route path="admin/gerenciar-usuarios" element={<AdminRoute><GerenciarUsuarios/></AdminRoute>}/>
       <Route path="admin/criar-usuario" element={<AdminRoute><CriarNovoUsuario/></AdminRoute>}/>
 
-      {/* Compatibilidade com rotas antigas */}
       <Route
        path="contas-mes"
        element={<Navigate to="/pessoal/dashboard/consultas/contas-mes" replace/>}
