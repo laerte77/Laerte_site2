@@ -1,6 +1,6 @@
 import React,{useState,useEffect,useCallback,useRef,useMemo}from'react';
 import{motion}from'framer-motion';
-import{Plus,Edit,Trash,Download,Search,TrendingUp,DollarSign}from'lucide-react';
+import{Plus,Edit,Trash,Download,Search,TrendingUp,DollarSign,FileText,ArrowUpRight,CalendarDays,Filter,ChevronLeft,ChevronRight}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -8,7 +8,6 @@ import{useToast}from'@/components/ui/use-toast';
 import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle}from'@/components/ui/alert-dialog';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{ScrollArea}from'@/components/ui/scroll-area';
-import{Card,CardContent}from'@/components/ui/card';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import SearchableModal from'@/components/SearchableModal';
@@ -21,6 +20,7 @@ import ModalLancamentoPadrao from'../ModalLancamentoPadrao';
 const TIME_ZONE='America/Sao_Paulo';
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const availableYears=[new Date().getFullYear(),new Date().getFullYear()-1,new Date().getFullYear()-2];
+const money=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 
 const getBrasiliaDateISO=()=>{
  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()),values={};
@@ -33,19 +33,16 @@ const formatDateBR=value=>{
  const match=String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
  if(match)return`${match[3]}/${match[2]}/${match[1]}`;
  const date=new Date(value);
- if(Number.isNaN(date.getTime()))return'-';
- return new Intl.DateTimeFormat('pt-BR',{timeZone:TIME_ZONE}).format(date);
+ return Number.isNaN(date.getTime())?'-':new Intl.DateTimeFormat('pt-BR',{timeZone:TIME_ZONE}).format(date);
 };
 
 const formatCurrencyBRL=value=>{
  const digits=String(value??'').replace(/\D/g,'');
- if(!digits)return'';
- return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(digits)/100);
+ return digits?money.format(Number(digits)/100):'';
 };
 
 const parseCurrencyBRL=value=>{
- if(value===null||value===undefined||value==='')return 0;
- const digits=String(value).replace(/\D/g,'');
+ const digits=String(value??'').replace(/\D/g,'');
  return digits?Number(digits)/100:0;
 };
 
@@ -55,6 +52,20 @@ const createInitialFormData=()=>({
  valor:'',
  origem:''
 });
+
+const StatCard=({icon:Icon,label,value})=>(
+ <div className="rounded-xl border border-border bg-card/80 p-4 shadow-sm">
+  <div className="flex items-center gap-3">
+   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--neon-pessoal)/.20)] bg-[hsl(var(--neon-pessoal)/.08)]">
+    <Icon className="h-5 w-5 text-[hsl(var(--neon-pessoal))]"/>
+   </div>
+   <div className="min-w-0">
+    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+    <p className="mt-1 truncate text-xl font-bold text-[hsl(var(--neon-pessoal))]">{value}</p>
+   </div>
+  </div>
+ </div>
+);
 
 const Receitas=()=>{
  const{toast}=useToast();
@@ -73,6 +84,10 @@ const Receitas=()=>{
  const[searchTerm,setSearchTerm]=useState('');
  const[selectedMonth,setSelectedMonth]=useState(String(new Date().getMonth()));
  const[selectedYear,setSelectedYear]=useState(String(new Date().getFullYear()));
+ const[selectedCategory,setSelectedCategory]=useState('all');
+ const[currentPage,setCurrentPage]=useState(1);
+
+ const pageSize=10;
 
  useEffect(()=>{
   isMountedRef.current=true;
@@ -86,7 +101,7 @@ const Receitas=()=>{
   try{
    const[receitasRes,tiposRes]=await Promise.all([
     supabase.from('receitas').select('*').eq('user_id',user.id).order('data',{ascending:false}),
-    supabase.from('tipos_receita').select('id,nome_receita').eq('user_id',user.id)
+    supabase.from('tipos_receita').select('id,nome_receita').eq('user_id',user.id).order('nome_receita')
    ]);
 
    if(!isMountedRef.current)return;
@@ -115,20 +130,37 @@ const Receitas=()=>{
   return()=>{supabase.removeChannel(channel)};
  },[user,fetchData]);
 
+ const categories=useMemo(
+  ()=>['all',...tiposReceita.map(t=>t.nome_receita).filter(Boolean)],
+  [tiposReceita]
+ );
+
  const filteredItems=useMemo(()=>{
+  const q=searchTerm.trim().toLowerCase();
+
   return receitas.filter(item=>{
    const rawDate=String(item.data||'');
    const year=rawDate.length>=4?parseInt(rawDate.slice(0,4),10):null;
    const month=rawDate.length>=7?parseInt(rawDate.slice(5,7),10)-1:null;
-   const monthMatch=selectedMonth==='all'||month===parseInt(selectedMonth,10);
-   const yearMatch=selectedYear==='all'||year===parseInt(selectedYear,10);
-   const searchLower=searchTerm.toLowerCase();
-   const searchMatch=!searchTerm||item.receita?.toLowerCase().includes(searchLower)||item.origem?.toLowerCase().includes(searchLower);
-   return monthMatch&&yearMatch&&searchMatch;
+   const monthMatch=selectedMonth==='all'||month===Number(selectedMonth);
+   const yearMatch=selectedYear==='all'||year===Number(selectedYear);
+   const categoryMatch=selectedCategory==='all'||item.receita===selectedCategory;
+   const searchMatch=!q||item.receita?.toLowerCase().includes(q)||item.origem?.toLowerCase().includes(q);
+   return monthMatch&&yearMatch&&categoryMatch&&searchMatch;
   });
- },[receitas,selectedMonth,selectedYear,searchTerm]);
+ },[receitas,selectedMonth,selectedYear,selectedCategory,searchTerm]);
 
- const totalPeriodo=filteredItems.reduce((acc,curr)=>acc+Number(curr.valor||0),0);
+ useEffect(()=>setCurrentPage(1),[selectedMonth,selectedYear,selectedCategory,searchTerm]);
+
+ const totalPeriodo=filteredItems.reduce((acc,item)=>acc+Number(item.valor||0),0);
+ const media=filteredItems.length?totalPeriodo/filteredItems.length:0;
+ const maiorLancamento=filteredItems.reduce((max,item)=>Math.max(max,Number(item.valor||0)),0);
+ const totalPages=Math.max(1,Math.ceil(filteredItems.length/pageSize));
+
+ const paginatedItems=useMemo(()=>{
+  const start=(currentPage-1)*pageSize;
+  return filteredItems.slice(start,start+pageSize);
+ },[filteredItems,currentPage]);
 
  const resetForm=useCallback(()=>{
   setFormData(createInitialFormData());
@@ -237,6 +269,7 @@ const Receitas=()=>{
    if(isMountedRef.current){
     toast({title:'Removido',description:'Receita removida com sucesso.'});
     setItemToDelete(null);
+    fetchData();
    }
   }catch(error){
    if(isMountedRef.current)toast({title:'Erro',variant:'destructive',description:error.message});
@@ -244,45 +277,54 @@ const Receitas=()=>{
  };
 
  const handleExport=()=>{
-  if(filteredItems.length===0){
+  if(!filteredItems.length){
    toast({title:'Aviso',description:'Nenhum dado para exportar.',variant:'destructive'});
    return;
   }
 
-  const dataToExport=filteredItems.map(item=>({
-   Data:formatDateBR(item.data),
-   Descrição:item.origem||'-',
-   Categoria:item.receita,
-   Valor:parseFloat(item.valor||0)
-  }));
+  exportToExcel(
+   filteredItems.map(item=>({
+    Data:formatDateBR(item.data),
+    Descrição:item.origem||'-',
+    Categoria:item.receita,
+    Valor:Number(item.valor||0)
+   })),
+   'Lançamento_Receitas',
+   'Receitas'
+  );
+ };
 
-  exportToExcel(dataToExport,'Lançamento_Receitas','Receitas');
+ const clearFilters=()=>{
+  setSearchTerm('');
+  setSelectedMonth('all');
+  setSelectedYear('all');
+  setSelectedCategory('all');
  };
 
  return(
-  <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="dark-pessoal space-y-6">
+  <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="dark-pessoal space-y-4">
    <OfflineIndicator/>
 
-   <div className="glass-card overflow-hidden">
-    <div className="flex flex-col items-center justify-between gap-4 border-b border-border bg-card p-6 md:flex-row">
+   <div className="rounded-xl border border-border bg-card/70">
+    <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
      <div className="flex items-center gap-4">
-      <div className="rounded-full border border-[hsl(var(--neon-pessoal)/.20)] bg-[hsl(var(--neon-pessoal)/.10)] p-3">
-       <TrendingUp className="h-8 w-8 text-[hsl(var(--neon-pessoal))]"/>
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-[hsl(var(--neon-pessoal)/.25)] bg-[hsl(var(--neon-pessoal)/.10)]">
+       <TrendingUp className="h-7 w-7 text-[hsl(var(--neon-pessoal))]"/>
       </div>
 
       <div>
-       <h1 className="text-2xl font-bold text-[hsl(var(--neon-pessoal))]">Lançamento de Receitas</h1>
-       <p className="text-sm text-muted-foreground">Registre suas entradas financeiras (A-Z)</p>
+       <h1 className="text-2xl font-bold tracking-tight text-[hsl(var(--neon-pessoal))]">Lançamento de Receitas</h1>
+       <p className="text-sm text-muted-foreground">Registre e acompanhe suas entradas financeiras.</p>
       </div>
      </div>
 
      <div className="flex flex-wrap gap-2">
-      <Button onClick={handleExport} variant="outline" className="border-border hover:bg-secondary">
+      <Button variant="outline" onClick={handleExport} className="border-border bg-transparent">
        <Download className="mr-2 h-4 w-4"/>Excel
       </Button>
 
-      <Button onClick={()=>setIsSearchModalOpen(true)} variant="outline" className="border-border hover:bg-secondary">
-       <Search className="mr-2 h-4 w-4"/>Selecionar Registro
+      <Button variant="outline" onClick={()=>setIsSearchModalOpen(true)} className="border-border bg-transparent">
+       <Search className="mr-2 h-4 w-4"/>Selecionar
       </Button>
 
       <Button onClick={()=>openDialog()} className="bg-[hsl(var(--neon-pessoal))] text-white hover:bg-[hsl(var(--neon-pessoal)/.88)]">
@@ -292,85 +334,111 @@ const Receitas=()=>{
     </div>
    </div>
 
-   <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-    <div className="flex flex-col gap-4 md:flex-row lg:col-span-3">
-     <div className="relative flex-1">
+   <div className="rounded-xl border border-border bg-card/70 p-3">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.6fr_.6fr_.45fr_.8fr_auto]">
+     <div className="relative">
       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-      <Input placeholder="Buscar por descrição ou categoria..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="bg-input pl-10"/>
+      <Input
+       placeholder="Buscar por descrição ou categoria..."
+       value={searchTerm}
+       onChange={e=>setSearchTerm(e.target.value)}
+       className="h-11 border-border bg-input pl-10"
+      />
      </div>
 
-     <div className="w-full md:w-48">
-      <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-       <SelectTrigger className="bg-input"><SelectValue placeholder="Mês"/></SelectTrigger>
-       <SelectContent className="dark-pessoal bg-card">
-        <SelectItem value="all">Todos os Meses</SelectItem>
-        {meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
-       </SelectContent>
-      </Select>
-     </div>
+     <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+      <SelectTrigger className="h-11 border-border bg-input">
+       <CalendarDays className="mr-2 h-4 w-4 text-muted-foreground"/>
+       <SelectValue placeholder="Mês"/>
+      </SelectTrigger>
 
-     <div className="w-full md:w-32">
-      <Select value={selectedYear} onValueChange={setSelectedYear}>
-       <SelectTrigger className="bg-input"><SelectValue placeholder="Ano"/></SelectTrigger>
-       <SelectContent className="dark-pessoal bg-card">
-        <SelectItem value="all">Todos</SelectItem>
-        {availableYears.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-       </SelectContent>
-      </Select>
-     </div>
+      <SelectContent className="dark-pessoal border-border bg-card">
+       <SelectItem value="all">Todos os Meses</SelectItem>
+       {meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
+      </SelectContent>
+     </Select>
+
+     <Select value={selectedYear} onValueChange={setSelectedYear}>
+      <SelectTrigger className="h-11 border-border bg-input">
+       <SelectValue placeholder="Ano"/>
+      </SelectTrigger>
+
+      <SelectContent className="dark-pessoal border-border bg-card">
+       <SelectItem value="all">Todos</SelectItem>
+       {availableYears.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+      </SelectContent>
+     </Select>
+
+     <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+      <SelectTrigger className="h-11 border-border bg-input">
+       <SelectValue placeholder="Categoria"/>
+      </SelectTrigger>
+
+      <SelectContent className="dark-pessoal border-border bg-card">
+       <SelectItem value="all">Todas as Categorias</SelectItem>
+       {categories.filter(c=>c!=='all').map(c=><SelectItem key={c} value={c}>{c}</SelectItem>)}
+      </SelectContent>
+     </Select>
+
+     <Button variant="outline" onClick={clearFilters} className="h-11 border-border">
+      <Filter className="mr-2 h-4 w-4"/>Limpar
+     </Button>
     </div>
-
-    <Card className="border-border bg-card shadow-lg">
-     <CardContent className="flex items-center justify-between p-4">
-      <div>
-       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total no Período</p>
-       <p className="mt-1 text-2xl font-bold text-green-400">
-        {new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(totalPeriodo)}
-       </p>
-      </div>
-
-      <div className="rounded-full border border-green-400/20 bg-green-400/10 p-3">
-       <DollarSign className="h-6 w-6 text-green-400"/>
-      </div>
-     </CardContent>
-    </Card>
    </div>
 
-   <div className="glass-card overflow-hidden">
+   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <StatCard icon={FileText} label="Total de Registros" value={filteredItems.length}/>
+    <StatCard icon={DollarSign} label="Total do Período" value={money.format(totalPeriodo)}/>
+    <StatCard icon={ArrowUpRight} label="Média por Registro" value={money.format(media)}/>
+    <StatCard icon={TrendingUp} label="Maior Lançamento" value={money.format(maiorLancamento)}/>
+   </div>
+
+   <div className="overflow-hidden rounded-xl border border-border bg-card/70">
     <div className="overflow-x-auto">
      <table className="w-full text-sm">
       <thead>
-       <tr className="border-b border-border bg-secondary/50">
-        <th className="p-4 text-left font-semibold text-muted-foreground">Categoria</th>
-        <th className="p-4 text-left font-semibold text-muted-foreground">Descrição</th>
-        <th className="p-4 text-left font-semibold text-muted-foreground">Data</th>
-        <th className="p-4 text-right font-semibold text-muted-foreground">Valor</th>
-        <th className="p-4 text-right font-semibold text-muted-foreground">Ações</th>
+       <tr className="border-b border-border bg-secondary/30">
+        <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Categoria</th>
+        <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Descrição</th>
+        <th className="px-4 py-3 text-left font-semibold text-muted-foreground">Data</th>
+        <th className="px-4 py-3 text-right font-semibold text-muted-foreground">Valor</th>
+        <th className="px-4 py-3 text-right font-semibold text-muted-foreground">Ações</th>
        </tr>
       </thead>
 
       <tbody>
        {loading?(
-        <tr><td colSpan="5" className="p-8 text-center">Carregando...</td></tr>
-       ):filteredItems.length===0?(
-        <tr><td colSpan="5" className="p-8 text-center text-muted-foreground">Nenhum registro.</td></tr>
+        <tr><td colSpan="5" className="px-4 py-10 text-center text-muted-foreground">Carregando lançamentos...</td></tr>
+       ):paginatedItems.length===0?(
+        <tr>
+         <td colSpan="5" className="px-4 py-12">
+          <div className="flex flex-col items-center justify-center gap-2 text-center">
+           <FileText className="h-10 w-10 text-muted-foreground"/>
+           <p className="font-semibold text-foreground">Nenhum lançamento encontrado</p>
+           <p className="text-sm text-muted-foreground">Não existem registros para os filtros selecionados.</p>
+           <Button variant="outline" size="sm" onClick={clearFilters} className="mt-2">
+            <Filter className="mr-2 h-4 w-4"/>Limpar Filtros
+           </Button>
+          </div>
+         </td>
+        </tr>
        ):(
-        filteredItems.map(item=>(
-         <tr key={item.id} className="border-b border-border transition-colors last:border-b-0 hover:bg-secondary/50">
-          <td className="p-4 font-medium text-foreground">{item.receita}</td>
-          <td className="p-4">{item.origem||'-'}</td>
-          <td className="p-4">{formatDateBR(item.data)}</td>
-          <td className="p-4 text-right font-bold text-green-400">
-           {new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(item.valor||0))}
-          </td>
-          <td className="flex justify-end gap-2 p-4">
-           <Button variant="ghost" size="icon" onClick={()=>openDialog(item)}>
-            <Edit className="h-4 w-4 text-[hsl(var(--neon-pessoal))]"/>
-           </Button>
+        paginatedItems.map(item=>(
+         <tr key={item.id} className="border-b border-border transition-colors last:border-b-0 hover:bg-secondary/30">
+          <td className="px-4 py-4 font-medium text-foreground">{item.receita}</td>
+          <td className="px-4 py-4 text-foreground">{item.origem||'-'}</td>
+          <td className="px-4 py-4 text-foreground">{formatDateBR(item.data)}</td>
+          <td className="px-4 py-4 text-right font-bold text-[hsl(var(--neon-pessoal))]">{money.format(Number(item.valor||0))}</td>
+          <td className="px-4 py-4">
+           <div className="flex justify-end gap-1">
+            <Button variant="ghost" size="icon" onClick={()=>openDialog(item)} title="Editar lançamento" className="text-[hsl(var(--neon-pessoal))] hover:bg-[hsl(var(--neon-pessoal)/.10)]">
+             <Edit className="h-4 w-4"/>
+            </Button>
 
-           <Button variant="ghost" size="icon" onClick={()=>setItemToDelete(item)}>
-            <Trash className="h-4 w-4 text-red-500"/>
-           </Button>
+            <Button variant="ghost" size="icon" onClick={()=>setItemToDelete(item)} title="Excluir lançamento" className="text-red-400 hover:bg-red-500/10 hover:text-red-300">
+             <Trash className="h-4 w-4"/>
+            </Button>
+           </div>
           </td>
          </tr>
         ))
@@ -378,6 +446,28 @@ const Receitas=()=>{
       </tbody>
      </table>
     </div>
+
+    {!loading&&filteredItems.length>0&&(
+     <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-sm text-muted-foreground">
+       Mostrando {Math.min((currentPage-1)*pageSize+1,filteredItems.length)} a {Math.min(currentPage*pageSize,filteredItems.length)} de {filteredItems.length} registros
+      </div>
+
+      <div className="flex items-center gap-2">
+       <Button variant="outline" size="sm" disabled={currentPage===1} onClick={()=>setCurrentPage(p=>Math.max(1,p-1))}>
+        <ChevronLeft className="mr-1 h-4 w-4"/>Anterior
+       </Button>
+
+       <div className="flex h-9 min-w-9 items-center justify-center rounded-md bg-[hsl(var(--neon-pessoal))] px-3 text-sm font-semibold text-white">
+        {currentPage}
+       </div>
+
+       <Button variant="outline" size="sm" disabled={currentPage>=totalPages} onClick={()=>setCurrentPage(p=>Math.min(totalPages,p+1))}>
+        Próxima<ChevronRight className="ml-1 h-4 w-4"/>
+       </Button>
+      </div>
+     </div>
+    )}
    </div>
 
    <SearchableModal
@@ -392,7 +482,7 @@ const Receitas=()=>{
     displayFields={[
      {key:'receita',label:'Categoria'},
      {key:'data',label:'Data',format:d=>formatDateBR(d)},
-     {key:'valor',label:'Valor',format:v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(parseFloat(v||0))}
+     {key:'valor',label:'Valor',format:v=>money.format(Number(v||0))}
     ]}
     title="Buscar Receita"
    />
@@ -410,11 +500,7 @@ const Receitas=()=>{
        Cancelar
       </Button>
 
-      <Button
-       type="submit"
-       form="form-lancamento-receita"
-       className="h-11 rounded-xl bg-[hsl(var(--neon-pessoal))] px-6 font-semibold text-white shadow-[0_0_18px_hsl(var(--neon-pessoal)/.22)] transition-all hover:bg-[hsl(var(--neon-pessoal)/.88)]"
-      >
+      <Button type="submit" form="form-lancamento-receita" className="h-11 rounded-xl bg-[hsl(var(--neon-pessoal))] px-6 font-semibold text-white shadow-[0_0_18px_hsl(var(--neon-pessoal)/.22)] hover:bg-[hsl(var(--neon-pessoal)/.88)]">
        {currentReceita?'Salvar Alterações':'Salvar'}
       </Button>
      </>
@@ -424,31 +510,18 @@ const Receitas=()=>{
      <div className="space-y-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
        <div className="space-y-2">
-        <Label className="text-sm font-medium">Data</Label>
-        <Input
-         type="date"
-         value={formData.data}
-         onChange={e=>setFormData({...formData,data:e.target.value})}
-         className="h-11 rounded-xl bg-input"
-        />
+        <Label>Data</Label>
+        <Input type="date" value={formData.data} onChange={e=>setFormData({...formData,data:e.target.value})} className="h-11 rounded-xl bg-input"/>
        </div>
 
        <div className="space-y-2">
-        <Label className="text-sm font-medium">Valor</Label>
-        <Input
-         type="text"
-         inputMode="numeric"
-         value={formData.valor}
-         onChange={handleValueChange}
-         className="h-11 rounded-xl bg-input font-semibold tabular-nums"
-         placeholder="R$ 0,00"
-         aria-label="Valor da receita"
-        />
+        <Label>Valor</Label>
+        <Input type="text" inputMode="numeric" value={formData.valor} onChange={handleValueChange} className="h-11 rounded-xl bg-input font-semibold tabular-nums" placeholder="R$ 0,00"/>
        </div>
       </div>
 
       <div className="space-y-2">
-       <Label className="text-sm font-medium">Categoria de Receita</Label>
+       <Label>Categoria de Receita</Label>
 
        <Select value={formData.receita||''} onValueChange={v=>setFormData({...formData,receita:v})}>
         <SelectTrigger className="h-11 rounded-xl bg-input">
@@ -457,23 +530,15 @@ const Receitas=()=>{
 
         <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
          <ScrollArea className="h-48">
-          {tiposReceita.map(t=>(
-           <SelectItem key={t.id} value={t.nome_receita}>{t.nome_receita}</SelectItem>
-          ))}
+          {tiposReceita.map(t=><SelectItem key={t.id} value={t.nome_receita}>{t.nome_receita}</SelectItem>)}
          </ScrollArea>
         </SelectContent>
        </Select>
       </div>
 
       <div className="space-y-2">
-       <Label className="text-sm font-medium">Descrição / Origem</Label>
-
-       <Input
-        value={formData.origem}
-        onChange={e=>setFormData({...formData,origem:e.target.value})}
-        className="h-11 rounded-xl bg-input"
-        placeholder="Ex: Salário, Freelance"
-       />
+       <Label>Descrição / Origem</Label>
+       <Input value={formData.origem} onChange={e=>setFormData({...formData,origem:e.target.value})} className="h-11 rounded-xl bg-input" placeholder="Ex: Salário, Freelance"/>
       </div>
      </div>
     </form>
@@ -488,7 +553,9 @@ const Receitas=()=>{
 
      <AlertDialogFooter>
       <AlertDialogCancel>Cancelar</AlertDialogCancel>
-      <AlertDialogAction onClick={handleDelete} className="bg-red-600 text-white hover:bg-red-700">Deletar</AlertDialogAction>
+      <AlertDialogAction onClick={handleDelete} className="bg-red-600 text-white hover:bg-red-700">
+       Deletar
+      </AlertDialogAction>
      </AlertDialogFooter>
     </AlertDialogContent>
    </AlertDialog>
