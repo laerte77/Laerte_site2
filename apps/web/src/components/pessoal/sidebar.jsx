@@ -1,450 +1,157 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import {
-  Home, DollarSign, BookOpen, ChevronLeft, ChevronRight,
-  LayoutGrid, LogOut, TrendingUp, Target, List,
-  CreditCard, Users, Receipt, Zap
-} from 'lucide-react';
-import {
-  Accordion, AccordionContent, AccordionItem, AccordionTrigger
-} from '@/components/ui/accordion';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
+import React from'react';
+import{Link,useLocation}from'react-router-dom';
+import{Home,DollarSign,BookOpen,ChevronLeft,ChevronRight,LayoutGrid,LogOut,TrendingUp,Target,List,CreditCard,Users,Receipt,Zap}from'lucide-react';
+import{Accordion,AccordionContent,AccordionItem,AccordionTrigger}from'@/components/ui/accordion';
+import{Button}from'@/components/ui/button';
+import{cn}from'@/lib/utils';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
 
-const NavLink = ({ to, icon: Icon, children }) => {
-  const location = useLocation();
-
-  const active = to === '/pessoal/dashboard'
-    ? location.pathname === to
-    : location.pathname.startsWith(to);
-
-  return (
-    <Link
-      to={to}
-      className={cn(
-        'flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-[background-color,border-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-blue))] motion-reduce:transition-none',
-        active
-          ? 'border border-[hsl(var(--neon-blue))] bg-[hsl(var(--neon-blue)/.10)] text-[hsl(var(--neon-blue))]'
-          : 'border-transparent text-muted-foreground hover:border-[hsl(var(--neon-blue)/.25)] hover:bg-muted hover:text-foreground'
-      )}
-    >
-      {Icon && <Icon className="h-4 w-4 shrink-0" />}
-      <span className="truncate">{children}</span>
-    </Link>
-  );
+const NavLink=({to,icon:Icon,children})=>{
+ const{pathname}=useLocation();
+ const active=to==='/pessoal/dashboard'?pathname===to:pathname.startsWith(to);
+ return(
+  <Link to={to} className={cn(
+   'flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-[background-color,border-color,color] duration-200',
+   active
+    ?'border border-[hsl(var(--neon-blue))] bg-[hsl(var(--neon-blue)/.10)] text-[hsl(var(--neon-blue))]'
+    :'border-transparent text-muted-foreground hover:border-[hsl(var(--neon-blue)/.25)] hover:bg-muted hover:text-foreground'
+  )}>
+   {Icon&&<Icon className="h-4 w-4 shrink-0"/>}
+   <span className="truncate">{children}</span>
+  </Link>
+ );
 };
 
-const Sidebar = ({ isOpen, setOpen, isMobile }) => {
-  const { isAdmin, signOut } = useAuth();
+const Sidebar=({isOpen,setOpen,isMobile})=>{
+ const{isAdmin,signOut}=useAuth();
+ const trigger='flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-[background-color,color] duration-200 hover:bg-accent hover:text-foreground';
 
-  const triggerClass =
-    'flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-[background-color,color] duration-200 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--neon-blue))] motion-reduce:transition-none';
+ return(
+  <aside className={cn(
+   'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-card transition-[width,transform] duration-300',
+   isMobile?(isOpen?'w-60 translate-x-0':'w-60 -translate-x-full'):(isOpen?'w-60':'w-20')
+  )}>
+   <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
+    <div className="flex items-center gap-2 overflow-hidden">
+     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-[hsl(var(--neon-blue))] to-blue-700 shadow-[0_0_12px_hsl(var(--neon-blue)/.4)]">
+      <DollarSign className="h-4 w-4 text-white"/>
+     </div>
+     {(isOpen||isMobile)&&(
+      <div className="leading-tight">
+       <div className="text-sm font-bold uppercase text-white">PESSOAL</div>
+       <div className="text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--neon-blue))]">FINANÇAS</div>
+      </div>
+     )}
+    </div>
+    {!isMobile&&(
+     <Button type="button" variant="ghost" size="icon" onClick={()=>setOpen(!isOpen)} className="ml-auto shrink-0">
+      {isOpen?<ChevronLeft className="h-5 w-5"/>:<ChevronRight className="h-5 w-5"/>}
+     </Button>
+    )}
+   </div>
 
-  return (
-    <aside
-      className={cn(
-        'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-card transition-[width,transform] duration-300 ease-in-out motion-reduce:transition-none',
-        isMobile
-          ? isOpen
-            ? 'w-60 translate-x-0'
-            : 'w-60 -translate-x-full'
-          : isOpen
-            ? 'w-60'
-            : 'w-20'
+   <nav className="flex-1 overflow-auto px-2 py-4 text-sm font-medium">
+    <ul className="space-y-1">
+     <li><NavLink to="/pessoal/dashboard" icon={Home}>{(isOpen||isMobile)&&'Dashboard'}</NavLink></li>
+     <li><NavLink to="/pessoal/dashboard/alertas" icon={Zap}>{(isOpen||isMobile)&&'Alertas Inteligentes'}</NavLink></li>
+
+     <Accordion type="single" collapsible className="w-full">
+
+      <AccordionItem value="cadastros">
+       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">📋 {(isOpen||isMobile)&&'Cadastros'}</span></AccordionTrigger>
+       <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
+        <NavLink to="/pessoal/dashboard/cadastros/tipos-receita" icon={List}>Tipos de Receita</NavLink>
+        <NavLink to="/pessoal/dashboard/cadastros/tipos-despesa" icon={List}>Tipos de Despesa</NavLink>
+        <NavLink to="/pessoal/dashboard/cadastros/cartoes-credito" icon={CreditCard}>Cartões de Crédito</NavLink>
+        <NavLink to="/pessoal/dashboard/cadastros/cartao-usuarios" icon={Users}>Pessoas do Cartão</NavLink>
+        <NavLink to="/pessoal/dashboard/cadastros/livros" icon={List}>Livros</NavLink>
+       </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="lancamentos">
+       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">↔️ {(isOpen||isMobile)&&'Lançamentos'}</span></AccordionTrigger>
+       <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
+        <NavLink to="/pessoal/dashboard/lancamentos/receitas" icon={DollarSign}>Receitas</NavLink>
+        <NavLink to="/pessoal/dashboard/lancamentos/despesas" icon={List}>Despesas</NavLink>
+        <NavLink to="/pessoal/dashboard/lancamentos/despesa-prevista" icon={Target}>Despesas Previstas</NavLink>
+        <NavLink to="/pessoal/dashboard/lancamentos/cartao-lancamentos" icon={Receipt}>Lanç. do Cartão</NavLink>
+        <NavLink to="/pessoal/dashboard/lancamentos/devedores" icon={List}>Devedores</NavLink>
+        <NavLink to="/pessoal/dashboard/lancamentos/dizimos-e-ofertas" icon={DollarSign}>Dízimos/Ofertas</NavLink>
+       </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="investimentos">
+       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">📈 {(isOpen||isMobile)&&'Investimento'}</span></AccordionTrigger>
+       <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
+        <NavLink to="/pessoal/dashboard/investimentos/aportes" icon={DollarSign}>Aportes</NavLink>
+        <NavLink to="/pessoal/dashboard/investimentos/rendimentos" icon={TrendingUp}>Rendimentos</NavLink>
+       </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="leitura">
+       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">📖 {(isOpen||isMobile)&&'Leitura Bíblica'}</span></AccordionTrigger>
+       <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
+        <NavLink to="/pessoal/dashboard/lancamentos/leitura" icon={BookOpen}>Lançamentos</NavLink>
+       </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="planejamento">
+       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">🎯 {(isOpen||isMobile)&&'Planejamento'}</span></AccordionTrigger>
+       <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
+        <NavLink to="/pessoal/dashboard/planejamento" icon={Target}>Planejamento Financeiro</NavLink>
+        <NavLink to="/pessoal/dashboard/planejamento/metas" icon={Target}>Metas</NavLink>
+       </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="consultas">
+       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">🔎 {(isOpen||isMobile)&&'Consultas'}</span></AccordionTrigger>
+       <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
+        <NavLink to="/pessoal/dashboard/consultas/contas-mes" icon={Receipt}>Contas do Mês</NavLink>
+        <NavLink to="/pessoal/dashboard/consultas/faturas" icon={CreditCard}>Faturas do Cartão</NavLink>
+        <NavLink to="/pessoal/dashboard/consultas/despesas-previstas-mes-a-mes" icon={Target}>Despesas Previstas Mês a Mês</NavLink>
+        <NavLink to="/pessoal/dashboard/consultas/dividas-previstas-mes-a-mes" icon={List}>Dívidas Previstas Mês a Mês</NavLink>
+       </AccordionContent>
+      </AccordionItem>
+
+      <AccordionItem value="relatorios">
+       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">📊 {(isOpen||isMobile)&&'Relatórios'}</span></AccordionTrigger>
+       <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
+        <NavLink to="/pessoal/dashboard/relatorios/receitas" icon={DollarSign}>Receitas</NavLink>
+        <NavLink to="/pessoal/dashboard/relatorios/despesas" icon={List}>Despesas</NavLink>
+        <NavLink to="/pessoal/dashboard/relatorios/despesas-previstas" icon={Target}>Despesas Previstas</NavLink>
+        <NavLink to="/pessoal/dashboard/relatorios/cartoes" icon={CreditCard}>Cartões de Crédito</NavLink>
+        <NavLink to="/pessoal/dashboard/relatorios/cartoes-pessoas" icon={Users}>Cartões por Pessoa</NavLink>
+        <NavLink to="/pessoal/dashboard/relatorios/devedores" icon={List}>Devedores</NavLink>
+        <NavLink to="/pessoal/dashboard/relatorios/leitura" icon={BookOpen}>Leitura</NavLink>
+       </AccordionContent>
+      </AccordionItem>
+
+      {isAdmin&&(
+       <AccordionItem value="admin">
+        <AccordionTrigger className={trigger}><span className="flex items-center gap-3">🛡️ {(isOpen||isMobile)&&'Administração'}</span></AccordionTrigger>
+        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
+         <NavLink to="/pessoal/dashboard/admin/gerenciar-usuarios">Gerenciar Usuários</NavLink>
+        </AccordionContent>
+       </AccordionItem>
       )}
-    >
 
-      <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
-        <div className="flex items-center gap-2 overflow-hidden">
+     </Accordion>
+    </ul>
+   </nav>
 
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-[hsl(var(--neon-blue))] to-blue-700 shadow-[0_0_12px_hsl(var(--neon-blue)/.4)]">
-            <DollarSign className="h-4 w-4 text-white" />
-          </div>
+   <div className="shrink-0 space-y-1 border-t border-border p-2">
+    <Link to="/" className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
+     <LayoutGrid className="h-4 w-4 shrink-0"/>
+     {(isOpen||isMobile)&&'Módulos'}
+    </Link>
 
-          {(isOpen || isMobile) && (
-            <div className="leading-tight">
-              <div className="text-sm font-bold uppercase text-white">
-                PESSOAL
-              </div>
-
-              <div className="text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--neon-blue))]">
-                FINANÇAS
-              </div>
-            </div>
-          )}
-
-        </div>
-
-        {!isMobile && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => setOpen(!isOpen)}
-            className="ml-auto shrink-0"
-          >
-            {isOpen
-              ? <ChevronLeft className="h-5 w-5" />
-              : <ChevronRight className="h-5 w-5" />}
-          </Button>
-        )}
-      </div>
-
-      <nav className="flex-1 overflow-auto px-2 py-4 text-sm font-medium">
-        <ul className="space-y-1">
-
-          <li>
-            <NavLink to="/pessoal/dashboard" icon={Home}>
-              {(isOpen || isMobile) && 'Dashboard'}
-            </NavLink>
-          </li>
-
-          <li>
-            <NavLink to="/pessoal/dashboard/alertas" icon={Zap}>
-              {(isOpen || isMobile) && 'Alertas Inteligentes'}
-            </NavLink>
-          </li>
-
-          <Accordion
-            type="single"
-            collapsible
-            className="w-full"
-          >
-
-            <AccordionItem
-              value="cadastros"
-              className="mb-0 border-b-0"
-            >
-              <AccordionTrigger className={triggerClass}>
-                <span className="flex items-center gap-3">
-                  <span className="text-base">📋</span>
-                  {(isOpen || isMobile) && 'Cadastros'}
-                </span>
-              </AccordionTrigger>
-
-              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-                <NavLink
-                  to="/pessoal/dashboard/cadastros/tipos-receita"
-                  icon={List}
-                >
-                  Tipos de Receita
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/cadastros/tipos-despesa"
-                  icon={List}
-                >
-                  Tipos de Despesa
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/cadastros/cartoes-credito"
-                  icon={CreditCard}
-                >
-                  Cartões de Crédito
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/cadastros/cartao-usuarios"
-                  icon={Users}
-                >
-                  Pessoas do Cartão
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/cadastros/livros"
-                  icon={List}
-                >
-                  Livros
-                </NavLink>
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem
-              value="lancamentos"
-              className="mb-0 border-b-0"
-            >
-              <AccordionTrigger className={triggerClass}>
-                <span className="flex items-center gap-3">
-                  <span className="text-base">↔️</span>
-                  {(isOpen || isMobile) && 'Lançamentos'}
-                </span>
-              </AccordionTrigger>
-
-              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-                <NavLink
-                  to="/pessoal/dashboard/lancamentos/receitas"
-                  icon={DollarSign}
-                >
-                  Receitas
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/lancamentos/despesas"
-                  icon={List}
-                >
-                  Despesas
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/lancamentos/despesa-prevista"
-                  icon={Target}
-                >
-                  Despesas Previstas
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/lancamentos/faturas"
-                  icon={CreditCard}
-                >
-                  Faturas do Cartão
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/lancamentos/cartao-lancamentos"
-                  icon={Receipt}
-                >
-                  Lanç. do Cartão
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/lancamentos/devedores"
-                  icon={List}
-                >
-                  Devedores
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/lancamentos/dizimos-e-ofertas"
-                  icon={DollarSign}
-                >
-                  Dízimos/Ofertas
-                </NavLink>
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem
-              value="investimentos"
-              className="mb-0 border-b-0"
-            >
-              <AccordionTrigger className={triggerClass}>
-                <span className="flex items-center gap-3">
-                  <span className="text-base">📈</span>
-                  {(isOpen || isMobile) && 'Investimento'}
-                </span>
-              </AccordionTrigger>
-
-              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-                <NavLink
-                  to="/pessoal/dashboard/investimentos/aportes"
-                  icon={DollarSign}
-                >
-                  Aportes
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/investimentos/rendimentos"
-                  icon={TrendingUp}
-                >
-                  Rendimentos
-                </NavLink>
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem
-              value="leitura"
-              className="mb-0 border-b-0"
-            >
-              <AccordionTrigger className={triggerClass}>
-                <span className="flex items-center gap-3">
-                  <span className="text-base">📖</span>
-                  {(isOpen || isMobile) && 'Leitura Bíblica'}
-                </span>
-              </AccordionTrigger>
-
-              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-                <NavLink
-                  to="/pessoal/dashboard/lancamentos/leitura"
-                  icon={BookOpen}
-                >
-                  Lançamentos
-                </NavLink>
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem
-              value="planejamento"
-              className="mb-0 border-b-0"
-            >
-              <AccordionTrigger className={triggerClass}>
-                <span className="flex items-center gap-3">
-                  <span className="text-base">🎯</span>
-                  {(isOpen || isMobile) && 'Planejamento'}
-                </span>
-              </AccordionTrigger>
-
-              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-                <NavLink
-                  to="/pessoal/dashboard/planejamento"
-                  icon={Target}
-                >
-                  Planejamento Financeiro
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/planejamento/metas"
-                  icon={Target}
-                >
-                  Metas
-                </NavLink>
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem
-              value="consultas"
-              className="mb-0 border-b-0"
-            >
-              <AccordionTrigger className={triggerClass}>
-                <span className="flex items-center gap-3">
-                  <span className="text-base">🔎</span>
-                  {(isOpen || isMobile) && 'Consultas'}
-                </span>
-              </AccordionTrigger>
-
-              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-                <NavLink
-                  to="/pessoal/dashboard/consultas/contas-mes"
-                  icon={Receipt}
-                >
-                  Contas do Mês
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/consultas/despesas-previstas-mes-a-mes"
-                  icon={Target}
-                >
-                  Despesas Previstas Mês a Mês
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/consultas/dividas-previstas-mes-a-mes"
-                  icon={List}
-                >
-                  Dívidas Previstas Mês a Mês
-                </NavLink>
-              </AccordionContent>
-            </AccordionItem>
-
-            <AccordionItem
-              value="relatorios"
-              className="mb-0 border-b-0"
-            >
-              <AccordionTrigger className={triggerClass}>
-                <span className="flex items-center gap-3">
-                  <span className="text-base">📊</span>
-                  {(isOpen || isMobile) && 'Relatórios'}
-                </span>
-              </AccordionTrigger>
-
-              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-                <NavLink
-                  to="/pessoal/dashboard/relatorios/receitas"
-                  icon={DollarSign}
-                >
-                  Receitas
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/relatorios/despesas"
-                  icon={List}
-                >
-                  Despesas
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/relatorios/despesas-previstas"
-                  icon={Target}
-                >
-                  Despesas Previstas
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/relatorios/cartoes"
-                  icon={CreditCard}
-                >
-                  Cartões de Crédito
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/relatorios/cartoes-pessoas"
-                  icon={Users}
-                >
-                  Cartões por Pessoa
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/relatorios/devedores"
-                  icon={List}
-                >
-                  Devedores
-                </NavLink>
-
-                <NavLink
-                  to="/pessoal/dashboard/relatorios/leitura"
-                  icon={BookOpen}
-                >
-                  Leitura
-                </NavLink>
-              </AccordionContent>
-            </AccordionItem>
-
-            {isAdmin && (
-              <AccordionItem
-                value="admin"
-                className="mb-0 border-b-0"
-              >
-                <AccordionTrigger className={triggerClass}>
-                  <span className="flex items-center gap-3">
-                    <span className="text-base">🛡️</span>
-                    {(isOpen || isMobile) && 'Administração'}
-                  </span>
-                </AccordionTrigger>
-
-                <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-                  <NavLink to="/pessoal/dashboard/admin/gerenciar-usuarios">
-                    Gerenciar Usuários
-                  </NavLink>
-                </AccordionContent>
-              </AccordionItem>
-            )}
-
-          </Accordion>
-        </ul>
-      </nav>
-
-      <div className="shrink-0 space-y-1 border-t border-border p-2">
-
-        <Link
-          to="/"
-          className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-[background-color,color] duration-200 hover:bg-accent hover:text-foreground"
-        >
-          <LayoutGrid className="h-4 w-4 shrink-0" />
-          {(isOpen || isMobile) && 'Módulos'}
-        </Link>
-
-        <button
-          type="button"
-          onClick={signOut}
-          className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-red-500 transition-[background-color,color] duration-200 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 motion-reduce:transition-none"
-        >
-          <LogOut className="h-4 w-4 shrink-0" />
-          {(isOpen || isMobile) && 'Sair'}
-        </button>
-
-      </div>
-    </aside>
-  );
+    <button type="button" onClick={signOut} className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-500/10">
+     <LogOut className="h-4 w-4 shrink-0"/>
+     {(isOpen||isMobile)&&'Sair'}
+    </button>
+   </div>
+  </aside>
+ );
 };
 
 export default Sidebar;
