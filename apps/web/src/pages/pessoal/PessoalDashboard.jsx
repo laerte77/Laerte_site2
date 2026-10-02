@@ -15,24 +15,24 @@ import CartaoUsuarios from'@/components/pessoal/cadastros/CartaoUsuarios';
 import Receitas from'@/components/pessoal/lancamentos/Receitas';
 import Despesas from'@/components/pessoal/lancamentos/Despesas';
 import DespesaPrevista from'@/components/pessoal/lancamentos/DespesaPrevista';
-import ContasMes from'@/components/pessoal/consultas/ContasMes';
 import LancamentoDevedores from'@/components/pessoal/lancamentos/LancamentoDevedores';
 import LancamentoDizimosOfertas from'@/components/pessoal/lancamentos/LancamentoDizimosOfertas';
-import Metas from'@/components/pessoal/planejamento/Metas';
+import CartaoLancamentos from'@/components/pessoal/lancamentos/CartaoLancamentos';
 import Leitura from'@/components/pessoal/lancamentos/Leitura';
 import Aportes from'@/components/pessoal/investimentos/Aportes';
 import Rendimentos from'@/components/pessoal/investimentos/Rendimentos';
+import Metas from'@/components/pessoal/planejamento/Metas';
+import ContasMes from'@/components/pessoal/consultas/ContasMes';
+import Faturas from'@/components/pessoal/consultas/Faturas';
+import ConsultaDespesasPrevisadasMesAMes from'@/components/pessoal/consultas/ConsultaDespesasPrevisadasMesAMes';
+import ConsultaDividasPrevisadasMesAMes from'@/components/pessoal/consultas/ConsultaDividasPrevisadasMesAMes';
 import RelatorioReceitas from'@/components/pessoal/relatorios/RelatorioReceitas';
 import RelatorioDespesas from'@/components/pessoal/relatorios/RelatorioDespesas';
 import RelatorioDespesasPrevistas from'@/components/pessoal/relatorios/RelatorioDespesasPrevistas';
 import RelatorioCartoes from'@/components/pessoal/relatorios/RelatorioCartoes';
 import RelatorioCartaoPessoas from'@/components/pessoal/relatorios/RelatorioCartaoPessoas';
-import Faturas from'@/components/pessoal/lancamentos/Faturas';
-import CartaoLancamentos from'@/components/pessoal/lancamentos/CartaoLancamentos';
 import RelatorioDevedores from'@/components/pessoal/relatorios/RelatorioDevedores';
 import RelatorioLeitura from'@/components/pessoal/relatorios/RelatorioLeitura';
-import ConsultaDespesasPrevisadasMesAMes from'@/components/pessoal/consultas/ConsultaDespesasPrevisadasMesAMes';
-import ConsultaDividasPrevisadasMesAMes from'@/components/pessoal/consultas/ConsultaDividasPrevisadasMesAMes';
 import GerenciarUsuarios from'@/components/pessoal/admin/GerenciarUsuarios';
 import CriarNovoUsuario from'@/components/pessoal/admin/CriarNovoUsuario';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
@@ -50,75 +50,36 @@ const PessoalDashboard=()=>{
  useEffect(()=>{
   if(!loading){
    if(!session){
-    toast({
-     title:'Acesso Negado',
-     description:'Por favor, faça login.',
-     variant:'destructive'
-    });
+    toast({title:'Acesso Negado',description:'Por favor, faça login.',variant:'destructive'});
     navigate('/login');
    }else if(!canAccessModule('pessoal')){
-    toast({
-     title:'Acesso Restrito',
-     description:'Você não tem permissão para o módulo Pessoal.',
-     variant:'destructive'
-    });
+    toast({title:'Acesso Restrito',description:'Você não tem permissão para o módulo Pessoal.',variant:'destructive'});
     navigate('/modules');
    }
   }
  },[session,loading,navigate,toast,canAccessModule]);
 
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
-
- useEffect(()=>{
-  if(isMobile)setSidebarOpen(false);
- },[location.pathname,isMobile]);
+ useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
 
  if(loading||(!session&&!loading))
   return(
-   <div
-    className="flex h-screen flex-col items-center justify-center text-foreground"
-    role="status"
-    aria-live="polite"
-   >
+   <div className="flex h-screen flex-col items-center justify-center text-foreground" role="status" aria-live="polite">
     <Loader2 className="mb-4 h-10 w-10 animate-spin text-[hsl(var(--neon-blue))] motion-reduce:animate-none"/>
     <p>Carregando Módulo...</p>
    </div>
   );
 
- const AdminRoute=({children})=>
-  isAdmin
-   ?children
-   :<Navigate to="/pessoal/dashboard"/>;
+ const AdminRoute=({children})=>isAdmin?children:<Navigate to="/pessoal/dashboard"/>;
 
  return(
-  <div
-   className="flex min-h-screen w-full bg-gradient-professional"
-   style={{
-    '--primary':'var(--neon-blue)',
-    '--ring':'var(--neon-blue)'
-   }}
-  >
+  <div className="flex min-h-screen w-full bg-gradient-professional" style={{'--primary':'var(--neon-blue)','--ring':'var(--neon-blue)'}}>
+   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
 
-   <Sidebar
-    isOpen={isSidebarOpen}
-    setOpen={setSidebarOpen}
-    isMobile={isMobile}
-   />
-
-   <div
-    className={cn(
-     'flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',
-     !isMobile&&(isSidebarOpen?'ml-60':'ml-20')
-    )}
-   >
-
-    <Header
-     toggleSidebar={()=>setSidebarOpen(v=>!v)}
-     isSidebarOpen={isSidebarOpen}
-    />
+   <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
+    <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
 
     <main className="relative flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5 [&_.neon-card]:neon-border-blue [&_.neon-card]:neon-hover-blue">
-
      <Routes>
 
       <Route path="/" element={<PessoalDashboardHome/>}/>
@@ -127,20 +88,10 @@ const PessoalDashboard=()=>{
       <Route path="planejamento" element={<PlanejamentoFinanceiro/>}/>
       <Route path="planejamento/metas" element={<Metas/>}/>
 
-      <Route
-       path="consultas/contas-mes"
-       element={<ContasMes/>}
-      />
-
-      <Route
-       path="consultas/despesas-previstas-mes-a-mes"
-       element={<ConsultaDespesasPrevisadasMesAMes/>}
-      />
-
-      <Route
-       path="consultas/dividas-previstas-mes-a-mes"
-       element={<ConsultaDividasPrevisadasMesAMes/>}
-      />
+      <Route path="consultas/contas-mes" element={<ContasMes/>}/>
+      <Route path="consultas/faturas" element={<Faturas/>}/>
+      <Route path="consultas/despesas-previstas-mes-a-mes" element={<ConsultaDespesasPrevisadasMesAMes/>}/>
+      <Route path="consultas/dividas-previstas-mes-a-mes" element={<ConsultaDividasPrevisadasMesAMes/>}/>
 
       <Route path="cadastros/tipos-receita" element={<TiposReceita/>}/>
       <Route path="cadastros/tipos-despesa" element={<TiposDespesa/>}/>
@@ -151,7 +102,6 @@ const PessoalDashboard=()=>{
       <Route path="lancamentos/receitas" element={<Receitas/>}/>
       <Route path="lancamentos/despesas" element={<Despesas/>}/>
       <Route path="lancamentos/despesa-prevista" element={<DespesaPrevista/>}/>
-      <Route path="lancamentos/faturas" element={<Faturas/>}/>
       <Route path="lancamentos/cartao-lancamentos" element={<CartaoLancamentos/>}/>
       <Route path="lancamentos/devedores" element={<LancamentoDevedores/>}/>
       <Route path="lancamentos/dizimos-e-ofertas" element={<LancamentoDizimosOfertas/>}/>
@@ -168,80 +118,24 @@ const PessoalDashboard=()=>{
       <Route path="relatorios/devedores" element={<RelatorioDevedores/>}/>
       <Route path="relatorios/leitura" element={<RelatorioLeitura/>}/>
 
-      <Route
-       path="admin/gerenciar-usuarios"
-       element={
-        <AdminRoute>
-         <GerenciarUsuarios/>
-        </AdminRoute>
-       }
-      />
+      <Route path="admin/gerenciar-usuarios" element={<AdminRoute><GerenciarUsuarios/></AdminRoute>}/>
+      <Route path="admin/criar-usuario" element={<AdminRoute><CriarNovoUsuario/></AdminRoute>}/>
 
-      <Route
-       path="admin/criar-usuario"
-       element={
-        <AdminRoute>
-         <CriarNovoUsuario/>
-        </AdminRoute>
-       }
-      />
-
-      {/* Compatibilidade com rotas antigas */}
-      <Route
-       path="contas-mes"
-       element={
-        <Navigate
-         to="/pessoal/dashboard/consultas/contas-mes"
-         replace
-        />
-       }
-      />
-
-      <Route
-       path="lancamentos/dividas-previstas-mes-a-mes"
-       element={
-        <Navigate
-         to="/pessoal/dashboard/consultas/dividas-previstas-mes-a-mes"
-         replace
-        />
-       }
-      />
-
-      <Route
-       path="lancamentos/metas"
-       element={
-        <Navigate
-         to="/pessoal/dashboard/planejamento/metas"
-         replace
-        />
-       }
-      />
-
-      <Route
-       path="*"
-       element={
-        <Navigate
-         to="/pessoal/dashboard"
-         replace
-        />
-       }
-      />
+      <Route path="contas-mes" element={<Navigate to="/pessoal/dashboard/consultas/contas-mes" replace/>}/>
+      <Route path="lancamentos/faturas" element={<Navigate to="/pessoal/dashboard/consultas/faturas" replace/>}/>
+      <Route path="lancamentos/dividas-previstas-mes-a-mes" element={<Navigate to="/pessoal/dashboard/consultas/dividas-previstas-mes-a-mes" replace/>}/>
+      <Route path="lancamentos/metas" element={<Navigate to="/pessoal/dashboard/planejamento/metas" replace/>}/>
+      <Route path="*" element={<Navigate to="/pessoal/dashboard" replace/>}/>
 
      </Routes>
-
     </main>
    </div>
 
    {isMobile&&isSidebarOpen&&(
-    <div
-     onClick={()=>setSidebarOpen(false)}
-     className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-     aria-hidden="true"
-    />
+    <div onClick={()=>setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" aria-hidden="true"/>
    )}
 
    <Toaster/>
-
   </div>
  );
 };
