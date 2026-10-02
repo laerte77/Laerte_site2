@@ -49,9 +49,7 @@ const Livros=()=>{
     description:error.message,
     variant:'destructive'
    });
-  }else{
-   setLivros(data||[]);
-  }
+  }else setLivros(data||[]);
 
   setLoading(false);
  },[user,toast]);
@@ -102,9 +100,7 @@ const Livros=()=>{
     testamento:livro.testamento||''
    });
    setEditingId(livro.id);
-  }else{
-   resetForm();
-  }
+  }else resetForm();
 
   setIsDialogOpen(true);
  };
@@ -245,10 +241,7 @@ const Livros=()=>{
     </div>
 
     <div className="flex flex-wrap gap-2">
-     <Button
-      variant="outline"
-      onClick={fetchLivros}
-     >
+     <Button variant="outline" onClick={fetchLivros}>
       <RefreshCw className="mr-2 h-4 w-4"/>
       Atualizar
      </Button>
@@ -283,57 +276,26 @@ const Livros=()=>{
    </Card>
 
    <div className="grid gap-4 md:grid-cols-4">
-    <Card className="border-border bg-card">
-     <CardHeader className="pb-2">
-      <CardTitle className="text-sm font-medium text-muted-foreground">
-       Livros cadastrados
-      </CardTitle>
-     </CardHeader>
-     <CardContent>
-      <p className="text-2xl font-bold text-[hsl(var(--neon-pessoal))]">
-       {livros.length}
-      </p>
-     </CardContent>
-    </Card>
+    {[
+     ['Livros cadastrados',livros.length,true],
+     ['Capítulos',totalCapitulos,true],
+     ['Antigo Testamento',antigoTestamento,false],
+     ['Novo Testamento',novoTestamento,false]
+    ].map(([title,value,accent])=>(
+     <Card key={title} className="border-border bg-card">
+      <CardHeader className="pb-2">
+       <CardTitle className="text-sm font-medium text-muted-foreground">
+        {title}
+       </CardTitle>
+      </CardHeader>
 
-    <Card className="border-border bg-card">
-     <CardHeader className="pb-2">
-      <CardTitle className="text-sm font-medium text-muted-foreground">
-       Capítulos
-      </CardTitle>
-     </CardHeader>
-     <CardContent>
-      <p className="text-2xl font-bold text-[hsl(var(--neon-pessoal))]">
-       {totalCapitulos}
-      </p>
-     </CardContent>
-    </Card>
-
-    <Card className="border-border bg-card">
-     <CardHeader className="pb-2">
-      <CardTitle className="text-sm font-medium text-muted-foreground">
-       Antigo Testamento
-      </CardTitle>
-     </CardHeader>
-     <CardContent>
-      <p className="text-2xl font-bold">
-       {antigoTestamento}
-      </p>
-     </CardContent>
-    </Card>
-
-    <Card className="border-border bg-card">
-     <CardHeader className="pb-2">
-      <CardTitle className="text-sm font-medium text-muted-foreground">
-       Novo Testamento
-      </CardTitle>
-     </CardHeader>
-     <CardContent>
-      <p className="text-2xl font-bold">
-       {novoTestamento}
-      </p>
-     </CardContent>
-    </Card>
+      <CardContent>
+       <p className={`text-2xl font-bold ${accent?'text-[hsl(var(--neon-pessoal))]':''}`}>
+        {value}
+       </p>
+      </CardContent>
+     </Card>
+    ))}
    </div>
 
    <ModalLancamentoPadrao
@@ -345,11 +307,7 @@ const Livros=()=>{
     theme="blue"
     footer={
      <>
-      <Button
-       type="button"
-       variant="outline"
-       onClick={closeDialog}
-      >
+      <Button type="button" variant="outline" onClick={closeDialog}>
        Cancelar
       </Button>
 
@@ -363,11 +321,7 @@ const Livros=()=>{
      </>
     }
    >
-    <form
-     id="form-livro"
-     onSubmit={handleSave}
-     className="space-y-5"
-    >
+    <form id="form-livro" onSubmit={handleSave} className="space-y-5">
      <div className="grid gap-4 sm:grid-cols-2">
 
       <div className="space-y-2">
@@ -422,7 +376,7 @@ const Livros=()=>{
 
        <Select
         value={formData.testamento}
-        onValueChange=value=>setFormData(prev=>({
+        onValueChange={value=>setFormData(prev=>({
          ...prev,
          testamento:value
         }))}
@@ -483,19 +437,13 @@ const Livros=()=>{
        <tbody>
         {loading?(
          <tr>
-          <td
-           colSpan={5}
-           className="p-10 text-center text-muted-foreground"
-          >
+          <td colSpan={5} className="p-10 text-center text-muted-foreground">
            Carregando...
           </td>
          </tr>
         ):livrosFiltrados.length===0?(
          <tr>
-          <td
-           colSpan={5}
-           className="p-10 text-center text-muted-foreground"
-          >
+          <td colSpan={5} className="p-10 text-center text-muted-foreground">
            <BookOpen className="mx-auto mb-2 h-10 w-10 opacity-50"/>
            Nenhum livro encontrado.
           </td>
