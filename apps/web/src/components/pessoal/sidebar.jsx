@@ -43,6 +43,7 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
       </div>
      )}
     </div>
+
     {!isMobile&&(
      <Button type="button" variant="ghost" size="icon" onClick={()=>setOpen(!isOpen)} className="ml-auto shrink-0">
       {isOpen?<ChevronLeft className="h-5 w-5"/>:<ChevronRight className="h-5 w-5"/>}
@@ -58,7 +59,9 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
      <Accordion type="single" collapsible className="w-full">
 
       <AccordionItem value="cadastros">
-       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">📋 {(isOpen||isMobile)&&'Cadastros'}</span></AccordionTrigger>
+       <AccordionTrigger className={trigger}>
+        <span className="flex items-center gap-3">📋 {(isOpen||isMobile)&&'Cadastros'}</span>
+       </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
         <NavLink to="/pessoal/dashboard/cadastros/tipos-receita" icon={List}>Tipos de Receita</NavLink>
         <NavLink to="/pessoal/dashboard/cadastros/tipos-despesa" icon={List}>Tipos de Despesa</NavLink>
@@ -69,7 +72,9 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
       </AccordionItem>
 
       <AccordionItem value="lancamentos">
-       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">↔️ {(isOpen||isMobile)&&'Lançamentos'}</span></AccordionTrigger>
+       <AccordionTrigger className={trigger}>
+        <span className="flex items-center gap-3">↔️ {(isOpen||isMobile)&&'Lançamentos'}</span>
+       </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
         <NavLink to="/pessoal/dashboard/lancamentos/receitas" icon={DollarSign}>Receitas</NavLink>
         <NavLink to="/pessoal/dashboard/lancamentos/despesas" icon={List}>Despesas</NavLink>
@@ -81,7 +86,9 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
       </AccordionItem>
 
       <AccordionItem value="investimentos">
-       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">📈 {(isOpen||isMobile)&&'Investimento'}</span></AccordionTrigger>
+       <AccordionTrigger className={trigger}>
+        <span className="flex items-center gap-3">📈 {(isOpen||isMobile)&&'Investimento'}</span>
+       </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
         <NavLink to="/pessoal/dashboard/investimentos/aportes" icon={DollarSign}>Aportes</NavLink>
         <NavLink to="/pessoal/dashboard/investimentos/rendimentos" icon={TrendingUp}>Rendimentos</NavLink>
@@ -89,14 +96,18 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
       </AccordionItem>
 
       <AccordionItem value="leitura">
-       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">📖 {(isOpen||isMobile)&&'Leitura Bíblica'}</span></AccordionTrigger>
+       <AccordionTrigger className={trigger}>
+        <span className="flex items-center gap-3">📖 {(isOpen||isMobile)&&'Leitura Bíblica'}</span>
+       </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
         <NavLink to="/pessoal/dashboard/lancamentos/leitura" icon={BookOpen}>Lançamentos</NavLink>
        </AccordionContent>
       </AccordionItem>
 
       <AccordionItem value="planejamento">
-       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">🎯 {(isOpen||isMobile)&&'Planejamento'}</span></AccordionTrigger>
+       <AccordionTrigger className={trigger}>
+        <span className="flex items-center gap-3">🎯 {(isOpen||isMobile)&&'Planejamento'}</span>
+       </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
         <NavLink to="/pessoal/dashboard/planejamento" icon={Target}>Planejamento Financeiro</NavLink>
         <NavLink to="/pessoal/dashboard/planejamento/metas" icon={Target}>Metas</NavLink>
@@ -104,17 +115,20 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
       </AccordionItem>
 
       <AccordionItem value="consultas">
-       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">🔎 {(isOpen||isMobile)&&'Consultas'}</span></AccordionTrigger>
+       <AccordionTrigger className={trigger}>
+        <span className="flex items-center gap-3">🔎 {(isOpen||isMobile)&&'Consultas'}</span>
+       </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
         <NavLink to="/pessoal/dashboard/consultas/contas-mes" icon={Receipt}>Contas do Mês</NavLink>
         <NavLink to="/pessoal/dashboard/consultas/faturas" icon={CreditCard}>Faturas do Cartão</NavLink>
-        <NavLink to="/pessoal/dashboard/consultas/despesas-previstas-mes-a-mes" icon={Target}>Despesas Previstas Mês a Mês</NavLink>
         <NavLink to="/pessoal/dashboard/consultas/dividas-previstas-mes-a-mes" icon={List}>Dívidas Previstas Mês a Mês</NavLink>
        </AccordionContent>
       </AccordionItem>
 
       <AccordionItem value="relatorios">
-       <AccordionTrigger className={trigger}><span className="flex items-center gap-3">📊 {(isOpen||isMobile)&&'Relatórios'}</span></AccordionTrigger>
+       <AccordionTrigger className={trigger}>
+        <span className="flex items-center gap-3">📊 {(isOpen||isMobile)&&'Relatórios'}</span>
+       </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
         <NavLink to="/pessoal/dashboard/relatorios/receitas" icon={DollarSign}>Receitas</NavLink>
         <NavLink to="/pessoal/dashboard/relatorios/despesas" icon={List}>Despesas</NavLink>
@@ -128,7 +142,9 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
 
       {isAdmin&&(
        <AccordionItem value="admin">
-        <AccordionTrigger className={trigger}><span className="flex items-center gap-3">🛡️ {(isOpen||isMobile)&&'Administração'}</span></AccordionTrigger>
+        <AccordionTrigger className={trigger}>
+         <span className="flex items-center gap-3">🛡️ {(isOpen||isMobile)&&'Administração'}</span>
+        </AccordionTrigger>
         <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
          <NavLink to="/pessoal/dashboard/admin/gerenciar-usuarios">Gerenciar Usuários</NavLink>
         </AccordionContent>
