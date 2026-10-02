@@ -18,7 +18,7 @@ import DespesaPrevista from'@/components/pessoal/lancamentos/DespesaPrevista';
 import ContasMes from'@/components/pessoal/consultas/ContasMes';
 import LancamentoDevedores from'@/components/pessoal/lancamentos/LancamentoDevedores';
 import LancamentoDizimosOfertas from'@/components/pessoal/lancamentos/LancamentoDizimosOfertas';
-import Metas from'@/components/pessoal/lancamentos/Metas';
+import Metas from'@/components/pessoal/planejamento/Metas';
 import Leitura from'@/components/pessoal/lancamentos/Leitura';
 import Aportes from'@/components/pessoal/investimentos/Aportes';
 import Rendimentos from'@/components/pessoal/investimentos/Rendimentos';
@@ -50,39 +50,75 @@ const PessoalDashboard=()=>{
  useEffect(()=>{
   if(!loading){
    if(!session){
-    toast({title:'Acesso Negado',description:'Por favor, faça login.',variant:'destructive'});
+    toast({
+     title:'Acesso Negado',
+     description:'Por favor, faça login.',
+     variant:'destructive'
+    });
     navigate('/login');
    }else if(!canAccessModule('pessoal')){
-    toast({title:'Acesso Restrito',description:'Você não tem permissão para o módulo Pessoal.',variant:'destructive'});
+    toast({
+     title:'Acesso Restrito',
+     description:'Você não tem permissão para o módulo Pessoal.',
+     variant:'destructive'
+    });
     navigate('/modules');
    }
   }
  },[session,loading,navigate,toast,canAccessModule]);
 
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
- useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
+
+ useEffect(()=>{
+  if(isMobile)setSidebarOpen(false);
+ },[location.pathname,isMobile]);
 
  if(loading||(!session&&!loading))
   return(
-   <div className="flex h-screen flex-col items-center justify-center text-foreground" role="status" aria-live="polite">
+   <div
+    className="flex h-screen flex-col items-center justify-center text-foreground"
+    role="status"
+    aria-live="polite"
+   >
     <Loader2 className="mb-4 h-10 w-10 animate-spin text-[hsl(var(--neon-blue))] motion-reduce:animate-none"/>
     <p>Carregando Módulo...</p>
    </div>
   );
 
- const AdminRoute=({children})=>isAdmin?children:<Navigate to="/pessoal/dashboard"/>;
+ const AdminRoute=({children})=>
+  isAdmin
+   ?children
+   :<Navigate to="/pessoal/dashboard"/>;
 
  return(
-  <div className="flex min-h-screen w-full bg-gradient-professional" style={{'--primary':'var(--neon-blue)','--ring':'var(--neon-blue)'}}>
-   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
+  <div
+   className="flex min-h-screen w-full bg-gradient-professional"
+   style={{
+    '--primary':'var(--neon-blue)',
+    '--ring':'var(--neon-blue)'
+   }}
+  >
 
-   <div className={cn(
-    'flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',
-    !isMobile&&(isSidebarOpen?'ml-60':'ml-20')
-   )}>
-    <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
+   <Sidebar
+    isOpen={isSidebarOpen}
+    setOpen={setSidebarOpen}
+    isMobile={isMobile}
+   />
+
+   <div
+    className={cn(
+     'flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',
+     !isMobile&&(isSidebarOpen?'ml-60':'ml-20')
+    )}
+   >
+
+    <Header
+     toggleSidebar={()=>setSidebarOpen(v=>!v)}
+     isSidebarOpen={isSidebarOpen}
+    />
 
     <main className="relative flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5 [&_.neon-card]:neon-border-blue [&_.neon-card]:neon-hover-blue">
+
      <Routes>
 
       <Route path="/" element={<PessoalDashboardHome/>}/>
@@ -91,11 +127,16 @@ const PessoalDashboard=()=>{
       <Route path="planejamento" element={<PlanejamentoFinanceiro/>}/>
       <Route path="planejamento/metas" element={<Metas/>}/>
 
-      <Route path="consultas/contas-mes" element={<ContasMes/>}/>
+      <Route
+       path="consultas/contas-mes"
+       element={<ContasMes/>}
+      />
+
       <Route
        path="consultas/despesas-previstas-mes-a-mes"
        element={<ConsultaDespesasPrevisadasMesAMes/>}
       />
+
       <Route
        path="consultas/dividas-previstas-mes-a-mes"
        element={<ConsultaDividasPrevisadasMesAMes/>}
@@ -127,27 +168,67 @@ const PessoalDashboard=()=>{
       <Route path="relatorios/devedores" element={<RelatorioDevedores/>}/>
       <Route path="relatorios/leitura" element={<RelatorioLeitura/>}/>
 
-      <Route path="admin/gerenciar-usuarios" element={<AdminRoute><GerenciarUsuarios/></AdminRoute>}/>
-      <Route path="admin/criar-usuario" element={<AdminRoute><CriarNovoUsuario/></AdminRoute>}/>
+      <Route
+       path="admin/gerenciar-usuarios"
+       element={
+        <AdminRoute>
+         <GerenciarUsuarios/>
+        </AdminRoute>
+       }
+      />
 
       <Route
+       path="admin/criar-usuario"
+       element={
+        <AdminRoute>
+         <CriarNovoUsuario/>
+        </AdminRoute>
+       }
+      />
+
+      {/* Compatibilidade com rotas antigas */}
+      <Route
        path="contas-mes"
-       element={<Navigate to="/pessoal/dashboard/consultas/contas-mes" replace/>}
+       element={
+        <Navigate
+         to="/pessoal/dashboard/consultas/contas-mes"
+         replace
+        />
+       }
       />
 
       <Route
        path="lancamentos/dividas-previstas-mes-a-mes"
-       element={<Navigate to="/pessoal/dashboard/consultas/dividas-previstas-mes-a-mes" replace/>}
+       element={
+        <Navigate
+         to="/pessoal/dashboard/consultas/dividas-previstas-mes-a-mes"
+         replace
+        />
+       }
       />
 
       <Route
        path="lancamentos/metas"
-       element={<Navigate to="/pessoal/dashboard/planejamento/metas" replace/>}
+       element={
+        <Navigate
+         to="/pessoal/dashboard/planejamento/metas"
+         replace
+        />
+       }
       />
 
-      <Route path="*" element={<Navigate to="/pessoal/dashboard" replace/>}/>
+      <Route
+       path="*"
+       element={
+        <Navigate
+         to="/pessoal/dashboard"
+         replace
+        />
+       }
+      />
 
      </Routes>
+
     </main>
    </div>
 
@@ -160,6 +241,7 @@ const PessoalDashboard=()=>{
    )}
 
    <Toaster/>
+
   </div>
  );
 };
