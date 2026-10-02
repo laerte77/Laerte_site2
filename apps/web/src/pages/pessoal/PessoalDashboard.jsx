@@ -32,7 +32,7 @@ import CartaoLancamentos from'@/components/pessoal/lancamentos/CartaoLancamentos
 import RelatorioDevedores from'@/components/pessoal/relatorios/RelatorioDevedores';
 import RelatorioLeitura from'@/components/pessoal/relatorios/RelatorioLeitura';
 import ConsultaDespesasPrevisadasMesAMes from'@/components/pessoal/consultas/ConsultaDespesasPrevisadasMesAMes';
-import ConsultaDividasPrevisadasMesAMes from'@/components/pessoal/relatorios/ConsultaDividasPrevisadasMesAMes';
+import ConsultaDividasPrevisadasMesAMes from'@/components/pessoal/consultas/ConsultaDividasPrevisadasMesAMes';
 import GerenciarUsuarios from'@/components/pessoal/admin/GerenciarUsuarios';
 import CriarNovoUsuario from'@/components/pessoal/admin/CriarNovoUsuario';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
