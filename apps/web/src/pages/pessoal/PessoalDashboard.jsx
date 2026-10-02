@@ -31,6 +31,7 @@ import Faturas from'@/components/pessoal/lancamentos/Faturas';
 import CartaoLancamentos from'@/components/pessoal/lancamentos/CartaoLancamentos';
 import RelatorioDevedores from'@/components/pessoal/relatorios/RelatorioDevedores';
 import RelatorioLeitura from'@/components/pessoal/relatorios/RelatorioLeitura';
+import ConsultaDespesasPrevisadasMesAMes from'@/components/pessoal/relatorios/ConsultaDespesasPrevisadasMesAMes';
 import ConsultaDividasPrevisadasMesAMes from'@/components/pessoal/relatorios/ConsultaDividasPrevisadasMesAMes';
 import GerenciarUsuarios from'@/components/pessoal/admin/GerenciarUsuarios';
 import CriarNovoUsuario from'@/components/pessoal/admin/CriarNovoUsuario';
@@ -83,10 +84,22 @@ const PessoalDashboard=()=>{
 
     <main className="relative flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5 [&_.neon-card]:neon-border-blue [&_.neon-card]:neon-hover-blue">
      <Routes>
+
       <Route path="/" element={<PessoalDashboardHome/>}/>
       <Route path="alertas" element={<AlertasInteligentes/>}/>
+
       <Route path="planejamento" element={<PlanejamentoFinanceiro/>}/>
-      <Route path="contas-mes" element={<ContasMes/>}/>
+      <Route path="planejamento/metas" element={<Metas/>}/>
+
+      <Route path="consultas/contas-mes" element={<ContasMes/>}/>
+      <Route
+       path="consultas/despesas-previstas-mes-a-mes"
+       element={<ConsultaDespesasPrevisadasMesAMes/>}
+      />
+      <Route
+       path="consultas/dividas-previstas-mes-a-mes"
+       element={<ConsultaDividasPrevisadasMesAMes/>}
+      />
 
       <Route path="cadastros/tipos-receita" element={<TiposReceita/>}/>
       <Route path="cadastros/tipos-despesa" element={<TiposDespesa/>}/>
@@ -99,10 +112,8 @@ const PessoalDashboard=()=>{
       <Route path="lancamentos/despesa-prevista" element={<DespesaPrevista/>}/>
       <Route path="lancamentos/faturas" element={<Faturas/>}/>
       <Route path="lancamentos/cartao-lancamentos" element={<CartaoLancamentos/>}/>
-      <Route path="lancamentos/dividas-previstas-mes-a-mes" element={<ConsultaDividasPrevisadasMesAMes/>}/>
       <Route path="lancamentos/devedores" element={<LancamentoDevedores/>}/>
       <Route path="lancamentos/dizimos-e-ofertas" element={<LancamentoDizimosOfertas/>}/>
-      <Route path="lancamentos/metas" element={<Metas/>}/>
       <Route path="lancamentos/leitura" element={<Leitura/>}/>
 
       <Route path="investimentos/aportes" element={<Aportes/>}/>
@@ -119,7 +130,24 @@ const PessoalDashboard=()=>{
       <Route path="admin/gerenciar-usuarios" element={<AdminRoute><GerenciarUsuarios/></AdminRoute>}/>
       <Route path="admin/criar-usuario" element={<AdminRoute><CriarNovoUsuario/></AdminRoute>}/>
 
+      {/* Compatibilidade com rotas antigas */}
+      <Route
+       path="contas-mes"
+       element={<Navigate to="/pessoal/dashboard/consultas/contas-mes" replace/>}
+      />
+
+      <Route
+       path="lancamentos/dividas-previstas-mes-a-mes"
+       element={<Navigate to="/pessoal/dashboard/consultas/dividas-previstas-mes-a-mes" replace/>}
+      />
+
+      <Route
+       path="lancamentos/metas"
+       element={<Navigate to="/pessoal/dashboard/planejamento/metas" replace/>}
+      />
+
       <Route path="*" element={<Navigate to="/pessoal/dashboard" replace/>}/>
+
      </Routes>
     </main>
    </div>
