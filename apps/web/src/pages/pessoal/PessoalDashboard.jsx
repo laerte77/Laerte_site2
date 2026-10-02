@@ -31,7 +31,7 @@ import Faturas from'@/components/pessoal/lancamentos/Faturas';
 import CartaoLancamentos from'@/components/pessoal/lancamentos/CartaoLancamentos';
 import RelatorioDevedores from'@/components/pessoal/relatorios/RelatorioDevedores';
 import RelatorioLeitura from'@/components/pessoal/relatorios/RelatorioLeitura';
-import ConsultaDespesasPrevisadasMesAMes from'@/components/pessoal/relatorios/ConsultaDespesasPrevisadasMesAMes';
+import ConsultaDespesasPrevisadasMesAMes from'@/components/pessoal/consultas/ConsultaDespesasPrevisadasMesAMes';
 import ConsultaDividasPrevisadasMesAMes from'@/components/pessoal/relatorios/ConsultaDividasPrevisadasMesAMes';
 import GerenciarUsuarios from'@/components/pessoal/admin/GerenciarUsuarios';
 import CriarNovoUsuario from'@/components/pessoal/admin/CriarNovoUsuario';
