@@ -1,21 +1,15 @@
 import React,{useState,useEffect,useCallback}from'react';
-import{
- Plus,Edit,Trash2,CreditCard,Wallet,RefreshCw,Search
-}from'lucide-react';
+import{Plus,Edit,Trash2,CreditCard,Wallet,RefreshCw,Search}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
 import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{useToast}from'@/components/ui/use-toast';
-import{
- AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,
- AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,
- AlertDialogTitle,AlertDialogTrigger
-}from'@/components/ui/alert-dialog';
+import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
-import ModalLancamentoPadrao from'../ModalLancamentoPadrao';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const BANDEIRAS=[
  'Visa','Mastercard','Elo','American Express',
@@ -334,7 +328,6 @@ const CartoesCredito=()=>{
   <div className="dark-pessoal space-y-4">
 
    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
-
     <div className="flex items-center gap-3">
      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-pessoal)/.20)] bg-[hsl(var(--neon-pessoal)/.08)]">
       <CreditCard className="h-5 w-5 text-[hsl(var(--neon-pessoal))]"/>
@@ -404,6 +397,7 @@ const CartoesCredito=()=>{
        Cartões cadastrados
       </CardTitle>
      </CardHeader>
+
      <CardContent>
       <p className="text-2xl font-bold text-[hsl(var(--neon-pessoal))]">
        {cartoes.length}
@@ -417,6 +411,7 @@ const CartoesCredito=()=>{
        Limite total
       </CardTitle>
      </CardHeader>
+
      <CardContent>
       <p className="text-2xl font-bold text-[hsl(var(--neon-pessoal))]">
        {moneyBRL(
@@ -435,6 +430,7 @@ const CartoesCredito=()=>{
        Limite utilizado
       </CardTitle>
      </CardHeader>
+
      <CardContent>
       <p className="text-2xl font-bold text-red-400">
        {moneyBRL(
@@ -722,7 +718,10 @@ const CartoesCredito=()=>{
           </div>
 
           <div>
-           <p className="text-xs text-muted-foreground">Fechamento / Venc.</p>
+           <p className="text-xs text-muted-foreground">
+            Fechamento / Venc.
+           </p>
+
            <p className="flex items-center gap-1 font-semibold">
             <Wallet className="h-3 w-3"/>
             {cartao.dia_fechamento}/{cartao.dia_vencimento}
