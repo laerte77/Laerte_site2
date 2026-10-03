@@ -140,7 +140,7 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
         <span className="flex items-center gap-3">📖 {(isOpen||isMobile)&&'Leitura Bíblica'}</span>
        </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-        <NavLink to="/pessoal/dashboard/leitura" icon={BookOpen}>Lançamentos</NavLink>
+        <NavLink to="/pessoal/dashboard/leitura" icon={BookOpen}>Registrar Leitura</NavLink>
        </AccordionContent>
       </AccordionItem>
 
