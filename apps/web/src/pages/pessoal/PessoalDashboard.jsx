@@ -77,10 +77,7 @@ const PessoalDashboard=()=>{
  return(
   <div
    className="flex min-h-screen w-full bg-gradient-professional"
-   style={{
-    '--primary':'var(--neon-pessoal)',
-    '--ring':'var(--neon-pessoal)'
-   }}
+   style={{'--primary':'var(--neon-pessoal)','--ring':'var(--neon-pessoal)'}}
   >
    <Sidebar
     isOpen={isSidebarOpen}
@@ -120,7 +117,9 @@ const PessoalDashboard=()=>{
       <Route path="lancamentos/cartao-lancamentos" element={<CartaoLancamentos/>}/>
       <Route path="lancamentos/devedores" element={<LancamentoDevedores/>}/>
       <Route path="lancamentos/dizimos-e-ofertas" element={<LancamentoDizimosOfertas/>}/>
+
       <Route path="leitura" element={<Leitura/>}/>
+
       <Route path="investimentos/aportes" element={<Aportes/>}/>
       <Route path="investimentos/rendimentos" element={<Rendimentos/>}/>
 
@@ -143,6 +142,8 @@ const PessoalDashboard=()=>{
       <Route path="lancamentos/faturas" element={<Navigate to="/pessoal/dashboard/consultas/faturas" replace/>}/>
       <Route path="lancamentos/dividas-previstas-mes-a-mes" element={<Navigate to="/pessoal/dashboard/consultas/dividas-previstas-mes-a-mes" replace/>}/>
       <Route path="lancamentos/metas" element={<Navigate to="/pessoal/dashboard/planejamento/metas" replace/>}/>
+      <Route path="lancamentos/leitura" element={<Navigate to="/pessoal/dashboard/leitura" replace/>}/>
+
       <Route path="*" element={<Navigate to="/pessoal/dashboard" replace/>}/>
 
      </Routes>
