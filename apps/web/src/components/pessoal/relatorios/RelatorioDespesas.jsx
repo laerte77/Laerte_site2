@@ -12,10 +12,14 @@ import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{useToast}from'@/components/ui/use-toast';
 import{exportToExcel}from'@/lib/ExportUtils';
 
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
 const money=v=>new Intl.NumberFormat('pt-BR',{
  style:'currency',
- currency:'BRL'
-}).format(Number(v||0));
+ currency:'BRL',
+ minimumFractionDigits:2,
+ maximumFractionDigits:2
+}).format(fromCents(toCents(v)));
 
 const dateBR=v=>{
  if(!v)return'—';
@@ -38,7 +42,6 @@ const StatCard=({label,value,icon:Icon,type='red',note})=>{
    text:'text-blue-400'
   }
  };
-
  const s=styles[type];
 
  return(
@@ -48,10 +51,21 @@ const StatCard=({label,value,icon:Icon,type='red',note})=>{
      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${s.icon}`}>
       <Icon className={`h-5 w-5 ${s.text}`}/>
      </div>
+
      <div className="min-w-0">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={`mt-1 truncate text-xl font-bold ${s.text}`}>{value}</p>
-      {note&&<p className="mt-1 text-xs text-muted-foreground">{note}</p>}
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+       {label}
+      </p>
+
+      <p className={`mt-1 truncate text-xl font-bold ${s.text}`}>
+       {value}
+      </p>
+
+      {note&&(
+       <p className="mt-1 text-xs text-muted-foreground">
+        {note}
+       </p>
+      )}
      </div>
     </div>
    </CardContent>
@@ -158,18 +172,23 @@ const RelatorioDespesas=()=>{
   });
  },[despesas,filtros]);
 
- const total=useMemo(
-  ()=>filteredDespesas.reduce((sum,d)=>sum+Number(d.valor||0),0),
+ const totalCents=useMemo(
+  ()=>filteredDespesas.reduce(
+   (sum,d)=>sum+toCents(d.valor),
+   0
+  ),
   [filteredDespesas]
  );
 
  const quantidade=filteredDespesas.length;
 
- const media=quantidade?total/quantidade:0;
+ const mediaCents=quantidade
+  ?Math.round(totalCents/quantidade)
+  :0;
 
  const maiorDespesa=useMemo(
   ()=>filteredDespesas.reduce(
-   (max,d)=>Number(d.valor||0)>Number(max.valor||0)?d:max,
+   (max,d)=>toCents(d.valor)>toCents(max.valor)?d:max,
    {valor:0}
   ),
   [filteredDespesas]
@@ -207,7 +226,7 @@ const RelatorioDespesas=()=>{
    filteredDespesas.map(d=>({
     Data:dateBR(d.data),
     'Tipo de Despesa':d.despesa||'-',
-    Valor:Number(d.valor||0),
+    Valor:fromCents(toCents(d.valor)),
     'Forma de Pagamento':d.forma_pagamento||'-',
     Parcelas:d.parcelas||'-'
    })),
@@ -265,6 +284,7 @@ const RelatorioDespesas=()=>{
 
      <div className="space-y-2">
       <Label className="text-xs">Data inicial</Label>
+
       <Input
        type="date"
        name="dataInicio"
@@ -276,6 +296,7 @@ const RelatorioDespesas=()=>{
 
      <div className="space-y-2">
       <Label className="text-xs">Data final</Label>
+
       <Input
        type="date"
        name="dataFim"
@@ -346,7 +367,7 @@ const RelatorioDespesas=()=>{
    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
     <StatCard
      label="Total das Despesas"
-     value={money(total)}
+     value={money(fromCents(totalCents))}
      icon={TrendingDown}
     />
 
@@ -359,16 +380,14 @@ const RelatorioDespesas=()=>{
 
     <StatCard
      label="Média por Despesa"
-     value={money(media)}
+     value={money(fromCents(mediaCents))}
      icon={WalletCards}
-     type="red"
     />
 
     <StatCard
      label="Maior Despesa"
      value={money(maiorDespesa.valor)}
      icon={CalendarDays}
-     type="red"
     />
    </div>
 
