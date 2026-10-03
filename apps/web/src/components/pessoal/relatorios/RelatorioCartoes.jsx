@@ -14,11 +14,17 @@ import{getInstallmentValue}from'@/lib/cartaoParcelas';
 import{exportToExcel}from'@/lib/ExportUtils';
 
 const YEARS=[2024,2025,2026];
-
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
 const money=v=>new Intl.NumberFormat('pt-BR',{
  style:'currency',
- currency:'BRL'
-}).format(Number(v||0));
+ currency:'BRL',
+ minimumFractionDigits:2,
+ maximumFractionDigits:2
+}).format(fromCents(toCents(v)));
+const installmentCents=l=>toCents(
+ getInstallmentValue(l.valor,l.parcelas,l.parcela_atual)
+);
 
 const STATUS_STYLE={
  aberta:'bg-amber-500/20 text-amber-400 border-amber-500/40',
@@ -53,7 +59,6 @@ const StatCard=({label,value,icon:Icon,type='blue',note})=>{
    text:'text-amber-400'
   }
  };
-
  const s=styles[type];
 
  return(
@@ -85,52 +90,64 @@ const RelatorioCartoes=()=>{
 
  const fetchAll=useCallback(async()=>{
   if(!user)return;
-
   setLoading(true);
 
-  const ano=Number(selectedYear);
-  const startDate=`${ano-1}-12-01`;
-  const endDate=`${ano}-12-31`;
+  try{
+   const ano=Number(selectedYear);
+   const startDate=`${ano-1}-12-01`;
+   const endDate=`${ano}-12-31`;
 
-  const[cRes,lRes,fRes]=await Promise.all([
-   supabase
-    .from('pessoal_cartoes')
-    .select('*')
-    .eq('user_id',user.id)
-    .order('nome',{ascending:true}),
+   const[cRes,lRes,fRes]=await Promise.all([
+    supabase
+     .from('pessoal_cartoes')
+     .select('*')
+     .eq('user_id',user.id)
+     .order('nome',{ascending:true}),
 
-   supabase
-    .from('pessoal_cartao_lancamentos')
-    .select('cartao_id,valor,parcelas,parcela_atual,data')
-    .eq('user_id',user.id)
-    .gte('data',startDate)
-    .lte('data',endDate),
+    supabase
+     .from('pessoal_cartao_lancamentos')
+     .select('cartao_id,valor,parcelas,parcela_atual,data')
+     .eq('user_id',user.id)
+     .gte('data',startDate)
+     .lte('data',endDate),
 
-   supabase
-    .from('pessoal_faturas')
-    .select('*')
-    .eq('user_id',user.id)
-    .eq('ano',ano)
-  ]);
+    supabase
+     .from('pessoal_faturas')
+     .select('*')
+     .eq('user_id',user.id)
+     .eq('ano',ano)
+   ]);
 
-  const ids=(fRes.data||[]).map(f=>f.id);
+   if(cRes.error)throw cRes.error;
+   if(lRes.error)throw lRes.error;
+   if(fRes.error)throw fRes.error;
 
-  let pagamentosData=[];
+   const ids=(fRes.data||[]).map(f=>f.id);
+   let pagamentosData=[];
 
-  if(ids.length){
-   const{data}=await supabase
-    .from('pessoal_cartao_pagamentos')
-    .select('fatura_id,valor')
-    .in('fatura_id',ids);
+   if(ids.length){
+    const{data,error}=await supabase
+     .from('pessoal_cartao_pagamentos')
+     .select('fatura_id,valor')
+     .in('fatura_id',ids);
 
-   pagamentosData=data||[];
+    if(error)throw error;
+    pagamentosData=data||[];
+   }
+
+   setCartoes(cRes.data||[]);
+   setLancamentos(lRes.data||[]);
+   setFaturas(fRes.data||[]);
+   setPagamentos(pagamentosData);
+  }catch(error){
+   console.error(error);
+   setCartoes([]);
+   setLancamentos([]);
+   setFaturas([]);
+   setPagamentos([]);
+  }finally{
+   setLoading(false);
   }
-
-  setCartoes(cRes.data||[]);
-  setLancamentos(lRes.data||[]);
-  setFaturas(fRes.data||[]);
-  setPagamentos(pagamentosData);
-  setLoading(false);
  },[user,selectedYear]);
 
  useEffect(()=>{
@@ -141,7 +158,7 @@ const RelatorioCartoes=()=>{
   const map={};
 
   pagamentos.forEach(p=>{
-   map[p.fatura_id]=(map[p.fatura_id]||0)+Number(p.valor||0);
+   map[p.fatura_id]=(map[p.fatura_id]||0)+toCents(p.valor);
   });
 
   return map;
@@ -171,61 +188,61 @@ const RelatorioCartoes=()=>{
     return comp&&comp.ano===Number(selectedYear);
    })
    .reduce(
-    (sum,l)=>sum+getInstallmentValue(
-     l.valor,
-     l.parcelas,
-     l.parcela_atual
-    ),
+    (sum,l)=>sum+installmentCents(l),
     0
    );
  },[cartoes,lancamentos,selectedYear]);
 
  const resumoCartoes=useMemo(()=>{
   return cartoes.map(c=>{
-   const limite=Number(c.limite||0);
-   const utilizado=Math.max(
-    0,
-    comprasPorCartao(c.id)-(pagamentosPorCartao[c.id]||0)
-   );
-   const percentual=limite>0?(utilizado/limite)*100:0;
+   const limiteCents=toCents(c.limite);
+   const comprasCents=comprasPorCartao(c.id);
+   const pagoCents=pagamentosPorCartao[c.id]||0;
+   const utilizadoCents=Math.max(0,comprasCents-pagoCents);
+   const percentual=limiteCents>0
+    ?(utilizadoCents/limiteCents)*100
+    :0;
 
    return{
     ...c,
-    limite,
-    utilizado,
-    disponivel:Math.max(0,limite-utilizado),
+    limite:fromCents(limiteCents),
+    utilizado:fromCents(utilizadoCents),
+    disponivel:fromCents(Math.max(0,limiteCents-utilizadoCents)),
     percentual
    };
   });
  },[cartoes,comprasPorCartao,pagamentosPorCartao]);
 
- const totalLimite=useMemo(
-  ()=>resumoCartoes.reduce((sum,c)=>sum+c.limite,0),
+ const totalLimiteCents=useMemo(
+  ()=>resumoCartoes.reduce((sum,c)=>sum+toCents(c.limite),0),
   [resumoCartoes]
  );
 
- const totalUtilizado=useMemo(
-  ()=>resumoCartoes.reduce((sum,c)=>sum+c.utilizado,0),
+ const totalUtilizadoCents=useMemo(
+  ()=>resumoCartoes.reduce((sum,c)=>sum+toCents(c.utilizado),0),
   [resumoCartoes]
  );
 
- const totalGastoAno=useMemo(
+ const totalGastoAnoCents=useMemo(
   ()=>cartoes.reduce((sum,c)=>sum+comprasPorCartao(c.id),0),
   [cartoes,comprasPorCartao]
  );
 
- const totalPagoAno=useMemo(
-  ()=>cartoes.reduce((sum,c)=>sum+(pagamentosPorCartao[c.id]||0),0),
+ const totalPagoAnoCents=useMemo(
+  ()=>cartoes.reduce(
+   (sum,c)=>sum+(pagamentosPorCartao[c.id]||0),
+   0
+  ),
   [cartoes,pagamentosPorCartao]
  );
 
- const totalFaturasEmAberto=useMemo(
+ const totalFaturasEmAbertoCents=useMemo(
   ()=>faturas
    .filter(f=>f.status==='aberta'||f.status==='fechada')
    .reduce(
     (sum,f)=>sum+Math.max(
      0,
-     Number(f.valor_total||0)-(pagamentosPorFatura[f.id]||0)
+     toCents(f.valor_total)-(pagamentosPorFatura[f.id]||0)
     ),
     0
    ),
@@ -239,9 +256,9 @@ const RelatorioCartoes=()=>{
    resumoCartoes.map(c=>({
     Cartão:c.nome,
     Bandeira:c.bandeira||'-',
-    Limite:c.limite,
-    Utilizado:c.utilizado,
-    Disponível:c.disponivel,
+    Limite:fromCents(toCents(c.limite)),
+    Utilizado:fromCents(toCents(c.utilizado)),
+    Disponível:fromCents(toCents(c.disponivel)),
     'Uso (%)':Number(c.percentual.toFixed(2))
    })),
    `Relatorio_Cartoes_${selectedYear}`,
@@ -284,6 +301,7 @@ const RelatorioCartoes=()=>{
      <Button
       variant="outline"
       onClick={fetchAll}
+      disabled={loading}
      >
       <RefreshCw className="mr-2 h-4 w-4"/>
       Atualizar
@@ -322,13 +340,13 @@ const RelatorioCartoes=()=>{
    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
     <StatCard
      label="Limite Total"
-     value={money(totalLimite)}
+     value={money(fromCents(totalLimiteCents))}
      icon={CreditCard}
     />
 
     <StatCard
      label="Limite Utilizado"
-     value={money(totalUtilizado)}
+     value={money(fromCents(totalUtilizadoCents))}
      icon={TrendingUp}
      type="red"
      note="Compras - pagamentos"
@@ -336,7 +354,7 @@ const RelatorioCartoes=()=>{
 
     <StatCard
      label="Pago no Ano"
-     value={money(totalPagoAno)}
+     value={money(fromCents(totalPagoAnoCents))}
      icon={CreditCard}
      type="green"
      note="Valor já pago"
@@ -344,14 +362,14 @@ const RelatorioCartoes=()=>{
 
     <StatCard
      label="Gasto no Ano"
-     value={money(totalGastoAno)}
+     value={money(fromCents(totalGastoAnoCents))}
      icon={CreditCard}
      type="red"
     />
 
     <StatCard
      label="Faturas em Aberto"
-     value={money(totalFaturasEmAberto)}
+     value={money(fromCents(totalFaturasEmAbertoCents))}
      icon={AlertCircle}
      type="amber"
     />
@@ -500,7 +518,7 @@ const RelatorioCartoes=()=>{
           .sort((a,b)=>(a.ano-b.ano)||(a.mes-b.mes))
           .map(f=>{
            const cartao=cartoes.find(c=>c.id===f.cartao_id);
-           const pago=pagamentosPorFatura[f.id]||0;
+           const pagoCents=pagamentosPorFatura[f.id]||0;
 
            return(
             <TableRow
@@ -526,7 +544,7 @@ const RelatorioCartoes=()=>{
              </TableCell>
 
              <TableCell className="text-right font-semibold text-emerald-400">
-              {money(pago)}
+              {money(fromCents(pagoCents))}
              </TableCell>
 
              <TableCell>
