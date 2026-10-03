@@ -9,7 +9,7 @@ import{formatCurrency}from'@/lib/utils';
 import{AlertCircle,RefreshCw,CheckCircle2,Clock,AlertTriangle,Download,Receipt,DollarSign,TrendingUp,CalendarDays,RotateCcw}from'lucide-react';
 import{format,parseISO}from'date-fns';
 import{useContasMesData}from'@/hooks/useContasMesData';
-import CategoryIcon from'@/components/pessoal/lancamentos/CategoryIcon';
+import CategoryIcon from'@/components/CategoryIcon';
 import StatusChangeModal from'@/components/StatusChangeModal';
 import LoadingSkeleton from'@/components/ui/LoadingSkeleton';
 import{exportToExcel}from'@/lib/ExportUtils';
