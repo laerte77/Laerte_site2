@@ -14,7 +14,7 @@ import{
 }from'@/components/ui/alert-dialog';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
-import ModalLancamentoPadrao from'../ModalLancamentoPadrao';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const TiposDespesa=()=>{
  const{user}=useAuth();
@@ -216,10 +216,7 @@ const TiposDespesa=()=>{
     </div>
 
     <div className="flex flex-wrap gap-2">
-     <Button
-      variant="outline"
-      onClick={fetchTipos}
-     >
+     <Button variant="outline" onClick={fetchTipos}>
       <RefreshCw className="mr-2 h-4 w-4"/>
       Atualizar
      </Button>
@@ -381,19 +378,13 @@ const TiposDespesa=()=>{
        <tbody>
         {loading?(
          <tr>
-          <td
-           colSpan={3}
-           className="p-10 text-center text-muted-foreground"
-          >
+          <td colSpan={3} className="p-10 text-center text-muted-foreground">
            Carregando...
           </td>
          </tr>
         ):tiposFiltrados.length===0?(
          <tr>
-          <td
-           colSpan={3}
-           className="p-10 text-center text-muted-foreground"
-          >
+          <td colSpan={3} className="p-10 text-center text-muted-foreground">
            <TrendingDown className="mx-auto mb-2 h-10 w-10 opacity-50"/>
            {tipos.length
             ?'Nenhum tipo corresponde à pesquisa.'
