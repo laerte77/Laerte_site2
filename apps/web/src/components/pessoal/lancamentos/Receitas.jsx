@@ -1,4 +1,5 @@
 import React,{useState,useEffect,useCallback,useRef,useMemo}from'react';
+import{motion}from'framer-motion';
 import{Plus,Edit,Trash,Download,Search,TrendingUp,DollarSign,FileText,ArrowUpRight,CalendarDays,Filter,ChevronLeft,ChevronRight}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
