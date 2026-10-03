@@ -31,10 +31,17 @@ export default function SaldoCard({
  entradasPrev,
  despesasPrev,
  entradasReais,
- despesasReais
+ despesasReais,
+ aportesReais,
+ dizimosReais
 }){
  const saldoPrev=entradasPrev-despesasPrev;
- const saldoReal=entradasReais-despesasReais;
+
+ const saldoReal=
+  entradasReais-
+  despesasReais-
+  aportesReais-
+  dizimosReais;
 
  const previsto=saldoStyle(saldoPrev);
  const real=saldoStyle(saldoReal);
