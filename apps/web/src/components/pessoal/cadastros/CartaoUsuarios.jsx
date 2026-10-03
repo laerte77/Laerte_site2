@@ -13,7 +13,7 @@ import{
 }from'@/components/ui/alert-dialog';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
-import ModalLancamentoPadrao from'../ModalLancamentoPadrao';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const PARENTESCOS=[
  'Titular',
