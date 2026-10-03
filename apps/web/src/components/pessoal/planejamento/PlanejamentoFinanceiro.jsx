@@ -21,6 +21,12 @@ export default function PlanejamentoFinanceiro(){
 
  const{data,loading,error,refetch}=useFinancialData(periodFilter);
 
+ const saldoReal=
+  data.entradasReais-
+  data.despesasReais-
+  data.aportesReais-
+  data.dizimosReais;
+
  if(error){
   return(
    <div className="dark-pessoal flex min-h-[300px] items-center justify-center p-6">
@@ -108,11 +114,13 @@ export default function PlanejamentoFinanceiro(){
       despesasPrev={data.despesasPrevistas}
       entradasReais={data.entradasReais}
       despesasReais={data.despesasReais}
+      aportesReais={data.aportesReais}
+      dizimosReais={data.dizimosReais}
      />
 
      <DistribuicaoCard
       saldoPrev={data.entradasPrevistas-data.despesasPrevistas}
-      saldoReal={data.entradasReais-data.despesasReais}
+      saldoReal={saldoReal}
       distribuicao={data.distribuicao}
       onUpdate={refetch}
      />
