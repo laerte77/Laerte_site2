@@ -9,7 +9,7 @@ import { formatCurrency } from '@/lib/utils';
 import { AlertCircle, RefreshCw, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { format, parseISO, endOfMonth } from 'date-fns';
 import { supabase } from '@/lib/customSupabaseClient';
-import CategoryIcon from '@/components/pessoal/lancamentos/CategoryIcon';
+import CategoryIcon from'@/components/CategoryIcon';
 import StatusChangeModal from '@/components/StatusChangeModal';
 import LoadingSkeleton from '@/components/ui/LoadingSkeleton';
 
