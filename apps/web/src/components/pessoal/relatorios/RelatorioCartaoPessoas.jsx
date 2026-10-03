@@ -18,7 +18,17 @@ import{exportToExcel}from'@/lib/ExportUtils';
 const YEARS=[2024,2025,2026];
 const MONTHS=Array.from({length:12},(_,i)=>i);
 
-const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
+const addMoney=(a,b)=>fromCents(toCents(a)+toCents(b));
+
+const money=v=>new Intl.NumberFormat('pt-BR',{
+ style:'currency',
+ currency:'BRL',
+ minimumFractionDigits:2,
+ maximumFractionDigits:2
+}).format(fromCents(toCents(v)));
+
 const dateBR=d=>{
  if(!d)return'—';
  try{return format(parse(d,'yyyy-MM-dd',new Date()),'dd/MM/yyyy',{locale:ptBR});}
@@ -93,7 +103,7 @@ const RelatorioCartaoPessoas=()=>{
 
  useEffect(()=>{fetchAll();},[fetchAll]);
 
- const filtrarCompetencia=useCallback((item)=>{
+ const filtrarCompetencia=useCallback(item=>{
   if(selectedCartao!=='todos'&&item.cartao_id!==selectedCartao)return false;
 
   const cartao=cartoes.find(c=>c.id===item.cartao_id);
@@ -124,7 +134,7 @@ const RelatorioCartaoPessoas=()=>{
    responsavel_id:l.responsavel_id,
    data:l.data,
    descricao:l.descricao,
-   valor:Number(l.valor)||0,
+   valor:fromCents(toCents(l.valor)),
    parcelas:l.parcelas||1,
    parcela_atual:l.parcela_atual||1,
    categoria:l.categoria,
@@ -137,7 +147,7 @@ const RelatorioCartaoPessoas=()=>{
    responsavel_id:d.responsavel_id,
    data:d.data,
    descricao:d.despesa,
-   valor:Number(d.valor)||0,
+   valor:fromCents(toCents(d.valor)),
    parcelas:d.parcelas||1,
    parcela_atual:1,
    categoria:d.categoria,
@@ -180,7 +190,10 @@ const RelatorioCartaoPessoas=()=>{
    }
 
    const item=map.get(key);
-   item.valorParcelas+=getInstallmentValue(c.valor,c.parcelas,c.parcela_atual);
+   item.valorParcelas=addMoney(
+    item.valorParcelas,
+    getInstallmentValue(c.valor,c.parcelas,c.parcela_atual)
+   );
 
    if(!vistos.has(key))vistos.set(key,new Set());
 
@@ -189,7 +202,7 @@ const RelatorioCartaoPessoas=()=>{
    if(!comprasPessoa.has(c.compra_id)){
     comprasPessoa.add(c.compra_id);
     item.compras+=1;
-    item.valorTotal+=Number(c.valor)||0;
+    item.valorTotal=addMoney(item.valorTotal,c.valor);
    }
   });
 
@@ -204,29 +217,42 @@ const RelatorioCartaoPessoas=()=>{
   return todasCompras.filter(c=>c.responsavel_id===selectedPessoa);
  },[todasCompras,selectedPessoa]);
 
- const faturasResumo=useMemo(()=>{
-  return faturas
+ const faturasResumo=useMemo(()=>(
+  faturas
    .filter(f=>selectedCartao==='todos'||f.cartao_id===selectedCartao)
    .filter(f=>selectedMonth==='todos'||String(f.mes)===selectedMonth)
    .map(f=>{
-    const pago=pagamentos
+    const pagoC=pagamentos
      .filter(p=>p.fatura_id===f.id)
-     .reduce((s,p)=>s+Number(p.valor||0),0);
+     .reduce((s,p)=>s+toCents(p.valor),0);
+
+    const valorTotal=fromCents(toCents(f.valor_total));
+    const pago=fromCents(pagoC);
 
     return{
      ...f,
+     valor_total:valorTotal,
      nomeCartao:cartoes.find(c=>c.id===f.cartao_id)?.nome||'—',
      pago,
-     saldo:Math.max(0,Number(f.valor_total||0)-pago)
+     saldo:fromCents(Math.max(0,toCents(valorTotal)-pagoC))
     };
    })
-   .sort((a,b)=>(a.ano-b.ano)||(a.mes-b.mes));
- },[faturas,pagamentos,selectedCartao,selectedMonth,cartoes]);
+   .sort((a,b)=>(a.ano-b.ano)||(a.mes-b.mes))
+ ),[faturas,pagamentos,selectedCartao,selectedMonth,cartoes]);
 
  const totalCompras=resumoPorPessoa.reduce((s,p)=>s+p.compras,0);
- const totalParcelas=resumoPorPessoa.reduce((s,p)=>s+p.valorParcelas,0);
- const totalFaturas=faturasResumo.reduce((s,f)=>s+Number(f.valor_total||0),0);
- const pessoasComCompras=resumoPorPessoa.filter(p=>p.id!=='sem'&&p.compras>0).length;
+
+ const totalParcelas=resumoPorPessoa.reduce(
+  (s,p)=>addMoney(s,p.valorParcelas),0
+ );
+
+ const totalFaturas=faturasResumo.reduce(
+  (s,f)=>addMoney(s,f.valor_total),0
+ );
+
+ const pessoasComCompras=resumoPorPessoa.filter(
+  p=>p.id!=='sem'&&p.compras>0
+ ).length;
 
  const responsavelNome=id=>
   usuarios.find(u=>u.id===id)?.nome||(id?'Pessoa removida':'Sem responsável');
@@ -235,9 +261,7 @@ const RelatorioCartaoPessoas=()=>{
   cartoes.find(c=>c.id===id)?.nome||'—';
 
  const handleExport=()=>{
-  if(!comprasDetalhe.length){
-   return;
-  }
+  if(!comprasDetalhe.length)return;
 
   exportToExcel(
    comprasDetalhe
@@ -250,8 +274,10 @@ const RelatorioCartaoPessoas=()=>{
      Categoria:c.categoria||'-',
      Data:dateBR(c.data),
      Parcela:`${c.parcela_atual}/${c.parcelas}`,
-     'Valor da Compra':c.valor,
-     'Valor da Parcela':getInstallmentValue(c.valor,c.parcelas,c.parcela_atual)
+     'Valor da Compra':fromCents(toCents(c.valor)),
+     'Valor da Parcela':fromCents(
+      toCents(getInstallmentValue(c.valor,c.parcelas,c.parcela_atual))
+     )
     })),
    `Relatorio_Cartao_Pessoas_${selectedYear}`,
    'Cartoes'
@@ -260,7 +286,6 @@ const RelatorioCartaoPessoas=()=>{
 
  return(
   <div className="dark-pessoal space-y-4">
-
    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
     <div className="flex items-center gap-3">
      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-pessoal)/.20)] bg-[hsl(var(--neon-pessoal)/.08)]">
@@ -275,12 +300,10 @@ const RelatorioCartaoPessoas=()=>{
 
     <div className="flex flex-wrap gap-2">
      <Button variant="outline" onClick={handleExport} disabled={!comprasDetalhe.length}>
-      <Download className="mr-2 h-4 w-4"/>
-      Exportar
+      <Download className="mr-2 h-4 w-4"/>Exportar
      </Button>
      <Button variant="outline" onClick={fetchAll}>
-      <RefreshCw className="mr-2 h-4 w-4"/>
-      Atualizar
+      <RefreshCw className="mr-2 h-4 w-4"/>Atualizar
      </Button>
     </div>
    </div>
@@ -290,9 +313,7 @@ const RelatorioCartaoPessoas=()=>{
      <div className="space-y-2">
       <Label className="text-xs">Ano</Label>
       <Select value={selectedYear} onValueChange={setSelectedYear}>
-       <SelectTrigger className="bg-input">
-        <SelectValue/>
-       </SelectTrigger>
+       <SelectTrigger className="bg-input"><SelectValue/></SelectTrigger>
        <SelectContent className="dark-pessoal border-border bg-card">
         {YEARS.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
        </SelectContent>
@@ -302,9 +323,7 @@ const RelatorioCartaoPessoas=()=>{
      <div className="space-y-2">
       <Label className="text-xs">Mês</Label>
       <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-       <SelectTrigger className="bg-input">
-        <SelectValue/>
-       </SelectTrigger>
+       <SelectTrigger className="bg-input"><SelectValue/></SelectTrigger>
        <SelectContent className="dark-pessoal border-border bg-card">
         <SelectItem value="todos">Todos os meses</SelectItem>
         {MONTHS.map(i=>(
@@ -319,9 +338,7 @@ const RelatorioCartaoPessoas=()=>{
      <div className="space-y-2">
       <Label className="text-xs">Cartão</Label>
       <Select value={selectedCartao} onValueChange={setSelectedCartao}>
-       <SelectTrigger className="bg-input">
-        <SelectValue/>
-       </SelectTrigger>
+       <SelectTrigger className="bg-input"><SelectValue/></SelectTrigger>
        <SelectContent className="dark-pessoal border-border bg-card">
         <SelectItem value="todos">Todos os cartões</SelectItem>
         {cartoes.map(c=>(
@@ -383,7 +400,6 @@ const RelatorioCartaoPessoas=()=>{
              )}
             </div>
            </TableCell>
-
            <TableCell className="text-sm text-muted-foreground">{p.parentesco||'—'}</TableCell>
            <TableCell className="text-center">{p.compras}</TableCell>
            <TableCell className="text-right font-semibold text-red-400">{money(p.valorParcelas)}</TableCell>
@@ -515,7 +531,6 @@ const RelatorioCartaoPessoas=()=>{
      </ScrollArea>
     </CardContent>
    </Card>
-
   </div>
  );
 };
