@@ -12,8 +12,8 @@ import LancamentoDespesaPrevista from'@/components/igreja/tesouraria/lancamentos
 import ConsultaDizimistasAtivos from'@/components/igreja/tesouraria/consultas/ConsultaDizimistasAtivos';
 import ConsultaEntradasMesAMes from'@/components/igreja/tesouraria/consultas/ConsultaEntradasMesAMes';
 import ConsultaTodosDizimistas from'@/components/igreja/tesouraria/consultas/ConsultaTodosDizimistas';
-import ConsultaContasDoMesIgreja from'@/components/igreja/tesouraria/relatorios/ConsultaContasDoMesIgreja';
-import ConsultaDespesasPrevisadasMesAMes from'@/components/igreja/tesouraria/relatorios/ConsultaDespesasPrevisadasMesAMes';
+import ConsultaContasDoMesIgreja from'@/components/igreja/tesouraria/consultas/ConsultaContasDoMesIgreja';
+import ConsultaDespesasPrevisadasMesAMes from'@/components/igreja/tesouraria/consultas/ConsultaDespesasPrevisadasMesAMes';
 import RelatorioEntradas from'@/components/igreja/tesouraria/relatorios/RelatorioEntradas';
 import RelatorioDespesas from'@/components/igreja/tesouraria/relatorios/RelatorioDespesas';
 import RelatorioDespesasPrevistas from'@/components/igreja/tesouraria/relatorios/RelatorioDespesasPrevistas';
