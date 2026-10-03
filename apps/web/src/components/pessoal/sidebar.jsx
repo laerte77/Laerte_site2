@@ -140,7 +140,7 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
         <span className="flex items-center gap-3">📖 {(isOpen||isMobile)&&'Leitura Bíblica'}</span>
        </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-        <NavLink to="/pessoal/dashboard/lancamentos/leitura" icon={BookOpen}>Lançamentos</NavLink>
+        <NavLink to="/pessoal/dashboard/leitura" icon={BookOpen}>Lançamentos</NavLink>
        </AccordionContent>
       </AccordionItem>
 
@@ -198,7 +198,6 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
    </nav>
 
    <div className="shrink-0 space-y-1 border-t border-border p-2">
-
     <Link
      to="/"
      className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-[hsl(var(--neon-pessoal)/.08)] hover:text-foreground"
@@ -215,7 +214,6 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
      <LogOut className="h-4 w-4 shrink-0"/>
      {(isOpen||isMobile)&&'Sair'}
     </button>
-
    </div>
   </aside>
  );
