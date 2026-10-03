@@ -34,10 +34,15 @@ const LancamentoDespesaPrevista=()=>{
     supabase.from('igreja_despesas_previstas').select('*').eq('user_id',user.id).order('vencimento'),
     supabase.from('igreja_tipos_despesa').select('id,despesa').eq('user_id',user.id).order('despesa')
    ]);
-   if(a.error)throw a.error;if(b.error)throw b.error;
-   setData(a.data||[]);setTipos(b.data||[]);
-  }catch(e){toast({title:'Erro ao carregar dados',description:e.message,variant:'destructive'})}
-  finally{setLoading(false)}
+   if(a.error)throw a.error;
+   if(b.error)throw b.error;
+   setData(a.data||[]);
+   setTipos(b.data||[]);
+  }catch(e){
+   toast({title:'Erro ao carregar dados',description:e.message,variant:'destructive'})
+  }finally{
+   setLoading(false)
+  }
  },[user,toast]);
 
  useEffect(()=>{load()},[load]);
@@ -74,8 +79,13 @@ const LancamentoDespesaPrevista=()=>{
    ?await supabase.from('igreja_despesas_previstas').update(payload).eq('id',current.id)
    :await supabase.from('igreja_despesas_previstas').insert(payload);
 
-  if(q.error)toast({title:'Erro ao salvar',description:q.error.message,variant:'destructive'});
-  else{toast({title:'Sucesso',description:current?'Despesa prevista atualizada.':'Despesa prevista registrada.'});close();load()}
+  if(q.error)
+   toast({title:'Erro ao salvar',description:q.error.message,variant:'destructive'});
+  else{
+   toast({title:'Sucesso',description:current?'Despesa prevista atualizada.':'Despesa prevista registrada.'});
+   close();
+   load()
+  }
  };
 
  const openDialog=item=>{
@@ -89,11 +99,21 @@ const LancamentoDespesaPrevista=()=>{
  const remove=async()=>{
   if(!deleteItem)return;
   const{error}=await supabase.from('igreja_despesas_previstas').delete().eq('id',deleteItem.id);
-  if(error)toast({title:'Erro ao remover',description:error.message,variant:'destructive'});
-  else{toast({title:'Sucesso',description:'Despesa prevista removida.'});setDeleteItem(null);load()}
+  if(error)
+   toast({title:'Erro ao remover',description:error.message,variant:'destructive'});
+  else{
+   toast({title:'Sucesso',description:'Despesa prevista removida.'});
+   setDeleteItem(null);
+   load()
+  }
  };
 
- const statusIcon=s=>s==='PAGO'?<CheckCircle className="h-5 w-5 text-green-400"/>:s==='VENCIDO'?<XCircle className="h-5 w-5 text-red-400"/>:<Clock className="h-5 w-5 text-yellow-400"/>;
+ const statusIcon=s=>
+  s==='PAGO'
+   ?<CheckCircle className="h-5 w-5 text-green-400"/>
+   :s==='VENCIDO'
+    ?<XCircle className="h-5 w-5 text-red-400"/>
+    :<Clock className="h-5 w-5 text-yellow-400"/>;
 
  return(
   <div className="dark-igreja space-y-5">
@@ -147,33 +167,37 @@ const LancamentoDespesaPrevista=()=>{
     <CardContent className="p-0">
      <div className="overflow-x-auto">
       <table className="w-full text-sm">
-       <thead><tr className="border-b border-border bg-muted/30">
-        <th className="p-4 text-left text-muted-foreground">Vencimento</th>
-        <th className="p-4 text-left text-muted-foreground">Tipo</th>
-        <th className="p-4 text-left text-muted-foreground">Pagamento</th>
-        <th className="p-4 text-right text-muted-foreground">Valor</th>
-        <th className="p-4 text-center text-muted-foreground">Status</th>
-        <th className="p-4 text-right text-muted-foreground">Ações</th>
-       </tr></thead>
+       <thead>
+        <tr className="border-b border-border bg-muted/30">
+         <th className="p-4 text-left text-muted-foreground">Vencimento</th>
+         <th className="p-4 text-left text-muted-foreground">Tipo</th>
+         <th className="p-4 text-left text-muted-foreground">Pagamento</th>
+         <th className="p-4 text-right text-muted-foreground">Valor</th>
+         <th className="p-4 text-center text-muted-foreground">Status</th>
+         <th className="p-4 text-right text-muted-foreground">Ações</th>
+        </tr>
+       </thead>
 
        <tbody>
-        {loading?<tr><td colSpan={6} className="p-10 text-center text-muted-foreground">Carregando...</td></tr>:
-         filtered.length?filtered.map(i=>(
-          <tr key={i.id} className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-igreja)/.04)]">
-           <td className="p-4">{new Date(i.vencimento).toLocaleDateString('pt-BR',{timeZone:'UTC'})}</td>
-           <td className="p-4 font-medium">{i.despesa}</td>
-           <td className="p-4">{i.forma_pagamento}{i.forma_pagamento==='CARTÃO DE CRÉDITO'&&i.parcelas>1?` (${i.parcelas}x)`:''}</td>
-           <td className="p-4 text-right font-bold text-red-400">R$ {Number(i.valor||0).toFixed(2)}</td>
-           <td className="p-4"><div className="flex justify-center">{statusIcon(i.status)}</div></td>
-           <td className="p-4">
-            <div className="flex justify-end gap-1">
-             <Button variant="ghost" size="icon" onClick={()=>openDialog(i)} className="text-[hsl(var(--neon-igreja))]"><Edit className="h-4 w-4"/></Button>
-             <Button variant="ghost" size="icon" onClick={()=>setDeleteItem(i)} className="text-red-400"><Trash2 className="h-4 w-4"/></Button>
-            </div>
-           </td>
-          </tr>
-         )):
-         <tr><td colSpan={6} className="p-12 text-center text-muted-foreground"><CalendarCheck className="mx-auto mb-3 h-10 w-10 opacity-40"/>Nenhuma despesa prevista encontrada.</td></tr>}
+        {loading
+         ?<tr><td colSpan={6} className="p-10 text-center text-muted-foreground">Carregando...</td></tr>
+         :filtered.length
+          ?filtered.map(i=>(
+           <tr key={i.id} className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-igreja)/.04)]">
+            <td className="p-4">{new Date(i.vencimento).toLocaleDateString('pt-BR',{timeZone:'UTC'})}</td>
+            <td className="p-4 font-medium">{i.despesa}</td>
+            <td className="p-4">{i.forma_pagamento}{i.forma_pagamento==='CARTÃO DE CRÉDITO'&&i.parcelas>1?` (${i.parcelas}x)`:''}</td>
+            <td className="p-4 text-right font-bold text-red-400">R$ {Number(i.valor||0).toFixed(2)}</td>
+            <td className="p-4"><div className="flex justify-center">{statusIcon(i.status)}</div></td>
+            <td className="p-4">
+             <div className="flex justify-end gap-1">
+              <Button variant="ghost" size="icon" onClick={()=>openDialog(i)} className="text-[hsl(var(--neon-igreja))]"><Edit className="h-4 w-4"/></Button>
+              <Button variant="ghost" size="icon" onClick={()=>setDeleteItem(i)} className="text-red-400"><Trash2 className="h-4 w-4"/></Button>
+             </div>
+            </td>
+           </tr>
+          ))
+          :<tr><td colSpan={6} className="p-12 text-center text-muted-foreground"><CalendarCheck className="mx-auto mb-3 h-10 w-10 opacity-40"/>Nenhuma despesa prevista encontrada.</td></tr>}
        </tbody>
       </table>
      </div>
@@ -211,10 +235,14 @@ const LancamentoDespesaPrevista=()=>{
 
      <div className="space-y-2">
       <Label>Tipo de Despesa</Label>
-      <Select value={form.despesa} onValueChange=v=>setForm({...form,despesa:v})>
+      <Select value={form.despesa} onValueChange={v=>setForm({...form,despesa:v})}>
        <SelectTrigger className="bg-input"><SelectValue placeholder="Selecione"/></SelectTrigger>
        <SelectContent className="dark-igreja bg-card igreja-select-hover">
-        <ScrollArea className="h-48">{[...tipos].sort((a,b)=>a.despesa.localeCompare(b.despesa,'pt-BR')).map(t=><SelectItem key={t.id} value={t.despesa}>{t.despesa}</SelectItem>)}</ScrollArea>
+        <ScrollArea className="h-48">
+         {[...tipos].sort((a,b)=>a.despesa.localeCompare(b.despesa,'pt-BR')).map(t=>
+          <SelectItem key={t.id} value={t.despesa}>{t.despesa}</SelectItem>
+         )}
+        </ScrollArea>
        </SelectContent>
       </Select>
      </div>
@@ -222,7 +250,7 @@ const LancamentoDespesaPrevista=()=>{
      <div className="grid gap-4 sm:grid-cols-2">
       <div className="space-y-2">
        <Label>Forma de Pagamento</Label>
-       <Select value={form.forma_pagamento} onValueChange=v=>setForm({...form,forma_pagamento:v})>
+       <Select value={form.forma_pagamento} onValueChange={v=>setForm({...form,forma_pagamento:v})}>
         <SelectTrigger className="bg-input"><SelectValue placeholder="Selecione"/></SelectTrigger>
         <SelectContent className="dark-igreja bg-card igreja-select-hover">
          <SelectItem value="DINHEIRO">Dinheiro</SelectItem>
@@ -243,7 +271,7 @@ const LancamentoDespesaPrevista=()=>{
 
      <div className="space-y-2">
       <Label>Status</Label>
-      <Select value={form.status} onValueChange=v=>setForm({...form,status:v})>
+      <Select value={form.status} onValueChange={v=>setForm({...form,status:v})}>
        <SelectTrigger className="bg-input"><SelectValue/></SelectTrigger>
        <SelectContent className="dark-igreja bg-card igreja-select-hover">
         <SelectItem value="PENDENTE">Pendente</SelectItem>
@@ -256,11 +284,14 @@ const LancamentoDespesaPrevista=()=>{
    </ModalLancamentoPadrao>
 
    <DialogExport open={exportOpen} setOpen={setExportOpen} filters={exportFilters} setFilters={setExportFilters}/>
-   
+
    <AlertDialog open={!!deleteItem} onOpenChange={()=>setDeleteItem(null)}>
     <AlertDialogContent className="dark-igreja">
      <AlertDialogHeader><AlertDialogTitle>Excluir despesa prevista?</AlertDialogTitle></AlertDialogHeader>
-     <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={remove} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter>
+     <AlertDialogFooter>
+      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+      <AlertDialogAction onClick={remove} className="bg-red-600">Excluir</AlertDialogAction>
+     </AlertDialogFooter>
     </AlertDialogContent>
    </AlertDialog>
   </div>
