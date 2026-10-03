@@ -22,32 +22,63 @@ const GREEN='hsl(142 71% 45%)';
 const meses=Array.from({length:12},(_,i)=>i);
 const anos=[2024,2025,2026];
 
-const moeda=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
+const toCents=v=>
+ Math.round((Number(v)||0)*100);
+
+const fromCents=v=>
+ (Number(v)||0)/100;
+
+const roundMoney=v=>
+ fromCents(toCents(v));
+
+const moeda=v=>
+ new Intl.NumberFormat('pt-BR',{
+  style:'currency',
+  currency:'BRL'
+ }).format(roundMoney(v));
 
 const getBRDate=()=>{
  const parts=new Intl.DateTimeFormat('en-CA',{
-  timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'
+  timeZone:TZ,
+  year:'numeric',
+  month:'2-digit',
+  day:'2-digit'
  }).formatToParts(new Date()),v={};
- parts.forEach(x=>{if(x.type!=='literal')v[x.type]=x.value});
+
+ parts.forEach(x=>{
+  if(x.type!=='literal')v[x.type]=x.value;
+ });
+
  return`${v.year}-${v.month}-${v.day}`;
 };
 
 const money=v=>{
  const d=String(v??'').replace(/\D/g,'');
- return d?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(d)/100):'';
+ return d
+  ?new Intl.NumberFormat('pt-BR',{
+    style:'currency',
+    currency:'BRL'
+   }).format(fromCents(Number(d)))
+  :'';
 };
 
 const moneyNum=v=>{
  const d=String(v??'').replace(/\D/g,'');
- return d?Number(d)/100:0;
+ return d?fromCents(Number(d)):0;
 };
 
 const brDate=v=>{
  if(!v)return'-';
+
  const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+
  if(m)return`${m[3]}/${m[2]}/${m[1]}`;
+
  const d=new Date(v);
- return Number.isNaN(d.getTime())?'-':new Intl.DateTimeFormat('pt-BR',{timeZone:TZ}).format(d);
+
+ return Number.isNaN(d.getTime())
+  ?'-'
+  :new Intl.DateTimeFormat('pt-BR',{timeZone:TZ}).format(d);
 };
 
 const cicloFatura=(dia,mes,ano)=>{
@@ -55,6 +86,7 @@ const cicloFatura=(dia,mes,ano)=>{
  const diaF=Math.min(dia||1,28);
  const inicio=addMonths(setDate(ref,diaF),-1);
  const fim=subDays(setDate(ref,diaF),1);
+
  return{
   inicio:format(inicio,'yyyy-MM-dd'),
   fim:format(fim,'yyyy-MM-dd')
@@ -74,9 +106,15 @@ const StatCard=({label,value,icon:Icon,color='blue'})=>(
     <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-${color}-500/10`}>
      <Icon className={`h-5 w-5 text-${color}-400`}/>
     </div>
+
     <div className="min-w-0">
-     <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-     <p className={`mt-1 truncate text-xl font-bold text-${color}-400`}>{value}</p>
+     <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      {label}
+     </p>
+
+     <p className={`mt-1 truncate text-xl font-bold text-${color}-400`}>
+      {value}
+     </p>
     </div>
    </div>
   </CardContent>
@@ -98,15 +136,19 @@ const Faturas=()=>{
  const[selectedYear,setSelectedYear]=useState(String(new Date().getFullYear()));
  const[isPagamentoOpen,setIsPagamentoOpen]=useState(false);
 
- const initialPagamento=()=>({valor:'',data:getBRDate(),forma_pagamento:'Pix'});
+ const initialPagamento=()=>({
+  valor:'',
+  data:getBRDate(),
+  forma_pagamento:'Pix'
+ });
+
  const[pagForm,setPagForm]=useState(initialPagamento);
 
- useEffect(()=>()=>{
-  mounted.current=false;
- },[]);
+ useEffect(()=>()=>{mounted.current=false},[]);
 
  const fetchCartoes=useCallback(async()=>{
   if(!user)return;
+
   const{data,error}=await supabase
    .from('pessoal_cartoes')
    .select('*')
@@ -117,7 +159,10 @@ const Faturas=()=>{
 
   if(mounted.current){
    setCartoes(data||[]);
-   if(data?.length&&!selectedCartao)setSelectedCartao(data[0].id);
+
+   if(data?.length&&!selectedCartao){
+    setSelectedCartao(data[0].id);
+   }
   }
  },[user,selectedCartao]);
 
@@ -148,6 +193,7 @@ const Faturas=()=>{
     .gte('data',ciclo.inicio)
     .lte('data',ciclo.fim)
     .order('data',{ascending:false}),
+
    supabase
     .from('pessoal_faturas')
     .select('*')
@@ -169,6 +215,7 @@ const Faturas=()=>{
     .select('*')
     .eq('fatura_id',fatRes.data.id)
     .order('data',{ascending:false});
+
    if(mounted.current)setPagamentos(pags||[]);
   }else{
    setPagamentos([]);
@@ -177,23 +224,47 @@ const Faturas=()=>{
   setLoading(false);
  },[user,selectedCartao,ciclo,mes,ano]);
 
- useEffect(()=>{fetchCartoes();},[fetchCartoes]);
+ useEffect(()=>{
+  fetchCartoes();
+ },[fetchCartoes]);
 
  useEffect(()=>{
   if(selectedCartao)fetchDados();
  },[selectedCartao,selectedMonth,selectedYear,fetchDados]);
 
- const totalFatura=lancamentos.reduce(
-  (total,l)=>total+getInstallmentValue(l.valor,l.parcelas,l.parcela_atual),0
+ const totalFaturaCentavos=lancamentos.reduce(
+  (total,l)=>
+   total+toCents(
+    getInstallmentValue(
+     l.valor,
+     l.parcelas,
+     l.parcela_atual
+    )
+   ),
+  0
  );
 
- const totalPago=pagamentos.reduce((total,p)=>total+Number(p.valor||0),0);
- const saldoRestante=Math.max(0,totalFatura-totalPago);
+ const totalPagoCentavos=pagamentos.reduce(
+  (total,p)=>
+   total+toCents(p.valor),
+  0
+ );
+
+ const totalFatura=fromCents(totalFaturaCentavos);
+ const totalPago=fromCents(totalPagoCentavos);
+
+ const saldoRestante=fromCents(
+  Math.max(0,totalFaturaCentavos-totalPagoCentavos)
+ );
 
  const dataVencimento=useMemo(()=>{
   if(!cartao)return null;
+
   return format(
-   setDate(new Date(ano,mes,1),Math.min(cartao.dia_vencimento||1,28)),
+   setDate(
+    new Date(ano,mes,1),
+    Math.min(cartao.dia_vencimento||1,28)
+   ),
    'yyyy-MM-dd'
   );
  },[cartao,mes,ano]);
@@ -222,10 +293,16 @@ const Faturas=()=>{
   };
 
   const r=fatura
-   ?await supabase.from('pessoal_faturas')
-    .update({...payload,updated_at:new Date().toISOString()})
+   ?await supabase
+    .from('pessoal_faturas')
+    .update({
+     ...payload,
+     updated_at:new Date().toISOString()
+    })
     .eq('id',fatura.id)
-   :await supabase.from('pessoal_faturas').insert(payload);
+   :await supabase
+    .from('pessoal_faturas')
+    .insert(payload);
 
   if(r.error){
    toast({
@@ -234,7 +311,10 @@ const Faturas=()=>{
     variant:'destructive'
    });
   }else{
-   toast({title:'Sucesso',description:'Fatura fechada.'});
+   toast({
+    title:'Sucesso',
+    description:'Fatura fechada.'
+   });
   }
 
   fetchDados();
@@ -245,12 +325,23 @@ const Faturas=()=>{
 
   const{error}=await supabase
    .from('pessoal_faturas')
-   .update({status:'aberta',updated_at:new Date().toISOString()})
+   .update({
+    status:'aberta',
+    updated_at:new Date().toISOString()
+   })
    .eq('id',fatura.id);
 
-  toast(error
-   ?{title:'Erro',description:'Não foi possível reabrir a fatura.',variant:'destructive'}
-   :{title:'Sucesso',description:'Fatura reaberta.'}
+  toast(
+   error
+    ?{
+      title:'Erro',
+      description:'Não foi possível reabrir a fatura.',
+      variant:'destructive'
+     }
+    :{
+      title:'Sucesso',
+      description:'Fatura reaberta.'
+     }
   );
 
   fetchDados();
@@ -258,10 +349,11 @@ const Faturas=()=>{
 
  const openPagamento=()=>{
   setPagForm({
-   valor:money(saldoRestante*100),
+   valor:money(toCents(saldoRestante)),
    data:getBRDate(),
    forma_pagamento:'Pix'
   });
+
   setIsPagamentoOpen(true);
  };
 
@@ -280,9 +372,10 @@ const Faturas=()=>{
    return;
   }
 
-  const valor=moneyNum(pagForm.valor);
+  const valor=roundMoney(moneyNum(pagForm.valor));
+  const valorCentavos=toCents(valor);
 
-  if(valor<=0){
+  if(valorCentavos<=0){
    toast({
     title:'Erro',
     description:'Informe um valor válido.',
@@ -304,15 +397,22 @@ const Faturas=()=>{
 
    if(error)throw error;
 
-   const novoTotal=totalPago+valor;
-   const novoStatus=novoTotal>=totalFatura?'paga':'fechada';
+   const novoTotalCentavos=
+    totalPagoCentavos+valorCentavos;
+
+   const novoStatus=
+    novoTotalCentavos>=totalFaturaCentavos
+     ?'paga'
+     :'fechada';
 
    const updatePayload={
     status:novoStatus,
     updated_at:new Date().toISOString()
    };
 
-   if(novoStatus==='paga')updatePayload.data_pagamento=pagForm.data;
+   if(novoStatus==='paga'){
+    updatePayload.data_pagamento=pagForm.data;
+   }
 
    const{error:updateError}=await supabase
     .from('pessoal_faturas')
@@ -354,19 +454,30 @@ const Faturas=()=>{
 
   if(fatura){
    const pagamento=pagamentos.find(p=>p.id===id);
-   const novoTotal=totalPago-Number(pagamento?.valor||0);
+
+   const novoTotalCentavos=Math.max(
+    0,
+    totalPagoCentavos-toCents(pagamento?.valor||0)
+   );
 
    await supabase
     .from('pessoal_faturas')
     .update({
-     status:novoTotal>=totalFatura?'paga':'fechada',
+     status:
+      novoTotalCentavos>=totalFaturaCentavos
+       ?'paga'
+       :'fechada',
      data_pagamento:null,
      updated_at:new Date().toISOString()
     })
     .eq('id',fatura.id);
   }
 
-  toast({title:'Sucesso',description:'Pagamento removido.'});
+  toast({
+   title:'Sucesso',
+   description:'Pagamento removido.'
+  });
+
   fetchDados();
  };
 
@@ -386,18 +497,29 @@ const Faturas=()=>{
     Data:brDate(l.data),
     Descrição:l.descricao||'-',
     Parcela:`${l.parcela_atual||0}/${l.parcelas||0}`,
-    Valor:getInstallmentValue(l.valor,l.parcelas,l.parcela_atual)
+    Valor:roundMoney(
+     getInstallmentValue(
+      l.valor,
+      l.parcelas,
+      l.parcela_atual
+     )
+    )
    })),
+
    ...pagamentos.map(p=>({
     Tipo:'Pagamento',
     Data:brDate(p.data),
     Descrição:p.forma_pagamento||'-',
     Parcela:'-',
-    Valor:Number(p.valor||0)
+    Valor:roundMoney(p.valor)
    }))
   ];
 
-  exportToExcel(dados,'Fatura_Cartao','Fatura');
+  exportToExcel(
+   dados,
+   'Fatura_Cartao',
+   'Fatura'
+  );
  };
 
  const status=fatura?.status||'aberta';
@@ -406,115 +528,232 @@ const Faturas=()=>{
   <div className="dark-pessoal space-y-4">
 
    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
+
     <div className="min-w-0">
      <div className="flex items-center gap-3">
+
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10">
        <WalletCards className="h-5 w-5 text-red-400"/>
       </div>
+
       <div>
-       <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-red-400">Consultas</p>
-       <h1 className="text-2xl font-bold tracking-tight">Faturas do Cartão</h1>
-       <p className="text-sm text-muted-foreground">Acompanhe fechamento, vencimento e pagamentos.</p>
+       <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-red-400">
+        Consultas
+       </p>
+
+       <h1 className="text-2xl font-bold tracking-tight">
+        Faturas do Cartão
+       </h1>
+
+       <p className="text-sm text-muted-foreground">
+        Acompanhe fechamento, vencimento e pagamentos.
+       </p>
       </div>
+
      </div>
     </div>
 
     <div className="flex flex-wrap gap-2">
-     <Button variant="outline" onClick={handleExport} disabled={!lancamentos.length&&!pagamentos.length}>
+
+     <Button
+      variant="outline"
+      onClick={handleExport}
+      disabled={!lancamentos.length&&!pagamentos.length}
+     >
       <Download className="mr-2 h-4 w-4"/>
       Exportar
      </Button>
-     <Button variant="outline" onClick={fetchDados} disabled={!selectedCartao}>
+
+     <Button
+      variant="outline"
+      onClick={fetchDados}
+      disabled={!selectedCartao}
+     >
       <RefreshCw className="mr-2 h-4 w-4"/>
       Atualizar
      </Button>
+
     </div>
+
    </div>
 
    {cartoes.length===0?(
     <Card className="border-border bg-card">
+
      <CardContent className="p-12 text-center text-muted-foreground">
       <Receipt className="mx-auto mb-3 h-12 w-12 opacity-50"/>
-      <p>Cadastre um cartão para gerenciar faturas.</p>
+      <p>
+       Cadastre um cartão para gerenciar faturas.
+      </p>
      </CardContent>
+
     </Card>
    ):(
     <>
+
      <Card className="border-border bg-card/80">
+
       <CardContent className="grid gap-4 p-4 md:grid-cols-4">
-       <div className="space-y-2">
-        <Label className="text-xs">Cartão</Label>
-        <Select value={selectedCartao} onValueChange={setSelectedCartao}>
-         <SelectTrigger className="bg-input">
-          <SelectValue/>
-         </SelectTrigger>
-         <SelectContent className="dark-pessoal border-border bg-card">
-          {cartoes.map(c=>(
-           <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
-          ))}
-         </SelectContent>
-        </Select>
-       </div>
 
        <div className="space-y-2">
-        <Label className="text-xs">Mês</Label>
-        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+
+        <Label className="text-xs">
+         Cartão
+        </Label>
+
+        <Select
+         value={selectedCartao}
+         onValueChange={setSelectedCartao}
+        >
          <SelectTrigger className="bg-input">
           <SelectValue/>
          </SelectTrigger>
+
          <SelectContent className="dark-pessoal border-border bg-card">
-          {meses.map(i=>(
-           <SelectItem key={i} value={String(i)}>
-            {format(new Date(2024,i,1),'MMMM',{locale:ptBR})}
+          {cartoes.map(c=>(
+           <SelectItem key={c.id} value={c.id}>
+            {c.nome}
            </SelectItem>
           ))}
          </SelectContent>
         </Select>
+
        </div>
 
        <div className="space-y-2">
-        <Label className="text-xs">Ano</Label>
-        <Select value={selectedYear} onValueChange={setSelectedYear}>
+
+        <Label className="text-xs">
+         Mês
+        </Label>
+
+        <Select
+         value={selectedMonth}
+         onValueChange={setSelectedMonth}
+        >
          <SelectTrigger className="bg-input">
           <SelectValue/>
          </SelectTrigger>
+
          <SelectContent className="dark-pessoal border-border bg-card">
-          {anos.map(y=>(
-           <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+          {meses.map(i=>(
+           <SelectItem key={i} value={String(i)}>
+            {format(
+             new Date(2024,i,1),
+             'MMMM',
+             {locale:ptBR}
+            )}
+           </SelectItem>
           ))}
          </SelectContent>
         </Select>
+
+       </div>
+
+       <div className="space-y-2">
+
+        <Label className="text-xs">
+         Ano
+        </Label>
+
+        <Select
+         value={selectedYear}
+         onValueChange={setSelectedYear}
+        >
+         <SelectTrigger className="bg-input">
+          <SelectValue/>
+         </SelectTrigger>
+
+         <SelectContent className="dark-pessoal border-border bg-card">
+          {anos.map(y=>(
+           <SelectItem key={y} value={String(y)}>
+            {y}
+           </SelectItem>
+          ))}
+         </SelectContent>
+        </Select>
+
        </div>
 
        <div className="flex items-end">
+
         <div className="w-full rounded-lg border border-border bg-muted/20 px-3 py-2">
-         <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
-         <Badge className={STATUS_STYLE[status]} variant="outline">
+
+         <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Status
+         </p>
+
+         <Badge
+          className={STATUS_STYLE[status]}
+          variant="outline"
+         >
           {status.toUpperCase()}
          </Badge>
+
         </div>
+
        </div>
+
       </CardContent>
      </Card>
 
      {cartao&&ciclo&&(
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/50 px-4 py-3 text-sm text-muted-foreground">
+
        <CalendarClock className="h-4 w-4 text-[hsl(var(--neon-pessoal))]"/>
-       <span>Ciclo: <strong className="text-foreground">{brDate(ciclo.inicio)} a {brDate(ciclo.fim)}</strong></span>
-       <span className="text-border">•</span>
-       <span>Vencimento: <strong className="text-foreground">{brDate(dataVencimento)}</strong></span>
+
+       <span>
+        Ciclo:
+        <strong className="text-foreground">
+         {brDate(ciclo.inicio)} a {brDate(ciclo.fim)}
+        </strong>
+       </span>
+
+       <span className="text-border">
+        •
+       </span>
+
+       <span>
+        Vencimento:
+        <strong className="text-foreground">
+         {brDate(dataVencimento)}
+        </strong>
+       </span>
+
       </div>
      )}
 
      <div className="grid gap-4 md:grid-cols-4">
-      <StatCard label="Total da Fatura" value={moeda(totalFatura)} icon={Receipt} color="red"/>
-      <StatCard label="Total Pago" value={moeda(totalPago)} icon={DollarSign} color="emerald"/>
-      <StatCard label="Saldo Restante" value={moeda(saldoRestante)} icon={WalletCards} color="red"/>
+
+      <StatCard
+       label="Total da Fatura"
+       value={moeda(totalFatura)}
+       icon={Receipt}
+       color="red"
+      />
+
+      <StatCard
+       label="Total Pago"
+       value={moeda(totalPago)}
+       icon={DollarSign}
+       color="emerald"
+      />
+
+      <StatCard
+       label="Saldo Restante"
+       value={moeda(saldoRestante)}
+       icon={WalletCards}
+       color="red"
+      />
 
       <Card className="border-border bg-card">
+
        <CardContent className="flex h-full flex-col justify-center gap-2 p-4">
+
         {status==='aberta'&&(
-         <Button className="w-full bg-blue-600 text-white hover:bg-blue-700" onClick={fecharFatura}>
+         <Button
+          className="w-full bg-blue-600 text-white hover:bg-blue-700"
+          onClick={fecharFatura}
+         >
           <Lock className="mr-2 h-4 w-4"/>
           Fechar Fatura
          </Button>
@@ -522,11 +761,19 @@ const Faturas=()=>{
 
         {status==='fechada'&&(
          <>
-          <Button className="w-full bg-emerald-600 text-white hover:bg-emerald-700" onClick={openPagamento}>
+          <Button
+           className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+           onClick={openPagamento}
+          >
            <DollarSign className="mr-2 h-4 w-4"/>
            Registrar Pagamento
           </Button>
-          <Button variant="outline" className="w-full" onClick={reabrir}>
+
+          <Button
+           variant="outline"
+           className="w-full"
+           onClick={reabrir}
+          >
            Reabrir Fatura
           </Button>
          </>
@@ -534,89 +781,176 @@ const Faturas=()=>{
 
         {status==='paga'&&(
          <>
-          <Button variant="outline" className="w-full" onClick={openPagamento}>
+          <Button
+           variant="outline"
+           className="w-full"
+           onClick={openPagamento}
+          >
            <Plus className="mr-2 h-4 w-4"/>
            Novo Pagamento
           </Button>
-          <Button variant="outline" className="w-full" onClick={reabrir}>
+
+          <Button
+           variant="outline"
+           className="w-full"
+           onClick={reabrir}
+          >
            Reabrir Fatura
           </Button>
          </>
         )}
+
        </CardContent>
       </Card>
+
      </div>
 
      <div className="grid gap-4 lg:grid-cols-2">
+
       <Card className="border-border bg-card">
+
        <CardHeader className="pb-3">
-        <CardTitle className="text-base text-red-400">Lançamentos do Ciclo</CardTitle>
+        <CardTitle className="text-base text-red-400">
+         Lançamentos do Ciclo
+        </CardTitle>
        </CardHeader>
+
        <CardContent className="p-0">
+
         <ScrollArea className="h-[360px]">
+
          <Table>
+
           <TableHeader>
            <TableRow>
             <TableHead>Descrição</TableHead>
             <TableHead>Data</TableHead>
             <TableHead>Parc.</TableHead>
-            <TableHead className="text-right">Valor/Parc.</TableHead>
+            <TableHead className="text-right">
+             Valor/Parc.
+            </TableHead>
            </TableRow>
           </TableHeader>
+
           <TableBody>
+
            {loading?(
             <TableRow>
-             <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Carregando...</TableCell>
+             <TableCell
+              colSpan={4}
+              className="py-8 text-center text-muted-foreground"
+             >
+              Carregando...
+             </TableCell>
             </TableRow>
            ):lancamentos.length===0?(
             <TableRow>
-             <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Nenhum lançamento no ciclo.</TableCell>
+             <TableCell
+              colSpan={4}
+              className="py-8 text-center text-muted-foreground"
+             >
+              Nenhum lançamento no ciclo.
+             </TableCell>
             </TableRow>
            ):(
             lancamentos.map(l=>(
-             <TableRow key={l.id} className="hover:bg-muted/50">
-              <TableCell className="font-medium">{l.descricao}</TableCell>
-              <TableCell className="text-sm">{brDate(l.data)}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">{l.parcela_atual}/{l.parcelas}</TableCell>
-              <TableCell className="text-right font-semibold text-red-400">
-               {moeda(getInstallmentValue(l.valor,l.parcelas,l.parcela_atual))}
+             <TableRow
+              key={l.id}
+              className="hover:bg-muted/50"
+             >
+              <TableCell className="font-medium">
+               {l.descricao}
               </TableCell>
+
+              <TableCell className="text-sm">
+               {brDate(l.data)}
+              </TableCell>
+
+              <TableCell className="text-sm text-muted-foreground">
+               {l.parcela_atual}/{l.parcelas}
+              </TableCell>
+
+              <TableCell className="text-right font-semibold text-red-400">
+               {moeda(
+                getInstallmentValue(
+                 l.valor,
+                 l.parcelas,
+                 l.parcela_atual
+                )
+               )}
+              </TableCell>
+
              </TableRow>
             ))
            )}
+
           </TableBody>
+
          </Table>
+
         </ScrollArea>
+
        </CardContent>
       </Card>
 
       <Card className="border-border bg-card">
+
        <CardHeader className="pb-3">
-        <CardTitle className="text-base text-emerald-400">Pagamentos</CardTitle>
+        <CardTitle className="text-base text-emerald-400">
+         Pagamentos
+        </CardTitle>
        </CardHeader>
+
        <CardContent className="p-0">
+
         <ScrollArea className="h-[360px]">
+
          <Table>
+
           <TableHeader>
            <TableRow>
             <TableHead>Data</TableHead>
             <TableHead>Forma</TableHead>
-            <TableHead className="text-right">Valor</TableHead>
-            <TableHead className="text-center">Ações</TableHead>
+            <TableHead className="text-right">
+             Valor
+            </TableHead>
+            <TableHead className="text-center">
+             Ações
+            </TableHead>
            </TableRow>
           </TableHeader>
+
           <TableBody>
+
            {pagamentos.length===0?(
             <TableRow>
-             <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Nenhum pagamento registrado.</TableCell>
+             <TableCell
+              colSpan={4}
+              className="py-8 text-center text-muted-foreground"
+             >
+              Nenhum pagamento registrado.
+             </TableCell>
             </TableRow>
            ):(
             pagamentos.map(p=>(
-             <TableRow key={p.id} className="hover:bg-muted/50">
-              <TableCell className="text-sm">{brDate(p.data)}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">{p.forma_pagamento||'—'}</TableCell>
-              <TableCell className="text-right font-semibold text-emerald-400">{moeda(p.valor)}</TableCell>
+             <TableRow
+              key={p.id}
+              className="hover:bg-muted/50"
+             >
+              <TableCell className="text-sm">
+               {brDate(p.data)}
+              </TableCell>
+
+              <TableCell className="text-sm text-muted-foreground">
+               {p.forma_pagamento||'—'}
+              </TableCell>
+
+              <TableCell className="text-right font-semibold text-emerald-400">
+               {moeda(p.valor)}
+              </TableCell>
+
               <TableCell className="text-center">
+
                <Button
                 variant="ghost"
                 size="icon"
@@ -625,16 +959,24 @@ const Faturas=()=>{
                >
                 <Trash2 className="h-4 w-4"/>
                </Button>
+
               </TableCell>
+
              </TableRow>
             ))
            )}
+
           </TableBody>
+
          </Table>
+
         </ScrollArea>
+
        </CardContent>
       </Card>
+
      </div>
+
     </>
    )}
 
@@ -647,67 +989,110 @@ const Faturas=()=>{
     theme="green"
     footer={
      <>
-      <Button type="button" variant="outline" onClick={closePagamento} className="h-11 rounded-xl border-border px-5">
+      <Button
+       type="button"
+       variant="outline"
+       onClick={closePagamento}
+       className="h-11 rounded-xl border-border px-5"
+      >
        Cancelar
       </Button>
+
       <Button
        type="button"
        onClick={salvarPagamento}
        className="h-11 rounded-xl px-6 font-semibold text-white hover:opacity-90"
-       style={{background:GREEN,boxShadow:'0 0 18px hsl(142 71% 45% / .22)'}}
+       style={{
+        background:GREEN,
+        boxShadow:'0 0 18px hsl(142 71% 45% / .22)'
+       }}
       >
        Salvar Pagamento
       </Button>
      </>
     }
    >
+
     <div className="space-y-5">
+
      <div className="space-y-2">
+
       <Label>Valor</Label>
+
       <Input
        type="text"
        inputMode="numeric"
        value={pagForm.valor}
-       onChange={e=>setPagForm(p=>({...p,valor:money(e.target.value)}))}
+       onChange={e=>
+        setPagForm(p=>({
+         ...p,
+         valor:money(e.target.value)
+        }))
+       }
        placeholder="R$ 0,00"
        className="h-11 rounded-xl bg-input font-semibold tabular-nums"
       />
+
      </div>
 
      <div className="space-y-2">
+
       <Label>Data</Label>
+
       <Input
        type="date"
        value={pagForm.data}
-       onChange={e=>setPagForm(p=>({...p,data:e.target.value}))}
+       onChange={e=>
+        setPagForm(p=>({
+         ...p,
+         data:e.target.value
+        }))
+       }
        className="h-11 rounded-xl bg-input"
       />
+
      </div>
 
      <div className="space-y-2">
+
       <Label>Forma de Pagamento</Label>
+
       <Select
        value={pagForm.forma_pagamento}
-       onValueChange={v=>setPagForm(p=>({...p,forma_pagamento:v}))}
+       onValueChange={v=>
+        setPagForm(p=>({
+         ...p,
+         forma_pagamento:v
+        }))
+       }
       >
+
        <SelectTrigger className="h-11 rounded-xl bg-input">
         <SelectValue/>
        </SelectTrigger>
+
        <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
         <SelectItem value="Pix">Pix</SelectItem>
         <SelectItem value="Débito">Débito</SelectItem>
         <SelectItem value="Dinheiro">Dinheiro</SelectItem>
         <SelectItem value="Boleto">Boleto</SelectItem>
        </SelectContent>
+
       </Select>
+
      </div>
 
      <div className="rounded-xl border border-red-500/15 bg-red-500/5 p-3 text-sm text-muted-foreground">
       Saldo restante:
-      <span className="ml-1 font-semibold text-red-400">{moeda(saldoRestante)}</span>
+      <span className="ml-1 font-semibold text-red-400">
+       {moeda(saldoRestante)}
+      </span>
      </div>
+
     </div>
+
    </ModalLancamentoPadrao>
+
   </div>
  );
 };
