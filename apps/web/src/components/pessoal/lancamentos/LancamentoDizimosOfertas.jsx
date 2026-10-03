@@ -1,8 +1,7 @@
 import React,{useState,useEffect,useCallback,useMemo,useRef}from'react';
 import{motion}from'framer-motion';
 import{Plus,Edit,Trash2,Heart,Search,Download,Receipt,DollarSign,TrendingDown,CalendarDays,RotateCcw}from'lucide-react';
-import{format,parseISO,getMonth,getYear}from'date-fns';
-import{ptBR}from'date-fns/locale';
+import{parseISO,getMonth,getYear}from'date-fns';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -21,35 +20,33 @@ import{exportToExcel}from'@/lib/ExportUtils';
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const TZ='America/Sao_Paulo';
 const GREEN='hsl(142 70% 45%)';
+const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2});
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
+const roundMoney=v=>fromCents(toCents(v));
 
 const getBRDate=()=>{
- const p=new Intl.DateTimeFormat('en-CA',{
-  timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'
- }).formatToParts(new Date()),v={};
+ const p=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()),v={};
  p.forEach(x=>{if(x.type!=='literal')v[x.type]=x.value});
  return`${v.year}-${v.month}-${v.day}`;
 };
 
-const money=v=>{
+const moneyInput=v=>{
  const d=String(v??'').replace(/\D/g,'');
- return d?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(d)/100):'';
+ return d?BRL.format(fromCents(Number(d))):'';
 };
 
 const moneyNum=v=>{
  const d=String(v??'').replace(/\D/g,'');
- return d?Number(d)/100:0;
+ return d?fromCents(Number(d)):0;
 };
 
-const moneyShow=v=>new Intl.NumberFormat('pt-BR',{
- style:'currency',
- currency:'BRL'
-}).format(Number(v)||0);
+const moneyShow=v=>BRL.format(roundMoney(v));
 
 const brDate=d=>d?new Date(d).toLocaleDateString('pt-BR',{timeZone:'UTC'}):'—';
 
 const LancamentoDizimosOfertas=()=>{
  const{toast}=useToast(),{user}=useAuth(),mounted=useRef(true);
-
  const[lancamentos,setLancamentos]=useState([]);
  const[loading,setLoading]=useState(true);
  const[searchTerm,setSearchTerm]=useState('');
@@ -60,18 +57,8 @@ const LancamentoDizimosOfertas=()=>{
  const[isSearchModalOpen,setIsSearchModalOpen]=useState(false);
  const[isExportOpen,setIsExportOpen]=useState(false);
  const[currentLancamentoId,setCurrentLancamentoId]=useState(null);
-
- const[exportFilters,setExportFilters]=useState({
-  month:new Date().getMonth(),
-  year:new Date().getFullYear()
- });
-
- const initialForm=()=>({
-  data:getBRDate(),
-  valor:'',
-  tipo_movimento:'DÍZIMO'
- });
-
+ const[exportFilters,setExportFilters]=useState({month:new Date().getMonth(),year:new Date().getFullYear()});
+ const initialForm=()=>({data:getBRDate(),valor:'',tipo_movimento:'DÍZIMO'});
  const[formData,setFormData]=useState(initialForm);
  const pageSize=10;
 
@@ -89,25 +76,13 @@ const LancamentoDizimosOfertas=()=>{
  const fetchData=useCallback(async()=>{
   if(!user)return;
   setLoading(true);
-
   try{
-   const{data,error}=await supabase
-    .from('pessoal_dizimos_ofertas')
-    .select('*')
-    .eq('user_id',user.id)
-    .order('data',{ascending:false});
-
+   const{data,error}=await supabase.from('pessoal_dizimos_ofertas').select('*').eq('user_id',user.id).order('data',{ascending:false});
    if(error)throw error;
    if(!mounted.current)return;
    setLancamentos(data||[]);
   }catch(error){
-   if(!mounted.current)return;
-
-   toast({
-    title:'Erro ao carregar lançamentos',
-    description:error.message||'Não foi possível carregar os registros.',
-    variant:'destructive'
-   });
+   if(mounted.current)toast({title:'Erro ao carregar lançamentos',description:error.message||'Não foi possível carregar os registros.',variant:'destructive'});
   }finally{
    if(mounted.current)setLoading(false);
   }
@@ -116,118 +91,60 @@ const LancamentoDizimosOfertas=()=>{
  useEffect(()=>{
   fetchData();
   if(!user)return;
-
-  const channel=supabase
-   .channel('pessoal_dizimos_changes')
-   .on(
-    'postgres_changes',
-    {
-     event:'*',
-     schema:'public',
-     table:'pessoal_dizimos_ofertas'
-    },
-    ()=>fetchData()
-   )
+  const channel=supabase.channel('pessoal_dizimos_changes')
+   .on('postgres_changes',{event:'*',schema:'public',table:'pessoal_dizimos_ofertas'},()=>fetchData())
    .subscribe();
-
   return()=>supabase.removeChannel(channel);
  },[user,fetchData]);
 
  const filtered=useMemo(()=>{
   let result=lancamentos;
-
-  if(selectedYear!=='all'){
-   result=result.filter(item=>String(getYear(parseISO(item.data)))===selectedYear);
-  }
-
-  if(selectedMonth!=='all'){
-   result=result.filter(item=>String(getMonth(parseISO(item.data)))===selectedMonth);
-  }
-
+  if(selectedYear!=='all')result=result.filter(x=>String(getYear(parseISO(x.data)))===selectedYear);
+  if(selectedMonth!=='all')result=result.filter(x=>String(getMonth(parseISO(x.data)))===selectedMonth);
   if(searchTerm.trim()){
    const term=searchTerm.toLowerCase();
-
-   result=result.filter(item=>
-    (item.tipo_movimento||'').toLowerCase().includes(term)
-   );
+   result=result.filter(x=>(x.tipo_movimento||'').toLowerCase().includes(term));
   }
-
   return result;
  },[lancamentos,selectedYear,selectedMonth,searchTerm]);
 
- useEffect(()=>{setCurrentPage(1)},[selectedYear,selectedMonth,searchTerm]);
+ useEffect(()=>setCurrentPage(1),[selectedYear,selectedMonth,searchTerm]);
 
- const total=useMemo(
-  ()=>filtered.reduce((sum,item)=>sum+Number(item.valor||0),0),
-  [filtered]
- );
-
- const average=filtered.length?total/filtered.length:0;
-
- const biggest=filtered.length
-  ?Math.max(...filtered.map(item=>Number(item.valor||0)))
-  :0;
-
+ const totalC=filtered.reduce((s,x)=>s+toCents(x.valor),0);
+ const averageC=filtered.length?Math.round(totalC/filtered.length):0;
+ const biggestC=filtered.reduce((m,x)=>Math.max(m,toCents(x.valor)),0);
+ const total=fromCents(totalC);
+ const average=fromCents(averageC);
+ const biggest=fromCents(biggestC);
  const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
-
- const paginated=filtered.slice(
-  (currentPage-1)*pageSize,
-  currentPage*pageSize
- );
+ const paginated=filtered.slice((currentPage-1)*pageSize,currentPage*pageSize);
 
  const handleSave=async()=>{
   if(!formData.data||!formData.valor||!formData.tipo_movimento){
-   toast({
-    title:'Campos obrigatórios',
-    description:'Preencha todos os campos.',
-    variant:'destructive'
-   });
+   toast({title:'Campos obrigatórios',description:'Preencha todos os campos.',variant:'destructive'});
    return;
   }
 
-  const valor=moneyNum(formData.valor);
-
+  const valor=roundMoney(moneyNum(formData.valor));
   if(valor<=0){
-   toast({
-    title:'Valor inválido',
-    description:'Informe um valor maior que zero.',
-    variant:'destructive'
-   });
+   toast({title:'Valor inválido',description:'Informe um valor maior que zero.',variant:'destructive'});
    return;
   }
 
-  const dataToSave={
-   ...formData,
-   user_id:user.id,
-   valor
-  };
+  const dataToSave={...formData,user_id:user.id,valor};
 
   try{
    const result=currentLancamentoId
-    ?await supabase
-      .from('pessoal_dizimos_ofertas')
-      .update(dataToSave)
-      .eq('id',currentLancamentoId)
-      .eq('user_id',user.id)
-    :await supabase
-      .from('pessoal_dizimos_ofertas')
-      .insert(dataToSave);
+    ?await supabase.from('pessoal_dizimos_ofertas').update(dataToSave).eq('id',currentLancamentoId).eq('user_id',user.id)
+    :await supabase.from('pessoal_dizimos_ofertas').insert(dataToSave);
 
    if(result.error)throw result.error;
 
-   toast({
-    title:'Sucesso',
-    description:currentLancamentoId?'Lançamento atualizado.':'Lançamento registrado.'
-   });
-
+   toast({title:'Sucesso',description:currentLancamentoId?'Lançamento atualizado.':'Lançamento registrado.'});
    closeDialog();
    fetchData();
   }catch(error){
-   toast({
-    title:'Erro ao salvar',
-    description:error.message||'Não foi possível salvar o lançamento.',
-    variant:'destructive'
-   });
+   toast({title:'Erro ao salvar',description:error.message||'Não foi possível salvar o lançamento.',variant:'destructive'});
   }
  };
 
@@ -236,14 +153,13 @@ const LancamentoDizimosOfertas=()=>{
    setCurrentLancamentoId(item.id);
    setFormData({
     data:item.data||getBRDate(),
-    valor:money(item.valor),
+    valor:moneyInput(item.valor),
     tipo_movimento:item.tipo_movimento||'DÍZIMO'
    });
   }else{
    setCurrentLancamentoId(null);
    setFormData(initialForm());
   }
-
   setIsDialogOpen(true);
  };
 
@@ -255,26 +171,12 @@ const LancamentoDizimosOfertas=()=>{
 
  const handleDelete=async id=>{
   try{
-   const{error}=await supabase
-    .from('pessoal_dizimos_ofertas')
-    .delete()
-    .eq('id',id)
-    .eq('user_id',user.id);
-
+   const{error}=await supabase.from('pessoal_dizimos_ofertas').delete().eq('id',id).eq('user_id',user.id);
    if(error)throw error;
-
-   toast({
-    title:'Removido',
-    description:'Lançamento removido.'
-   });
-
+   toast({title:'Removido',description:'Lançamento removido.'});
    fetchData();
   }catch(error){
-   toast({
-    title:'Erro ao remover',
-    description:error.message||'Não foi possível remover.',
-    variant:'destructive'
-   });
+   toast({title:'Erro ao remover',description:error.message||'Não foi possível remover.',variant:'destructive'});
   }
  };
 
@@ -285,11 +187,7 @@ const LancamentoDizimosOfertas=()=>{
   });
 
   if(!exportData.length){
-   toast({
-    title:'Sem dados',
-    description:'Não há registros para o período selecionado.',
-    variant:'destructive'
-   });
+   toast({title:'Sem dados',description:'Não há registros para o período selecionado.',variant:'destructive'});
    return;
   }
 
@@ -297,7 +195,7 @@ const LancamentoDizimosOfertas=()=>{
    exportData.map(item=>({
     DATA:brDate(item.data),
     TIPO:item.tipo_movimento,
-    VALOR:Number(item.valor||0)
+    VALOR:roundMoney(item.valor)
    })),
    `Dizimos_Ofertas_${meses[exportFilters.month]}_${exportFilters.year}`,
    'Dízimos e Ofertas'
@@ -320,153 +218,59 @@ const LancamentoDizimosOfertas=()=>{
  ];
 
  return(
-  <motion.div
-   initial={{opacity:0,y:20}}
-   animate={{opacity:1,y:0}}
-   className="dark-pessoal space-y-5"
-  >
-
+  <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="dark-pessoal space-y-5">
    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
     <div>
-     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:GREEN}}>
-      Finanças Pessoais
-     </p>
-
-     <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">
-      Dízimos e Ofertas
-     </h1>
-
-     <p className="text-sm text-muted-foreground">
-      Registre e acompanhe suas contribuições.
-     </p>
+     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:GREEN}}>Finanças Pessoais</p>
+     <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Dízimos e Ofertas</h1>
+     <p className="text-sm text-muted-foreground">Registre e acompanhe suas contribuições.</p>
     </div>
-
     <div className="flex flex-wrap gap-2">
-
-     <Button
-      variant="outline"
-      onClick={()=>setIsExportOpen(true)}
-      className="border-border hover:bg-green-500/10"
-      style={{color:GREEN}}
-     >
-      <Download className="mr-2 h-4 w-4"/>
-      Exportar
-     </Button>
-
-     <Button
-      variant="outline"
-      onClick={()=>setIsSearchModalOpen(true)}
-      className="border-border hover:bg-green-500/10"
-      style={{color:GREEN}}
-     >
-      <Search className="mr-2 h-4 w-4"/>
-      Selecionar
-     </Button>
-
-     <Button
-      onClick={()=>openDialog()}
-      className="text-white shadow-lg"
-      style={{background:GREEN,boxShadow:'0 0 18px hsl(142 70% 45% / .20)'}}
-    >
-      <Plus className="mr-2 h-4 w-4"/>
-      Novo Lançamento
-     </Button>
-
+     <Button variant="outline" onClick={()=>setIsExportOpen(true)} className="border-border hover:bg-green-500/10" style={{color:GREEN}}><Download className="mr-2 h-4 w-4"/>Exportar</Button>
+     <Button variant="outline" onClick={()=>setIsSearchModalOpen(true)} className="border-border hover:bg-green-500/10" style={{color:GREEN}}><Search className="mr-2 h-4 w-4"/>Selecionar</Button>
+     <Button onClick={()=>openDialog()} className="text-white shadow-lg" style={{background:GREEN,boxShadow:'0 0 18px hsl(142 70% 45% / .20)'}}><Plus className="mr-2 h-4 w-4"/>Novo Lançamento</Button>
     </div>
    </div>
 
    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-
     {stats.map(({label,value,icon:Icon})=>(
      <Card key={label} className="border-border bg-card">
       <CardContent className="flex items-center justify-between p-4">
-
        <div>
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-         {label}
-        </p>
-
-        <p
-         className="mt-1 text-xl font-bold tabular-nums"
-         style={{color:GREEN}}
-        >
-         {value}
-        </p>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="mt-1 text-xl font-bold tabular-nums" style={{color:GREEN}}>{value}</p>
        </div>
-
-       <div
-        className="rounded-xl bg-green-500/10 p-2.5"
-        style={{color:GREEN}}
-       >
-        <Icon className="h-5 w-5"/>
-       </div>
-
+       <div className="rounded-xl bg-green-500/10 p-2.5" style={{color:GREEN}}><Icon className="h-5 w-5"/></div>
       </CardContent>
      </Card>
     ))}
-
    </div>
 
    <Card className="border-border bg-card">
     <CardContent className="p-4">
-
      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-
       <div className="relative min-w-0 flex-1">
        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-
-       <Input
-        placeholder="Buscar por tipo..."
-        value={searchTerm}
-        onChange={e=>setSearchTerm(e.target.value)}
-        className="h-10 bg-input pl-9"
-       />
+       <Input placeholder="Buscar por tipo..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} className="h-10 bg-input pl-9"/>
       </div>
-
       <div className="flex flex-wrap gap-2">
-
        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-        <SelectTrigger className="h-10 w-[140px] bg-input">
-         <SelectValue/>
-        </SelectTrigger>
-
+        <SelectTrigger className="h-10 w-[140px] bg-input"><SelectValue/></SelectTrigger>
         <SelectContent>
          <SelectItem value="all">Todos os meses</SelectItem>
-
-         {meses.map((mes,i)=>(
-          <SelectItem key={i} value={String(i)}>
-           {mes}
-          </SelectItem>
-         ))}
+         {meses.map((mes,i)=><SelectItem key={i} value={String(i)}>{mes}</SelectItem>)}
         </SelectContent>
        </Select>
 
        <Select value={selectedYear} onValueChange={setSelectedYear}>
-        <SelectTrigger className="h-10 w-[110px] bg-input">
-         <SelectValue/>
-        </SelectTrigger>
-
+        <SelectTrigger className="h-10 w-[110px] bg-input"><SelectValue/></SelectTrigger>
         <SelectContent>
          <SelectItem value="all">Todos os anos</SelectItem>
-
-         {availableYears.map(y=>(
-          <SelectItem key={y} value={String(y)}>
-           {y}
-          </SelectItem>
-         ))}
+         {availableYears.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
         </SelectContent>
        </Select>
 
-       <Button
-        variant="outline"
-        onClick={limparFiltros}
-        className="h-10 border-border"
-       >
-        <RotateCcw className="mr-2 h-4 w-4"/>
-        Limpar
-       </Button>
-
+       <Button variant="outline" onClick={limparFiltros} className="h-10 border-border"><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button>
       </div>
      </div>
     </CardContent>
@@ -475,10 +279,7 @@ const LancamentoDizimosOfertas=()=>{
    <SearchableModal
     isOpen={isSearchModalOpen}
     onClose={()=>setIsSearchModalOpen(false)}
-    onSelect={item=>{
-     openDialog(item);
-     setIsSearchModalOpen(false);
-    }}
+    onSelect={item=>{openDialog(item);setIsSearchModalOpen(false)}}
     tableName="pessoal_dizimos_ofertas"
     searchField="tipo_movimento"
     displayFields={[
@@ -498,71 +299,28 @@ const LancamentoDizimosOfertas=()=>{
     theme="blue"
     footer={
      <>
-      <Button
-       variant="outline"
-       onClick={()=>setIsExportOpen(false)}
-       className="h-10 rounded-xl"
-      >
-       Cancelar
-      </Button>
-
-      <Button
-       onClick={handleExport}
-       className="h-10 rounded-xl px-6 font-semibold text-white"
-       style={{background:GREEN}}
-      >
-       Exportar
-      </Button>
+      <Button variant="outline" onClick={()=>setIsExportOpen(false)} className="h-10 rounded-xl">Cancelar</Button>
+      <Button onClick={handleExport} className="h-10 rounded-xl px-6 font-semibold text-white" style={{background:GREEN}}>Exportar</Button>
      </>
     }
    >
-
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
      <div className="space-y-2">
       <Label>Mês</Label>
-
-      <Select
-       value={String(exportFilters.month)}
-       onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}
-      >
-       <SelectTrigger className="h-11 rounded-xl bg-input">
-        <SelectValue/>
-       </SelectTrigger>
-
-       <SelectContent>
-        {meses.map((mes,i)=>(
-         <SelectItem key={i} value={String(i)}>
-          {mes}
-         </SelectItem>
-        ))}
-       </SelectContent>
+      <Select value={String(exportFilters.month)} onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}>
+       <SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue/></SelectTrigger>
+       <SelectContent>{meses.map((mes,i)=><SelectItem key={i} value={String(i)}>{mes}</SelectItem>)}</SelectContent>
       </Select>
      </div>
 
      <div className="space-y-2">
       <Label>Ano</Label>
-
-      <Select
-       value={String(exportFilters.year)}
-       onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}
-      >
-       <SelectTrigger className="h-11 rounded-xl bg-input">
-        <SelectValue/>
-       </SelectTrigger>
-
-       <SelectContent>
-        {availableYears.map(y=>(
-         <SelectItem key={y} value={String(y)}>
-          {y}
-         </SelectItem>
-        ))}
-       </SelectContent>
+      <Select value={String(exportFilters.year)} onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}>
+       <SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue/></SelectTrigger>
+       <SelectContent>{availableYears.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
       </Select>
      </div>
-
     </div>
-
    </ModalLancamentoPadrao>
 
    <ModalLancamentoPadrao
@@ -574,87 +332,40 @@ const LancamentoDizimosOfertas=()=>{
     theme="blue"
     footer={
      <>
-      <Button
-       type="button"
-       variant="outline"
-       onClick={closeDialog}
-       className="h-10 rounded-xl"
-      >
-       Cancelar
-      </Button>
-
-      <Button
-       type="button"
-       onClick={handleSave}
-       className="h-10 rounded-xl px-7 font-semibold text-white"
-       style={{background:GREEN}}
-      >
-       {currentLancamentoId?'Salvar Alterações':'Salvar Lançamento'}
-      </Button>
+      <Button type="button" variant="outline" onClick={closeDialog} className="h-10 rounded-xl">Cancelar</Button>
+      <Button type="button" onClick={handleSave} className="h-10 rounded-xl px-7 font-semibold text-white" style={{background:GREEN}}>{currentLancamentoId?'Salvar Alterações':'Salvar Lançamento'}</Button>
      </>
     }
    >
-
     <div className="space-y-5">
-
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
       <div className="space-y-2">
        <Label>Data</Label>
-
-       <Input
-        type="date"
-        value={formData.data}
-        onChange={e=>setFormData(p=>({...p,data:e.target.value}))}
-        className="h-11 rounded-xl bg-input"
-        required
-       />
+       <Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))} className="h-11 rounded-xl bg-input" required/>
       </div>
-
       <div className="space-y-2">
        <Label>Valor</Label>
-
-       <Input
-        type="text"
-        inputMode="numeric"
-        value={formData.valor}
-        onChange={e=>setFormData(p=>({...p,valor:money(e.target.value)}))}
-        placeholder="R$ 0,00"
-        className="h-11 rounded-xl bg-input font-semibold tabular-nums"
-        required
-       />
+       <Input type="text" inputMode="numeric" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:moneyInput(e.target.value)}))} placeholder="R$ 0,00" className="h-11 rounded-xl bg-input font-semibold tabular-nums" required/>
       </div>
-
      </div>
 
      <div className="space-y-2">
       <Label>Tipo de Movimento</Label>
-
-      <Select
-       value={formData.tipo_movimento}
-       onValueChange={v=>setFormData(p=>({...p,tipo_movimento:v}))}
-      >
-       <SelectTrigger className="h-11 rounded-xl bg-input">
-        <SelectValue placeholder="Selecione"/>
-       </SelectTrigger>
-
+      <Select value={formData.tipo_movimento} onValueChange={v=>setFormData(p=>({...p,tipo_movimento:v}))}>
+       <SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione"/></SelectTrigger>
        <SelectContent>
         <SelectItem value="DÍZIMO">Dízimo</SelectItem>
         <SelectItem value="OFERTA">Oferta</SelectItem>
        </SelectContent>
       </Select>
      </div>
-
     </div>
    </ModalLancamentoPadrao>
 
    <Card className="border-border bg-card">
     <CardContent className="p-0">
-
      <ScrollArea className="h-[500px]">
-
       <Table>
-
        <TableHeader className="sticky top-0 z-10 bg-secondary/50 backdrop-blur-sm">
         <TableRow>
          <TableHead>Data</TableHead>
@@ -665,153 +376,60 @@ const LancamentoDizimosOfertas=()=>{
        </TableHeader>
 
        <TableBody>
-
         {loading?(
-         <TableRow>
-          <TableCell colSpan={4} className="py-12 text-center text-muted-foreground">
-           Carregando lançamentos...
-          </TableCell>
-         </TableRow>
+         <TableRow><TableCell colSpan={4} className="py-12 text-center text-muted-foreground">Carregando lançamentos...</TableCell></TableRow>
         ):paginated.length===0?(
          <TableRow>
           <TableCell colSpan={4} className="py-12 text-center">
-
-           <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <Heart className="h-8 w-8 opacity-40"/>
-            <span>Nenhum lançamento encontrado.</span>
-           </div>
-
+           <div className="flex flex-col items-center gap-2 text-muted-foreground"><Heart className="h-8 w-8 opacity-40"/><span>Nenhum lançamento encontrado.</span></div>
           </TableCell>
          </TableRow>
         ):(
          paginated.map(item=>(
-          <TableRow
-           key={item.id}
-           className="transition-colors hover:bg-muted/40"
-          >
-
-           <TableCell className="p-4 font-medium">
-            {brDate(item.data)}
-           </TableCell>
-
-           <TableCell className="p-4">
-            <span className="font-medium">
-             {item.tipo_movimento}
-            </span>
-           </TableCell>
-
-           <TableCell
-            className="p-4 text-right font-bold tabular-nums"
-            style={{color:GREEN}}
-           >
-            {moneyShow(item.valor)}
-           </TableCell>
-
+          <TableRow key={item.id} className="transition-colors hover:bg-muted/40">
+           <TableCell className="p-4 font-medium">{brDate(item.data)}</TableCell>
+           <TableCell className="p-4"><span className="font-medium">{item.tipo_movimento}</span></TableCell>
+           <TableCell className="p-4 text-right font-bold tabular-nums" style={{color:GREEN}}>{moneyShow(item.valor)}</TableCell>
            <TableCell className="p-4">
             <div className="flex justify-center gap-1">
-
-             <Button
-              variant="ghost"
-              size="icon"
-              onClick={()=>openDialog(item)}
-              className="hover:bg-green-500/10"
-              style={{color:GREEN}}
-             >
-              <Edit className="h-4 w-4"/>
-             </Button>
+             <Button variant="ghost" size="icon" onClick={()=>openDialog(item)} className="hover:bg-green-500/10" style={{color:GREEN}}><Edit className="h-4 w-4"/></Button>
 
              <AlertDialog>
-
               <AlertDialogTrigger asChild>
-               <Button
-                variant="ghost"
-                size="icon"
-                className="text-red-500 hover:bg-red-500/10"
-               >
-                <Trash2 className="h-4 w-4"/>
-               </Button>
+               <Button variant="ghost" size="icon" className="text-red-500 hover:bg-red-500/10"><Trash2 className="h-4 w-4"/></Button>
               </AlertDialogTrigger>
-
               <AlertDialogContent className="dark-pessoal">
-
                <AlertDialogHeader>
-                <AlertDialogTitle>
-                 Confirmar Exclusão
-                </AlertDialogTitle>
-
-                <AlertDialogDescription>
-                 Deseja remover este lançamento?
-                </AlertDialogDescription>
+                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                <AlertDialogDescription>Deseja remover este lançamento?</AlertDialogDescription>
                </AlertDialogHeader>
-
                <AlertDialogFooter>
-                <AlertDialogCancel>
-                 Cancelar
-                </AlertDialogCancel>
-
-                <AlertDialogAction
-                 onClick={()=>handleDelete(item.id)}
-                 className="bg-red-600 hover:bg-red-700"
-                >
-                 Deletar
-                </AlertDialogAction>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={()=>handleDelete(item.id)} className="bg-red-600 hover:bg-red-700">Deletar</AlertDialogAction>
                </AlertDialogFooter>
-
               </AlertDialogContent>
              </AlertDialog>
-
             </div>
            </TableCell>
-
           </TableRow>
          ))
         )}
-
        </TableBody>
       </Table>
-
      </ScrollArea>
 
      {!loading&&filtered.length>0&&(
       <div className="flex flex-col gap-2 border-t border-border px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-
-       <span>
-        Mostrando {((currentPage-1)*pageSize)+1}–{Math.min(currentPage*pageSize,filtered.length)} de {filtered.length}
-       </span>
-
+       <span>Mostrando {((currentPage-1)*pageSize)+1}–{Math.min(currentPage*pageSize,filtered.length)} de {filtered.length}</span>
        <div className="flex items-center gap-1">
-
-        <Button
-         variant="outline"
-         size="sm"
-         disabled={currentPage===1}
-         onClick={()=>setCurrentPage(p=>Math.max(1,p-1))}
-         className="h-8"
-        >
-         Anterior
-        </Button>
-
-        <span className="px-2 text-xs">
-         {currentPage} / {totalPages}
-        </span>
-
-        <Button
-         variant="outline"
-         size="sm"
-         disabled={currentPage===totalPages}
-         onClick={()=>setCurrentPage(p=>Math.min(totalPages,p+1))}
-         className="h-8"
-        >
-         Próxima
-        </Button>
-
+        <Button variant="outline" size="sm" disabled={currentPage===1} onClick={()=>setCurrentPage(p=>Math.max(1,p-1))} className="h-8">Anterior</Button>
+        <span className="px-2 text-xs">{currentPage} / {totalPages}</span>
+        <Button variant="outline" size="sm" disabled={currentPage===totalPages} onClick={()=>setCurrentPage(p=>Math.min(totalPages,p+1))} className="h-8">Próxima</Button>
        </div>
       </div>
      )}
-
     </CardContent>
    </Card>
-
   </motion.div>
  );
 };
