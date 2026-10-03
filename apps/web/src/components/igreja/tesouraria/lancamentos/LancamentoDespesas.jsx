@@ -36,10 +36,21 @@ const LancamentoDespesas=()=>{
     supabase.from('igreja_despesas').select('*').eq('user_id',uid).order('data',{ascending:false}),
     supabase.from('igreja_tipos_despesa').select('id,despesa').eq('user_id',uid).order('despesa')
    ]);
-   if(a.error)throw a.error;if(b.error)throw b.error;
-   if(mounted.current){setItems(a.data||[]);setTipos(b.data||[])}
-  }catch(e){toast({title:'Erro ao carregar dados',description:e.message,variant:'destructive'})}
-  finally{if(mounted.current)setLoading(false)}
+   if(a.error)throw a.error;
+   if(b.error)throw b.error;
+   if(mounted.current){
+    setItems(a.data||[]);
+    setTipos(b.data||[]);
+   }
+  }catch(e){
+   toast({
+    title:'Erro ao carregar dados',
+    description:e.message,
+    variant:'destructive'
+   })
+  }finally{
+   if(mounted.current)setLoading(false)
+  }
  },[user,adminUser,toast]);
 
  useEffect(()=>{load()},[load]);
@@ -65,24 +76,49 @@ const LancamentoDespesas=()=>{
 
  const save=async()=>{
   if(!form.data||!form.valor||!form.despesa){
-   toast({title:'Campos obrigatórios',description:'Preencha todos os campos.',variant:'destructive'});
+   toast({
+    title:'Campos obrigatórios',
+    description:'Preencha todos os campos.',
+    variant:'destructive'
+   });
    return;
   }
 
-  const payload={data:form.data,valor:form.valor,despesa:form.despesa,user_id:adminUser?.id||user.id};
+  const payload={
+   data:form.data,
+   valor:form.valor,
+   despesa:form.despesa,
+   user_id:adminUser?.id||user.id
+  };
 
   const q=current
    ?await supabase.from('igreja_despesas').update(payload).eq('id',current.id)
    :await supabase.from('igreja_despesas').insert(payload);
 
-  if(q.error)toast({title:'Erro ao salvar',description:q.error.message,variant:'destructive'});
-  else{toast({title:'Sucesso',description:current?'Despesa atualizada.':'Despesa registrada.'});close();load()}
+  if(q.error){
+   toast({
+    title:'Erro ao salvar',
+    description:q.error.message,
+    variant:'destructive'
+   });
+  }else{
+   toast({
+    title:'Sucesso',
+    description:current?'Despesa atualizada.':'Despesa registrada.'
+   });
+   close();
+   load();
+  }
  };
 
  const openDialog=item=>{
   if(item){
    setCurrent(item);
-   setForm({data:item.data?.slice(0,10)||'',valor:item.valor||'',despesa:item.despesa||''});
+   setForm({
+    data:item.data?.slice(0,10)||'',
+    valor:item.valor||'',
+    despesa:item.despesa||''
+   });
   }else reset();
   setOpen(true);
  };
@@ -90,20 +126,41 @@ const LancamentoDespesas=()=>{
  const remove=async()=>{
   if(!deleteItem)return;
   const{error}=await supabase.from('igreja_despesas').delete().eq('id',deleteItem.id);
-  if(error)toast({title:'Erro ao remover',description:error.message,variant:'destructive'});
-  else{toast({title:'Sucesso',description:'Despesa removida.'});setDeleteItem(null);load()}
+  if(error){
+   toast({
+    title:'Erro ao remover',
+    description:error.message,
+    variant:'destructive'
+   });
+  }else{
+   toast({
+    title:'Sucesso',
+    description:'Despesa removida.'
+   });
+   setDeleteItem(null);
+   load();
+  }
  };
 
  const exportar=()=>{
   if(!filtered.length){
-   toast({title:'Nenhum dado',description:'Não há registros para exportar.',variant:'destructive'});
+   toast({
+    title:'Nenhum dado',
+    description:'Não há registros para exportar.',
+    variant:'destructive'
+   });
    return;
   }
-  exportToExcel(filtered.map(i=>({
-   Data:new Date(i.data).toLocaleDateString('pt-BR',{timeZone:'UTC'}),
-   Descrição:i.despesa,
-   Valor:Number(i.valor)
-  })),'Lançamento_Despesas','Despesas');
+
+  exportToExcel(
+   filtered.map(i=>({
+    Data:new Date(i.data).toLocaleDateString('pt-BR',{timeZone:'UTC'}),
+    Descrição:i.despesa,
+    Valor:Number(i.valor)
+   })),
+   'Lançamento_Despesas',
+   'Despesas'
+  );
  };
 
  return(
@@ -115,81 +172,187 @@ const LancamentoDespesas=()=>{
       <DollarSign className="h-5 w-5 text-red-400"/>
      </div>
      <div>
-      <p className="text-xs font-semibold uppercase tracking-[.2em] text-[hsl(var(--neon-igreja))]">Tesouraria • Lançamentos</p>
+      <p className="text-xs font-semibold uppercase tracking-[.2em] text-[hsl(var(--neon-igreja))]">
+       Tesouraria • Lançamentos
+      </p>
       <h1 className="text-2xl font-bold md:text-3xl">Despesas</h1>
-      <p className="text-sm text-muted-foreground">Registre e acompanhe as despesas da igreja.</p>
+      <p className="text-sm text-muted-foreground">
+       Registre e acompanhe as despesas da igreja.
+      </p>
      </div>
     </div>
 
     <div className="flex flex-wrap gap-2">
-     <Button variant="outline" onClick={load}><RefreshCw className="mr-2 h-4 w-4"/>Atualizar</Button>
-     <Button variant="outline" onClick={exportar}><Download className="mr-2 h-4 w-4"/>Excel</Button>
-     <Button variant="outline" onClick={()=>setSearchOpen(true)}><Search className="mr-2 h-4 w-4"/>Selecionar Registro</Button>
-     <Button onClick={()=>openDialog()} className="bg-[hsl(var(--neon-igreja))] text-[hsl(var(--background))]"><Plus className="mr-2 h-4 w-4"/>Novo Lançamento</Button>
+     <Button variant="outline" onClick={load}>
+      <RefreshCw className="mr-2 h-4 w-4"/>
+      Atualizar
+     </Button>
+
+     <Button variant="outline" onClick={exportar}>
+      <Download className="mr-2 h-4 w-4"/>
+      Excel
+     </Button>
+
+     <Button variant="outline" onClick={()=>setSearchOpen(true)}>
+      <Search className="mr-2 h-4 w-4"/>
+      Selecionar Registro
+     </Button>
+
+     <Button
+      onClick={()=>openDialog()}
+      className="bg-[hsl(var(--neon-igreja))] text-[hsl(var(--background))]"
+     >
+      <Plus className="mr-2 h-4 w-4"/>
+      Novo Lançamento
+     </Button>
     </div>
    </div>
 
    <div className="grid gap-4 lg:grid-cols-4">
+
     <Card className="border-border bg-card/80 lg:col-span-3">
      <CardContent className="flex flex-col gap-3 p-4 md:flex-row">
+
       <div className="relative flex-1">
        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-       <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar despesa..." className="bg-input pl-9"/>
+       <Input
+        value={search}
+        onChange={e=>setSearch(e.target.value)}
+        placeholder="Pesquisar despesa..."
+        className="bg-input pl-9"
+       />
       </div>
 
       <Select value={month} onValueChange={setMonth}>
-       <SelectTrigger className="w-full bg-input md:w-48"><SelectValue/></SelectTrigger>
+       <SelectTrigger className="w-full bg-input md:w-48">
+        <SelectValue/>
+       </SelectTrigger>
+
        <SelectContent className="dark-igreja bg-card igreja-select-hover">
         <SelectItem value="all">Todos os meses</SelectItem>
-        {meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
+        {meses.map((m,i)=>
+         <SelectItem key={i} value={String(i)}>
+          {m}
+         </SelectItem>
+        )}
        </SelectContent>
       </Select>
 
       <Select value={year} onValueChange={setYear}>
-       <SelectTrigger className="w-full bg-input md:w-32"><SelectValue/></SelectTrigger>
+       <SelectTrigger className="w-full bg-input md:w-32">
+        <SelectValue/>
+       </SelectTrigger>
+
        <SelectContent className="dark-igreja bg-card igreja-select-hover">
         <SelectItem value="all">Todos</SelectItem>
-        {anos.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+        {anos.map(y=>
+         <SelectItem key={y} value={String(y)}>
+          {y}
+         </SelectItem>
+        )}
        </SelectContent>
       </Select>
+
      </CardContent>
     </Card>
 
     <Card className="border-border bg-card">
-     <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Total no período</CardTitle></CardHeader>
-     <CardContent><p className="text-2xl font-bold text-red-400">R$ {total.toFixed(2)}</p></CardContent>
+     <CardHeader className="pb-2">
+      <CardTitle className="text-sm text-muted-foreground">
+       Total no período
+      </CardTitle>
+     </CardHeader>
+
+     <CardContent>
+      <p className="text-2xl font-bold text-red-400">
+       R$ {total.toFixed(2)}
+      </p>
+     </CardContent>
     </Card>
+
    </div>
 
    <Card className="border-border bg-card">
-    <CardHeader className="pb-3"><CardTitle className="text-lg text-[hsl(var(--neon-igreja))]">Lançamentos de despesas</CardTitle></CardHeader>
+    <CardHeader className="pb-3">
+     <CardTitle className="text-lg text-[hsl(var(--neon-igreja))]">
+      Lançamentos de despesas
+     </CardTitle>
+    </CardHeader>
+
     <CardContent className="p-0">
      <div className="overflow-x-auto">
       <table className="w-full text-sm">
-       <thead><tr className="border-b border-border bg-muted/30">
-        <th className="p-4 text-left text-muted-foreground">Data</th>
-        <th className="p-4 text-left text-muted-foreground">Descrição</th>
-        <th className="p-4 text-right text-muted-foreground">Valor</th>
-        <th className="p-4 text-right text-muted-foreground">Ações</th>
-       </tr></thead>
+
+       <thead>
+        <tr className="border-b border-border bg-muted/30">
+         <th className="p-4 text-left text-muted-foreground">Data</th>
+         <th className="p-4 text-left text-muted-foreground">Descrição</th>
+         <th className="p-4 text-right text-muted-foreground">Valor</th>
+         <th className="p-4 text-right text-muted-foreground">Ações</th>
+        </tr>
+       </thead>
 
        <tbody>
-        {loading?<tr><td colSpan={4} className="p-10 text-center text-muted-foreground">Carregando...</td></tr>:
-         filtered.length?filtered.map(i=>(
-          <tr key={i.id} className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-igreja)/.04)]">
-           <td className="p-4">{new Date(i.data).toLocaleDateString('pt-BR',{timeZone:'UTC'})}</td>
-           <td className="p-4 font-medium">{i.despesa}</td>
-           <td className="p-4 text-right font-bold text-red-400">R$ {Number(i.valor||0).toFixed(2)}</td>
-           <td className="p-4">
-            <div className="flex justify-end gap-1">
-             <Button variant="ghost" size="icon" onClick={()=>openDialog(i)} className="text-[hsl(var(--neon-igreja))]"><Edit className="h-4 w-4"/></Button>
-             <Button variant="ghost" size="icon" onClick={()=>setDeleteItem(i)} className="text-red-400"><Trash2 className="h-4 w-4"/></Button>
-            </div>
+        {loading?
+         <tr>
+          <td colSpan={4} className="p-10 text-center text-muted-foreground">
+           Carregando...
+          </td>
+         </tr>
+        :
+         filtered.length?
+          filtered.map(i=>(
+           <tr
+            key={i.id}
+            className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-igreja)/.04)]"
+           >
+            <td className="p-4">
+             {new Date(i.data).toLocaleDateString('pt-BR',{timeZone:'UTC'})}
+            </td>
+
+            <td className="p-4 font-medium">
+             {i.despesa}
+            </td>
+
+            <td className="p-4 text-right font-bold text-red-400">
+             R$ {Number(i.valor||0).toFixed(2)}
+            </td>
+
+            <td className="p-4">
+             <div className="flex justify-end gap-1">
+
+              <Button
+               variant="ghost"
+               size="icon"
+               onClick={()=>openDialog(i)}
+               className="text-[hsl(var(--neon-igreja))]"
+              >
+               <Edit className="h-4 w-4"/>
+              </Button>
+
+              <Button
+               variant="ghost"
+               size="icon"
+               onClick={()=>setDeleteItem(i)}
+               className="text-red-400"
+              >
+               <Trash2 className="h-4 w-4"/>
+              </Button>
+
+             </div>
+            </td>
+           </tr>
+          ))
+         :
+          <tr>
+           <td colSpan={4} className="p-12 text-center text-muted-foreground">
+            <DollarSign className="mx-auto mb-3 h-10 w-10 opacity-40"/>
+            Nenhum lançamento encontrado.
            </td>
           </tr>
-         )):
-         <tr><td colSpan={4} className="p-12 text-center text-muted-foreground"><DollarSign className="mx-auto mb-3 h-10 w-10 opacity-40"/>Nenhum lançamento encontrado.</td></tr>}
+        }
        </tbody>
+
       </table>
      </div>
     </CardContent>
@@ -198,13 +361,27 @@ const LancamentoDespesas=()=>{
    <SearchableModal
     isOpen={searchOpen}
     onClose={()=>setSearchOpen(false)}
-    onSelect={i=>{openDialog(i);setSearchOpen(false)}}
+    onSelect={i=>{
+     openDialog(i);
+     setSearchOpen(false);
+    }}
     tableName="igreja_despesas"
     searchField="despesa"
     displayFields={[
-     {key:'data',label:'Data',format:d=>new Date(d).toLocaleDateString('pt-BR',{timeZone:'UTC'})},
-     {key:'despesa',label:'Tipo'},
-     {key:'valor',label:'Valor',format:v=>`R$ ${Number(v).toFixed(2)}`}
+     {
+      key:'data',
+      label:'Data',
+      format:d=>new Date(d).toLocaleDateString('pt-BR',{timeZone:'UTC'})
+     },
+     {
+      key:'despesa',
+      label:'Tipo'
+     },
+     {
+      key:'valor',
+      label:'Valor',
+      format:v=>`R$ ${Number(v).toFixed(2)}`
+     }
     ]}
     title="Buscar Despesa"
    />
@@ -216,34 +393,106 @@ const LancamentoDespesas=()=>{
     description="Preencha os dados da despesa."
     icon={current?Edit:DollarSign}
     theme="red"
-    footer={<><Button variant="outline" onClick={close}>Cancelar</Button><Button onClick={save} className="bg-[hsl(var(--neon-igreja))] text-[hsl(var(--background))]">Salvar</Button></>}
+    footer={
+     <>
+      <Button variant="outline" onClick={close}>
+       Cancelar
+      </Button>
+
+      <Button
+       onClick={save}
+       className="bg-[hsl(var(--neon-igreja))] text-[hsl(var(--background))]"
+      >
+       Salvar
+      </Button>
+     </>
+    }
    >
+
     <div className="space-y-5">
+
      <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-2"><Label>Data</Label><Input type="date" value={form.data} onChange={e=>setForm({...form,data:e.target.value})} className="bg-input"/></div>
-      <div className="space-y-2"><Label>Valor</Label><Input type="number" value={form.valor} onChange={e=>setForm({...form,valor:e.target.value})} className="bg-input"/></div>
+
+      <div className="space-y-2">
+       <Label>Data</Label>
+       <Input
+        type="date"
+        value={form.data}
+        onChange={e=>setForm({...form,data:e.target.value})}
+        className="bg-input"
+       />
+      </div>
+
+      <div className="space-y-2">
+       <Label>Valor</Label>
+       <Input
+        type="number"
+        value={form.valor}
+        onChange={e=>setForm({...form,valor:e.target.value})}
+        className="bg-input"
+       />
+      </div>
+
      </div>
 
      <div className="space-y-2">
       <Label>Tipo de Despesa</Label>
-      <Select value={form.despesa} onValueChange=v=>setForm({...form,despesa:v})>
-       <SelectTrigger className="bg-input"><SelectValue placeholder="Selecione"/></SelectTrigger>
+
+      <Select
+       value={form.despesa}
+       onValueChange={v=>setForm({...form,despesa:v})}
+      >
+       <SelectTrigger className="bg-input">
+        <SelectValue placeholder="Selecione"/>
+       </SelectTrigger>
+
        <SelectContent className="dark-igreja bg-card igreja-select-hover">
         <ScrollArea className="h-48">
-         {[...tipos].sort((a,b)=>a.despesa.localeCompare(b.despesa,'pt-BR')).map(t=><SelectItem key={t.id} value={t.despesa}>{t.despesa}</SelectItem>)}
+         {[...tipos]
+          .sort((a,b)=>a.despesa.localeCompare(b.despesa,'pt-BR'))
+          .map(t=>
+           <SelectItem key={t.id} value={t.despesa}>
+            {t.despesa}
+           </SelectItem>
+          )}
         </ScrollArea>
        </SelectContent>
+
       </Select>
      </div>
+
     </div>
+
    </ModalLancamentoPadrao>
 
-   <AlertDialog open={!!deleteItem} onOpenChange={()=>setDeleteItem(null)}>
+   <AlertDialog
+    open={!!deleteItem}
+    onOpenChange={()=>setDeleteItem(null)}
+   >
     <AlertDialogContent className="dark-igreja">
-     <AlertDialogHeader><AlertDialogTitle>Excluir despesa?</AlertDialogTitle></AlertDialogHeader>
-     <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={remove} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter>
+
+     <AlertDialogHeader>
+      <AlertDialogTitle>
+       Excluir despesa?
+      </AlertDialogTitle>
+     </AlertDialogHeader>
+
+     <AlertDialogFooter>
+      <AlertDialogCancel>
+       Cancelar
+      </AlertDialogCancel>
+
+      <AlertDialogAction
+       onClick={remove}
+       className="bg-red-600"
+      >
+       Excluir
+      </AlertDialogAction>
+     </AlertDialogFooter>
+
     </AlertDialogContent>
    </AlertDialog>
+
   </div>
  );
 };
