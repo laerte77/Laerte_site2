@@ -15,7 +15,7 @@ import{Badge}from'@/components/ui/badge';
 import{format,isSameMonth,parseISO}from'date-fns';
 import{normalizeString}from'@/lib/gastoRealUtils';
 import{exportToExcel}from'@/lib/ExportUtils';
-import ModalLancamentoPadrao from'@/components/pessoal/ModalLancamentoPadrao';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const TZ='America/Sao_Paulo',RED='hsl(0 84% 60%)';
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
