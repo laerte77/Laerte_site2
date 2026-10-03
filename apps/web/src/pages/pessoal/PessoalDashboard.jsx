@@ -120,8 +120,7 @@ const PessoalDashboard=()=>{
       <Route path="lancamentos/cartao-lancamentos" element={<CartaoLancamentos/>}/>
       <Route path="lancamentos/devedores" element={<LancamentoDevedores/>}/>
       <Route path="lancamentos/dizimos-e-ofertas" element={<LancamentoDizimosOfertas/>}/>
-      <Route path="lancamentos/leitura" element={<Leitura/>}/>
-
+      <Route path="leitura" element={<Leitura/>}/>
       <Route path="investimentos/aportes" element={<Aportes/>}/>
       <Route path="investimentos/rendimentos" element={<Rendimentos/>}/>
 
