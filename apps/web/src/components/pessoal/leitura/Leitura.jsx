@@ -13,7 +13,7 @@ import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertD
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import SearchableModal from'@/components/SearchableModal';
-import ModalLancamentoPadrao from'@/components/pessoal/ModalLancamentoPadrao';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 import{exportToExcel}from'@/lib/ExportUtils';
 
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
