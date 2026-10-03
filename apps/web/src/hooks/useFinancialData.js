@@ -3,6 +3,9 @@ import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{startOfMonth,endOfMonth,startOfWeek,endOfWeek}from'date-fns';
 
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
+
 export function useFinancialData(periodFilter){
  const{user,isAdmin}=useAuth();
  const[data,setData]=useState({
@@ -60,54 +63,13 @@ export function useFinancialData(periodFilter){
     aportesRes,
     dizimosRes
    ]=await Promise.all([
-    supabase
-     .from('receitas')
-     .select('valor')
-     .eq('user_id',userIdToFetch)
-     .gte('data',startDate)
-     .lte('data',endDate),
-
-    supabase
-     .from('despesas')
-     .select('valor')
-     .eq('user_id',userIdToFetch)
-     .gte('data',startDate)
-     .lte('data',endDate),
-
-    supabase
-     .from('despesas_previstas')
-     .select('valor')
-     .eq('user_id',userIdToFetch)
-     .gte('data_vencimento',startDate)
-     .lte('data_vencimento',endDate),
-
-    supabase
-     .from('pessoal_orcamento_salario_previsto')
-     .select('salario_previsto')
-     .eq('user_id',userIdToFetch)
-     .eq('mes',month)
-     .eq('ano',year)
-     .maybeSingle(),
-
-    supabase
-     .from('pessoal_orcamento_distribuicao')
-     .select('percent_investimento,percent_gasto')
-     .eq('user_id',userIdToFetch)
-     .maybeSingle(),
-
-    supabase
-     .from('aportes')
-     .select('valor')
-     .eq('user_id',userIdToFetch)
-     .gte('data',startDate)
-     .lte('data',endDate),
-
-    supabase
-     .from('pessoal_dizimos_ofertas')
-     .select('valor')
-     .eq('user_id',userIdToFetch)
-     .gte('data',startDate)
-     .lte('data',endDate)
+    supabase.from('receitas').select('valor').eq('user_id',userIdToFetch).gte('data',startDate).lte('data',endDate),
+    supabase.from('despesas').select('valor').eq('user_id',userIdToFetch).gte('data',startDate).lte('data',endDate),
+    supabase.from('despesas_previstas').select('valor').eq('user_id',userIdToFetch).gte('data_vencimento',startDate).lte('data_vencimento',endDate),
+    supabase.from('pessoal_orcamento_salario_previsto').select('salario_previsto').eq('user_id',userIdToFetch).eq('mes',month).eq('ano',year).maybeSingle(),
+    supabase.from('pessoal_orcamento_distribuicao').select('percent_investimento,percent_gasto').eq('user_id',userIdToFetch).maybeSingle(),
+    supabase.from('aportes').select('valor').eq('user_id',userIdToFetch).gte('data',startDate).lte('data',endDate),
+    supabase.from('pessoal_dizimos_ofertas').select('valor').eq('user_id',userIdToFetch).gte('data',startDate).lte('data',endDate)
    ]);
 
    const results=[
@@ -118,20 +80,22 @@ export function useFinancialData(periodFilter){
    const firstError=results.find(r=>r.error)?.error;
    if(firstError)throw firstError;
 
-   const sum=items=>
-    (items||[]).reduce((total,item)=>total+Number(item.valor||0),0);
+   const sumCents=items=>
+    (items||[]).reduce((total,item)=>total+toCents(item?.valor),0);
+
+   const entradasPrevistasC=toCents(entradasPrevRes.data?.salario_previsto);
 
    setData({
-    entradasReais:sum(receitasRes.data),
-    entradasPrevistas:Number(entradasPrevRes.data?.salario_previsto||0),
-    despesasReais:sum(despesasRes.data),
-    despesasPrevistas:sum(despesasPrevRes.data),
-    aportesReais:sum(aportesRes.data),
-    dizimosReais:sum(dizimosRes.data),
+    entradasReais:fromCents(sumCents(receitasRes.data)),
+    entradasPrevistas:fromCents(entradasPrevistasC),
+    despesasReais:fromCents(sumCents(despesasRes.data)),
+    despesasPrevistas:fromCents(sumCents(despesasPrevRes.data)),
+    aportesReais:fromCents(sumCents(aportesRes.data)),
+    dizimosReais:fromCents(sumCents(dizimosRes.data)),
     distribuicao:distribuicaoRes.data
      ?{
-       investimento:Number(distribuicaoRes.data.percent_investimento),
-       gasto:Number(distribuicaoRes.data.percent_gasto)
+       investimento:Number(distribuicaoRes.data.percent_investimento)||0,
+       gasto:Number(distribuicaoRes.data.percent_gasto)||0
       }
      :{investimento:60,gasto:40}
    });
