@@ -11,10 +11,14 @@ import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{exportToExcel}from'@/lib/ExportUtils';
 
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
 const money=v=>new Intl.NumberFormat('pt-BR',{
  style:'currency',
- currency:'BRL'
-}).format(Number(v||0));
+ currency:'BRL',
+ minimumFractionDigits:2,
+ maximumFractionDigits:2
+}).format(fromCents(toCents(v)));
 
 const dateBR=v=>{
  if(!v)return'—';
@@ -58,10 +62,16 @@ const StatCard=({label,value,icon:Icon,type='blue',note})=>{
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
        {label}
       </p>
+
       <p className={`mt-1 truncate text-xl font-bold ${s.text}`}>
        {value}
       </p>
-      {note&&<p className="mt-1 text-xs text-muted-foreground">{note}</p>}
+
+      {note&&(
+       <p className="mt-1 text-xs text-muted-foreground">
+        {note}
+       </p>
+      )}
      </div>
     </div>
    </CardContent>
@@ -75,6 +85,7 @@ const RelatorioDevedores=()=>{
 
  const[devedores,setDevedores]=useState([]);
  const[loading,setLoading]=useState(true);
+
  const[filters,setFilters]=useState({
   dataInicio:'',
   dataFim:'',
@@ -150,23 +161,30 @@ const RelatorioDevedores=()=>{
    );
  },[devedores,filters]);
 
- const totalReceber=useMemo(
+ const totalReceberCents=useMemo(
   ()=>filteredDevedores
    .filter(d=>d.status!=='PAGO')
-   .reduce((sum,d)=>sum+Number(d.valor||0),0),
+   .reduce(
+    (sum,d)=>sum+toCents(d.valor),
+    0
+   ),
   [filteredDevedores]
  );
 
- const totalPago=useMemo(
+ const totalPagoCents=useMemo(
   ()=>filteredDevedores
    .filter(d=>d.status==='PAGO')
-   .reduce((sum,d)=>sum+Number(d.valor||0),0),
+   .reduce(
+    (sum,d)=>sum+toCents(d.valor),
+    0
+   ),
   [filteredDevedores]
  );
 
- const totalGeral=useMemo(
+ const totalGeralCents=useMemo(
   ()=>filteredDevedores.reduce(
-   (sum,d)=>sum+Number(d.valor||0),0
+   (sum,d)=>sum+toCents(d.valor),
+   0
   ),
   [filteredDevedores]
  );
@@ -233,7 +251,7 @@ const RelatorioDevedores=()=>{
      ?'-'
      :calculateDaysRemaining(d.data_vencimento),
     Status:d.status||'PENDENTE',
-    Valor:Number(d.valor||0)
+    Valor:fromCents(toCents(d.valor))
    })),
    'Relatorio_Devedores',
    'Devedores'
@@ -297,6 +315,7 @@ const RelatorioDevedores=()=>{
 
      <div className="space-y-2">
       <Label className="text-xs">Data inicial</Label>
+
       <Input
        type="date"
        value={filters.dataInicio}
@@ -310,6 +329,7 @@ const RelatorioDevedores=()=>{
 
      <div className="space-y-2">
       <Label className="text-xs">Data final</Label>
+
       <Input
        type="date"
        value={filters.dataFim}
@@ -354,21 +374,21 @@ const RelatorioDevedores=()=>{
    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
     <StatCard
      label="Total a Receber"
-     value={money(totalReceber)}
+     value={money(fromCents(totalReceberCents))}
      icon={WalletCards}
      type="blue"
     />
 
     <StatCard
      label="Total Recebido"
-     value={money(totalPago)}
+     value={money(fromCents(totalPagoCents))}
      icon={CheckCircle}
      type="green"
     />
 
     <StatCard
      label="Total Geral"
-     value={money(totalGeral)}
+     value={money(fromCents(totalGeralCents))}
      icon={Users}
      type="blue"
     />
