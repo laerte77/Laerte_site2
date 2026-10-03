@@ -17,25 +17,19 @@ import{useToast}from'@/components/ui/use-toast';
 import{pertenceCompetencia}from'@/lib/cartaoCompetencia';
 import{getInstallmentValue}from'@/lib/cartaoParcelas';
 import{exportToExcel}from'@/lib/ExportUtils';
-import ModalLancamentoPadrao from'../ModalLancamentoPadrao';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const TZ='America/Sao_Paulo';
 const RED='hsl(0 84% 60%)';
 
-const toCents=v=>
- Math.round((Number(v)||0)*100);
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
+const roundMoney=v=>fromCents(toCents(v));
 
-const fromCents=v=>
- (Number(v)||0)/100;
-
-const roundMoney=v=>
- fromCents(toCents(v));
-
-const moeda=v=>
- new Intl.NumberFormat('pt-BR',{
-  style:'currency',
-  currency:'BRL'
- }).format(roundMoney(v));
+const moeda=v=>new Intl.NumberFormat('pt-BR',{
+ style:'currency',
+ currency:'BRL'
+}).format(roundMoney(v));
 
 const getBRDate=()=>{
  const p=new Intl.DateTimeFormat('en-CA',{
@@ -199,8 +193,7 @@ const CartaoLancamentos=()=>{
     :q.eq('responsavel_id',selectedResponsavel);
   }
 
-  const{data,error}=await q
-   .order('data',{ascending:false});
+  const{data,error}=await q.order('data',{ascending:false});
 
   if(!mounted.current)return;
 
@@ -564,9 +557,7 @@ const CartaoLancamentos=()=>{
    filtered.map(item=>({
     Cartão:cartaoNome(item.cartao_id),
     Descrição:item.descricao,
-    Responsável:responsavelNome(
-     item.responsavel_id
-    ),
+    Responsável:responsavelNome(item.responsavel_id),
     Categoria:item.categoria||'',
     Data:format(
      parse(
@@ -577,8 +568,7 @@ const CartaoLancamentos=()=>{
      'dd/MM/yyyy',
      {locale:ptBR}
     ),
-    Parcela:
-     `${item.parcela_atual}/${item.parcelas}`,
+    Parcela:`${item.parcela_atual}/${item.parcelas}`,
     Valor:roundMoney(
      getInstallmentValue(
       item.valor,
@@ -596,12 +586,8 @@ const CartaoLancamentos=()=>{
   setSearchTerm('');
   setSelectedCartao('todos');
   setSelectedResponsavel('todos');
-  setSelectedMonth(
-   String(new Date().getMonth())
-  );
-  setSelectedYear(
-   String(new Date().getFullYear())
-  );
+  setSelectedMonth(String(new Date().getMonth()));
+  setSelectedYear(String(new Date().getFullYear()));
  };
 
  const statCards=[
@@ -684,14 +670,9 @@ const CartaoLancamentos=()=>{
    )}
 
    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-
     {statCards.map(({label,value,icon:Icon})=>(
-     <Card
-      key={label}
-      className="border-border bg-card"
-     >
+     <Card key={label} className="border-border bg-card">
       <CardContent className="flex items-center justify-between p-4">
-
        <div>
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
          {label}
@@ -705,21 +686,16 @@ const CartaoLancamentos=()=>{
        <div className="rounded-xl bg-red-500/10 p-2.5 text-red-500">
         <Icon className="h-5 w-5"/>
        </div>
-
       </CardContent>
      </Card>
     ))}
-
    </div>
 
    <Card className="border-border bg-card">
-
     <CardContent className="p-4">
-
      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
 
       <div className="relative min-w-0 flex-1">
-
        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
 
        <Input
@@ -728,11 +704,9 @@ const CartaoLancamentos=()=>{
         onChange={e=>setSearchTerm(e.target.value)}
         className="h-10 bg-input pl-9"
        />
-
       </div>
 
       <div className="flex flex-wrap gap-2">
-
        <Select
         value={selectedCartao}
         onValueChange={setSelectedCartao}
@@ -747,14 +721,10 @@ const CartaoLancamentos=()=>{
          </SelectItem>
 
          {cartoes.map(c=>(
-          <SelectItem
-           key={c.id}
-           value={c.id}
-          >
+          <SelectItem key={c.id} value={c.id}>
            {c.nome}
           </SelectItem>
          ))}
-
         </SelectContent>
        </Select>
 
@@ -767,7 +737,6 @@ const CartaoLancamentos=()=>{
         </SelectTrigger>
 
         <SelectContent className="dark-pessoal bg-card">
-
          <SelectItem value="todos">
           Todas as pessoas
          </SelectItem>
@@ -777,14 +746,10 @@ const CartaoLancamentos=()=>{
          </SelectItem>
 
          {usuarios.map(u=>(
-          <SelectItem
-           key={u.id}
-           value={u.id}
-          >
+          <SelectItem key={u.id} value={u.id}>
            {u.nome}
           </SelectItem>
          ))}
-
         </SelectContent>
        </Select>
 
@@ -797,14 +762,10 @@ const CartaoLancamentos=()=>{
         </SelectTrigger>
 
         <SelectContent className="dark-pessoal bg-card">
-
          {Array.from(
           {length:12},
           (_,i)=>(
-           <SelectItem
-            key={i}
-            value={String(i)}
-           >
+           <SelectItem key={i} value={String(i)}>
             {format(
              new Date(2024,i,1),
              'MMMM',
@@ -813,7 +774,6 @@ const CartaoLancamentos=()=>{
            </SelectItem>
           )
          )}
-
         </SelectContent>
        </Select>
 
@@ -826,23 +786,18 @@ const CartaoLancamentos=()=>{
         </SelectTrigger>
 
         <SelectContent className="dark-pessoal bg-card">
-
          {Array.from(
           {length:4},
           (_,i)=>{
            const y=anoAtual-2+i;
 
            return(
-            <SelectItem
-             key={y}
-             value={String(y)}
-            >
+            <SelectItem key={y} value={String(y)}>
              {y}
             </SelectItem>
            );
           }
          )}
-
         </SelectContent>
        </Select>
 
@@ -854,22 +809,15 @@ const CartaoLancamentos=()=>{
         <RotateCcw className="mr-2 h-4 w-4"/>
         Limpar
        </Button>
-
       </div>
-
      </div>
-
     </CardContent>
    </Card>
 
    <ModalLancamentoPadrao
     open={isModalOpen}
     onClose={closeModal}
-    title={
-     editingId
-      ?'Editar Lançamento'
-      :'Novo Lançamento'
-    }
+    title={editingId?'Editar Lançamento':'Novo Lançamento'}
     description={
      editingId
       ?'Atualize os dados da compra.'
@@ -897,104 +845,78 @@ const CartaoLancamentos=()=>{
         boxShadow:'0 0 18px hsl(0 84% 60% / .22)'
        }}
       >
-       {editingId
-        ?'Salvar Alterações'
-        :'Salvar Lançamento'}
+       {editingId?'Salvar Alterações':'Salvar Lançamento'}
       </Button>
      </>
     }
    >
-
     <form
      id="form-lancamento-cartao"
      onSubmit={handleSubmit}
      className="max-h-[calc(100vh-300px)] overflow-y-auto pr-1"
     >
-
      <div className="space-y-5">
 
       <div className="space-y-2">
-
        <Label>Cartão</Label>
 
        <Select
         value={formData.cartao_id}
-        onValueChange={v=>
-         setFormData(p=>({
-          ...p,
-          cartao_id:v
-         }))
-        }
+        onValueChange={v=>setFormData(p=>({
+         ...p,
+         cartao_id:v
+        }))}
        >
         <SelectTrigger className="h-11 rounded-xl bg-input">
          <SelectValue placeholder="Selecione o cartão"/>
         </SelectTrigger>
 
         <SelectContent className="dark-pessoal rounded-xl bg-card">
-
          {cartoes.map(c=>(
-          <SelectItem
-           key={c.id}
-           value={c.id}
-          >
+          <SelectItem key={c.id} value={c.id}>
            {c.nome}
           </SelectItem>
          ))}
-
         </SelectContent>
        </Select>
-
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
        <div className="space-y-2">
-
         <Label>Data</Label>
 
         <Input
          type="date"
          value={formData.data}
-         onChange={e=>
-          setFormData(p=>({
-           ...p,
-           data:e.target.value
-          }))
-         }
+         onChange={e=>setFormData(p=>({
+          ...p,
+          data:e.target.value
+         }))}
          required
          className="h-11 rounded-xl bg-input"
         />
-
        </div>
 
        <div className="space-y-2">
-
         <Label>Valor</Label>
 
         <Input
          type="text"
          inputMode="numeric"
          value={formData.valor}
-         onChange={e=>
-          setFormData(p=>({
-           ...p,
-           valor:money(e.target.value)
-          }))
-         }
+         onChange={e=>setFormData(p=>({
+          ...p,
+          valor:money(e.target.value)
+         }))}
          placeholder="R$ 0,00"
          required
          className="h-11 rounded-xl bg-input font-semibold tabular-nums"
         />
-
        </div>
-
       </div>
 
       <div className="space-y-2">
-
-       <Label>
-        Descrição (Tipo de Despesa)
-       </Label>
+       <Label>Descrição (Tipo de Despesa)</Label>
 
        {tiposDespesa.length===0?(
         <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm italic text-amber-400">
@@ -1020,9 +942,7 @@ const CartaoLancamentos=()=>{
          </SelectTrigger>
 
          <SelectContent className="dark-pessoal rounded-xl bg-card">
-
           <ScrollArea className="h-48">
-
            {tiposDespesa.map(t=>(
             <SelectItem
              key={t.nome_despesa}
@@ -1031,20 +951,14 @@ const CartaoLancamentos=()=>{
              {t.nome_despesa}
             </SelectItem>
            ))}
-
           </ScrollArea>
-
          </SelectContent>
         </Select>
        )}
-
       </div>
 
       <div className="space-y-2">
-
-       <Label>
-        Responsável pela Compra
-       </Label>
+       <Label>Responsável pela Compra</Label>
 
        {usuarios.length===0?(
         <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-sm italic text-amber-400">
@@ -1053,117 +967,85 @@ const CartaoLancamentos=()=>{
        ):(
         <Select
          value={formData.responsavel_id||'nenhum'}
-         onValueChange={v=>
-          setFormData(p=>({
-           ...p,
-           responsavel_id:
-            v==='nenhum'?'':v
-          }))
-         }
+         onValueChange={v=>setFormData(p=>({
+          ...p,
+          responsavel_id:v==='nenhum'?'':v
+         }))}
         >
          <SelectTrigger className="h-11 rounded-xl bg-input">
           <SelectValue placeholder="Selecione o responsável"/>
          </SelectTrigger>
 
          <SelectContent className="dark-pessoal bg-card">
-
           <SelectItem value="nenhum">
            — Sem responsável —
           </SelectItem>
 
           {usuarios.map(u=>(
-           <SelectItem
-            key={u.id}
-            value={u.id}
-           >
+           <SelectItem key={u.id} value={u.id}>
             {u.nome}
            </SelectItem>
           ))}
-
          </SelectContent>
         </Select>
        )}
-
       </div>
 
       <div className="space-y-2">
-
        <Label>Categoria</Label>
 
        <Input
         value={formData.categoria}
-        onChange={e=>
-         setFormData(p=>({
-          ...p,
-          categoria:e.target.value
-         }))
-        }
+        onChange={e=>setFormData(p=>({
+         ...p,
+         categoria:e.target.value
+        }))}
         placeholder="Ex: Alimentação"
         className="h-11 rounded-xl bg-input"
        />
-
       </div>
 
       <div className="space-y-2">
-
        <Label>Parcelas</Label>
 
        <Input
         type="number"
         min="1"
         value={formData.parcelas}
-        onChange={e=>
-         setFormData(p=>({
-          ...p,
-          parcelas:e.target.value
-         }))
-        }
+        onChange={e=>setFormData(p=>({
+         ...p,
+         parcelas:e.target.value
+        }))}
         className="h-11 rounded-xl bg-input"
        />
 
        <p className="text-xs text-muted-foreground">
         A compra será dividida em parcelas mensais e cada parcela cairá na fatura correspondente.
        </p>
-
       </div>
 
      </div>
-
     </form>
-
    </ModalLancamentoPadrao>
 
    <Card className="border-border bg-card">
-
     <CardContent className="p-0">
-
      <ScrollArea className="h-[500px]">
-
       <Table>
-
        <TableHeader>
-
         <TableRow>
-
          <TableHead>Cartão</TableHead>
          <TableHead>Descrição</TableHead>
          <TableHead>Responsável</TableHead>
          <TableHead>Categoria</TableHead>
          <TableHead>Data</TableHead>
          <TableHead>Parcelas</TableHead>
-         <TableHead className="text-right">
-          Valor
-         </TableHead>
-         <TableHead className="text-center">
-          Ações
-         </TableHead>
-
+         <TableHead className="text-right">Valor</TableHead>
+         <TableHead className="text-center">Ações</TableHead>
         </TableRow>
-
        </TableHeader>
 
        <TableBody>
-
         {loading?(
          <TableRow>
           <TableCell
@@ -1175,10 +1057,7 @@ const CartaoLancamentos=()=>{
          </TableRow>
         ):paginated.length===0?(
          <TableRow>
-          <TableCell
-           colSpan={8}
-           className="py-12 text-center"
-          >
+          <TableCell colSpan={8} className="py-12 text-center">
            <div className="flex flex-col items-center gap-2 text-muted-foreground">
             <CreditCard className="h-8 w-8 opacity-40"/>
             <span>Nenhum lançamento encontrado.</span>
@@ -1191,7 +1070,6 @@ const CartaoLancamentos=()=>{
            key={item.id}
            className="transition-colors hover:bg-muted/40"
           >
-
            <TableCell className="p-4 text-sm font-medium">
             {cartaoNome(item.cartao_id)}
            </TableCell>
@@ -1203,7 +1081,6 @@ const CartaoLancamentos=()=>{
            </TableCell>
 
            <TableCell className="p-4">
-
             {item.responsavel_id?(
              <Badge
               variant="outline"
@@ -1216,11 +1093,9 @@ const CartaoLancamentos=()=>{
               —
              </span>
             )}
-
            </TableCell>
 
            <TableCell className="p-4">
-
             {item.categoria?(
              <Badge
               variant="outline"
@@ -1233,7 +1108,6 @@ const CartaoLancamentos=()=>{
               —
              </span>
             )}
-
            </TableCell>
 
            <TableCell className="p-4 text-sm text-muted-foreground">
@@ -1263,9 +1137,7 @@ const CartaoLancamentos=()=>{
            </TableCell>
 
            <TableCell className="p-4">
-
             <div className="flex justify-center gap-1">
-
              <Button
               variant="ghost"
               size="icon"
@@ -1283,39 +1155,29 @@ const CartaoLancamentos=()=>{
              >
               <Trash2 className="h-4 w-4"/>
              </Button>
-
             </div>
-
            </TableCell>
-
           </TableRow>
          ))
         )}
-
        </TableBody>
-
       </Table>
-
      </ScrollArea>
 
      {!loading&&filtered.length>0&&(
       <div className="flex flex-col gap-2 border-t border-border px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-
        <span>
-        Mostrando {((currentPage-1)*pageSize)+1}–{Math.min(currentPage*pageSize,filtered.length)} de {filtered.length}
+        Mostrando {((currentPage-1)*pageSize)+1}–
+        {Math.min(currentPage*pageSize,filtered.length)}
+        {' '}de {filtered.length}
        </span>
 
        <div className="flex items-center gap-1">
-
         <Button
          variant="outline"
          size="sm"
          disabled={currentPage===1}
-         onClick={()=>
-          setCurrentPage(
-           p=>Math.max(1,p-1)
-          )
-         }
+         onClick={()=>setCurrentPage(p=>Math.max(1,p-1))}
          className="h-8"
         >
          Anterior
@@ -1329,21 +1191,14 @@ const CartaoLancamentos=()=>{
          variant="outline"
          size="sm"
          disabled={currentPage===totalPages}
-         onClick={()=>
-          setCurrentPage(
-           p=>Math.min(totalPages,p+1)
-          )
-         }
+         onClick={()=>setCurrentPage(p=>Math.min(totalPages,p+1))}
          className="h-8"
         >
          Próxima
         </Button>
-
        </div>
-
       </div>
      )}
-
     </CardContent>
    </Card>
 
