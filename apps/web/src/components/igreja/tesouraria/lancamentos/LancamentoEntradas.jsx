@@ -265,7 +265,7 @@ const LancamentoEntradas=()=>{
 
      {form.tipo_entrada==='DÍZIMO'&&<div className="space-y-2">
       <Label>Dizimista</Label>
-      <Select value={form.dizimista_id} onValueChange=v=>setForm({...form,dizimista_id:v})>
+      <Select value={form.dizimista_id} onValueChange={v=>setForm({...form,dizimista_id:v})}>
        <SelectTrigger className="bg-input"><SelectValue placeholder="Selecione"/></SelectTrigger>
        <SelectContent className="dark-igreja bg-card igreja-select-hover"><ScrollArea className="h-48">{[...dizimistas].sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR')).map(d=><SelectItem key={d.id} value={String(d.id)}>{d.nome}</SelectItem>)}</ScrollArea></SelectContent>
       </Select>
@@ -273,7 +273,7 @@ const LancamentoEntradas=()=>{
 
      <div className="space-y-2">
       <Label>Conferente</Label>
-      <Select value={form.conferente} onValueChange=v=>setForm({...form,conferente:v})>
+      <Select value={form.conferente} onValueChange={v=>setForm({...form,conferente:v})}>
        <SelectTrigger className="bg-input"><SelectValue placeholder="Selecione"/></SelectTrigger>
        <SelectContent className="dark-igreja bg-card igreja-select-hover">
         <SelectItem value="Laerte">Laerte</SelectItem>
