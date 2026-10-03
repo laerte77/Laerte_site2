@@ -19,10 +19,14 @@ import{exportToExcel}from'@/lib/ExportUtils';
 const MONTHS=Array.from({length:12},(_,i)=>i);
 const YEARS=[2024,2025,2026];
 
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
 const money=v=>new Intl.NumberFormat('pt-BR',{
  style:'currency',
- currency:'BRL'
-}).format(Number(v||0));
+ currency:'BRL',
+ minimumFractionDigits:2,
+ maximumFractionDigits:2
+}).format(fromCents(v));
 
 const STATUS_STYLE={
  Paga:'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
@@ -38,7 +42,6 @@ const StatusBadge=({status})=>{
   Atrasada:{icon:AlertCircle,label:'Atrasada'},
   Pendente:{icon:Clock,label:'Pendente'}
  };
-
  const item=config[status]||config.Pendente;
  const Icon=item.icon;
 
@@ -68,7 +71,6 @@ const StatCard=({label,value,icon:Icon,type='red',note})=>{
    text:'text-emerald-400'
   }
  };
-
  const s=styles[type];
 
  return(
@@ -78,7 +80,6 @@ const StatCard=({label,value,icon:Icon,type='red',note})=>{
      <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${s.icon}`}>
       <Icon className={`h-5 w-5 ${s.text}`}/>
      </div>
-
      <div className="min-w-0">
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className={`mt-1 truncate text-xl font-bold ${s.text}`}>{value}</p>
@@ -137,16 +138,17 @@ const RelatorioDespesasPrevistas=()=>{
 
    const processed=(plannedRes.data||[]).map(item=>{
     const matched=findMatchingExpense(actualRes.data||[],item);
-    const gastoReal=matched?Number(matched.valor||0):0;
+    const previstoC=toCents(item.valor);
+    const gastoRealC=matched?toCents(matched.valor):0;
     const status=item.status||calculateStatus(
      item.data_vencimento,
-     gastoReal,
-     item.valor
+     fromCents(gastoRealC),
+     fromCents(previstoC)
     );
 
     return{
      ...item,
-     gastoReal,
+     gastoReal:fromCents(gastoRealC),
      status,
      matchedId:matched?.id
     };
@@ -154,7 +156,7 @@ const RelatorioDespesasPrevistas=()=>{
 
    const grouped=processed.reduce((acc,item)=>{
     const categoria=item.categoria||'Sem Categoria';
-    acc[categoria]=(acc[categoria]||0)+Number(item.valor||0);
+    acc[categoria]=(acc[categoria]||0)+toCents(item.valor);
     return acc;
    },{});
 
@@ -183,12 +185,12 @@ const RelatorioDespesasPrevistas=()=>{
  },[fetchRelatorio]);
 
  const totalPrevisto=useMemo(
-  ()=>detailedItems.reduce((sum,item)=>sum+Number(item.valor||0),0),
+  ()=>detailedItems.reduce((sum,item)=>sum+toCents(item.valor),0),
   [detailedItems]
  );
 
  const totalRealizado=useMemo(
-  ()=>detailedItems.reduce((sum,item)=>sum+Number(item.gastoReal||0),0),
+  ()=>detailedItems.reduce((sum,item)=>sum+toCents(item.gastoReal),0),
   [detailedItems]
  );
 
@@ -213,8 +215,8 @@ const RelatorioDespesasPrevistas=()=>{
     Vencimento:format(parseISO(item.data_vencimento),'dd/MM/yyyy'),
     Descrição:item.descricao||'-',
     Categoria:item.categoria||'-',
-    Previsto:Number(item.valor||0),
-    Pago:Number(item.gastoReal||0),
+    Previsto:fromCents(toCents(item.valor)),
+    Pago:fromCents(toCents(item.gastoReal)),
     Status:item.status||'Pendente'
    })),
    `Despesas_Previstas_${selectedYear}_${String(Number(selectedMonth)+1).padStart(2,'0')}`,
@@ -362,7 +364,11 @@ const RelatorioDespesasPrevistas=()=>{
        Distribuição por Categoria
       </CardTitle>
       <CardDescription>
-       Valores previstos em {format(new Date(Number(selectedYear),Number(selectedMonth),1),'MMMM',{locale:ptBR})}.
+       Valores previstos em {format(
+        new Date(Number(selectedYear),Number(selectedMonth),1),
+        'MMMM',
+        {locale:ptBR}
+       )}.
       </CardDescription>
      </CardHeader>
 
@@ -382,14 +388,11 @@ const RelatorioDespesasPrevistas=()=>{
          layout="vertical"
          margin={{top:5,right:20,left:20,bottom:5}}
         >
-         <CartesianGrid
-          strokeDasharray="3 3"
-          horizontal={false}
-         />
+         <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
 
          <XAxis
           type="number"
-          tickFormatter={value=>`R$${value}`}
+          tickFormatter={value=>`R$${fromCents(value).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0})}`}
          />
 
          <YAxis
@@ -505,11 +508,11 @@ const RelatorioDespesasPrevistas=()=>{
            </TableCell>
 
            <TableCell className="text-right font-semibold text-red-400">
-            {money(item.valor)}
+            {money(toCents(item.valor))}
            </TableCell>
 
            <TableCell className="text-right font-semibold text-emerald-400">
-            {item.gastoReal>0?money(item.gastoReal):'—'}
+            {item.gastoReal>0?money(toCents(item.gastoReal)):'—'}
            </TableCell>
 
            <TableCell className="text-center">
@@ -542,7 +545,6 @@ const RelatorioDespesasPrevistas=()=>{
     expense={selectedExpense}
     onUpdateSuccess={()=>fetchRelatorio(true)}
    />
-
   </div>
  );
 };
