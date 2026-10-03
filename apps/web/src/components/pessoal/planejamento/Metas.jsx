@@ -10,7 +10,7 @@ import{useToast}from'@/components/ui/use-toast';
 import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle}from'@/components/ui/alert-dialog';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
-import ModalLancamentoPadrao from'@/components/pessoal/ModalLancamentoPadrao';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 import{exportToExcel}from'@/lib/ExportUtils';
 
 const BLUE='hsl(var(--neon-pessoal))';
