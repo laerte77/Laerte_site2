@@ -1,128 +1,300 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Edit, Trash, Users } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
+import React,{useCallback,useEffect,useState}from'react';
+import{Plus,Edit,Trash2,Users,RefreshCw,Search}from'lucide-react';
+import{Button}from'@/components/ui/button';
+import{Input}from'@/components/ui/input';
+import{Label}from'@/components/ui/label';
+import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
+import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
+import{useToast}from'@/components/ui/use-toast';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
+import{supabase}from'@/lib/customSupabaseClient';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
-const formatPhoneNumber = (value) => {
-    if (!value) return value;
-    const phoneNumber = value.replace(/[^\d]/g, '');
-    const phoneNumberLength = phoneNumber.length;
-    if (phoneNumberLength < 3) return `(${phoneNumber}`;
-    if (phoneNumberLength < 8) return `(${phoneNumber.slice(0, 2)}) ${phoneNumber.slice(2)}`;
-    return `(${phoneNumber.slice(0, 2)}) ${phoneNumber.slice(2, 7)}-${phoneNumber.slice(7, 11)}`;
-};
+const CadastroDizimistas=()=>{
+ const{user}=useAuth(),{toast}=useToast();
+ const[data,setData]=useState([]),[loading,setLoading]=useState(true);
+ const[search,setSearch]=useState('');
+ const[open,setOpen]=useState(false),[current,setCurrent]=useState(null);
+ const[nome,setNome]=useState(''),[telefone,setTelefone]=useState('');
 
-const CadastroDizimistas = () => {
-    const { toast } = useToast();
-    const { user } = useAuth();
-    const [items, setItems] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [currentItem, setCurrentItem] = useState(null);
-    const [formData, setFormData] = useState({ nome: '', telefone: '' });
+ const load=useCallback(async()=>{
+  if(!user)return;
+  setLoading(true);
+  const{data,error}=await supabase
+   .from('igreja_dizimistas')
+   .select('*')
+   .eq('user_id',user.id)
+   .order('nome');
 
-    const fetchData = useCallback(async () => {
-        if (!user) return;
-        setLoading(true);
-        const { data, error } = await supabase.from('igreja_dizimistas').select('*').eq('user_id', user.id).order('nome', { ascending: true });
-        if (error) toast({ title: 'Erro ao buscar dizimistas', variant: 'destructive' });
-        else setItems(data);
-        setLoading(false);
-    }, [user, toast]);
+  if(error)toast({title:'Erro ao buscar dizimistas',description:error.message,variant:'destructive'});
+  else setData(data||[]);
+  setLoading(false);
+ },[user,toast]);
 
-    useEffect(() => {
-        fetchData();
-        if (!user) return;
-        const channel = supabase.channel('igreja_dizimistas_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'igreja_dizimistas' }, fetchData).subscribe();
-        return () => supabase.removeChannel(channel);
-    }, [user, fetchData]);
+ useEffect(()=>{load()},[load]);
 
-    const resetForm = () => setFormData({ nome: '', telefone: '' });
+ useEffect(()=>{
+  if(!user)return;
+  const ch=supabase
+   .channel('igreja_dizimistas_changes')
+   .on('postgres_changes',{event:'*',schema:'public',table:'igreja_dizimistas'},load)
+   .subscribe();
 
-    const handlePhoneChange = (e) => {
-        const formatted = formatPhoneNumber(e.target.value);
-        setFormData({ ...formData, telefone: formatted });
-    };
+  return()=>supabase.removeChannel(ch);
+ },[user,load]);
 
-    const handleSave = async () => {
-        if (!formData.nome.trim()) {
-            toast({ title: 'Erro', description: 'O nome do dizimista é obrigatório.', variant: 'destructive' });
-            return;
-        }
-        const dataToSave = { ...formData, user_id: user.id };
-        if (currentItem) {
-            const { error } = await supabase.from('igreja_dizimistas').update(dataToSave).eq('id', currentItem.id);
-            if (error) toast({ title: 'Erro ao atualizar', variant: 'destructive' });
-            else toast({ title: 'Sucesso', description: 'Dizimista atualizado.' });
-        } else {
-            const { error } = await supabase.from('igreja_dizimistas').insert(dataToSave);
-            if (error) toast({ title: 'Erro ao cadastrar', variant: 'destructive' });
-            else toast({ title: 'Sucesso', description: 'Novo dizimista cadastrado.' });
-        }
-        resetForm();
-    };
+ const formatPhone=value=>{
+  const n=value.replace(/\D/g,'').slice(0,11);
+  if(n.length<3)return n?`(${n}`:'';
+  if(n.length<8)return`(${n.slice(0,2)}) ${n.slice(2)}`;
+  return`(${n.slice(0,2)}) ${n.slice(2,7)}-${n.slice(7)}`;
+ };
 
-    const openDialog = (item = null) => {
-        setCurrentItem(item);
-        setFormData(item ? { nome: item.nome, telefone: item.telefone || '' } : { nome: '', telefone: '' });
-        setIsDialogOpen(true);
-    };
+ const reset=()=>{
+  setNome('');
+  setTelefone('');
+  setCurrent(null);
+ };
 
-    const closeDialog = () => {
-        setIsDialogOpen(false);
-        setCurrentItem(null);
-        resetForm();
-    };
+ const close=()=>{
+  setOpen(false);
+  reset();
+ };
 
-    const handleDelete = async (id) => {
-        const { error } = await supabase.from('igreja_dizimistas').delete().eq('id', id);
-        if (error) toast({ title: 'Erro ao remover', variant: 'destructive' });
-        else toast({ title: 'Removido', description: 'Dizimista removido.' });
-    };
+ const save=async()=>{
+  if(!nome.trim()){
+   toast({title:'Campo obrigatório',description:'Informe o nome do dizimista.',variant:'destructive'});
+   return;
+  }
 
-    return (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div><h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-300 to-green-500">Cadastro de Dizimistas</h2><p className="text-muted-foreground">Gerencie os membros dizimistas.</p></div>
-                <Button onClick={() => openDialog()} className="bg-green-600 hover:bg-green-700 text-white"><Plus className="w-4 h-4 mr-2" /> Novo Dizimista</Button>
+  const payload={
+   nome:nome.trim(),
+   telefone:telefone.trim(),
+   user_id:user.id
+  };
+
+  const q=current
+   ?await supabase.from('igreja_dizimistas').update(payload).eq('id',current.id).eq('user_id',user.id)
+   :await supabase.from('igreja_dizimistas').insert(payload);
+
+  if(q.error)toast({title:'Erro ao salvar',description:q.error.message,variant:'destructive'});
+  else{
+   toast({title:'Sucesso',description:current?'Dizimista atualizado.':'Dizimista cadastrado.'});
+   close();
+   load();
+  }
+ };
+
+ const remove=async id=>{
+  const{error}=await supabase
+   .from('igreja_dizimistas')
+   .delete()
+   .eq('id',id)
+   .eq('user_id',user.id);
+
+  if(error)toast({title:'Erro ao remover',description:error.message,variant:'destructive'});
+  else{
+   toast({title:'Sucesso',description:'Dizimista removido.'});
+   load();
+  }
+ };
+
+ const filtered=data.filter(x=>
+  !search.trim()||
+  `${x.nome||''} ${x.telefone||''}`.toLowerCase().includes(search.trim().toLowerCase())
+ );
+
+ return(
+  <div className="dark-igreja space-y-5">
+
+   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex items-center gap-3">
+     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-igreja)/.2)] bg-[hsl(var(--neon-igreja)/.1)]">
+      <Users className="h-5 w-5 text-[hsl(var(--neon-igreja))]"/>
+     </div>
+
+     <div>
+      <p className="text-xs font-semibold uppercase tracking-[.2em] text-[hsl(var(--neon-igreja))]">
+       Tesouraria • Cadastros
+      </p>
+      <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+       Dizimistas
+      </h1>
+      <p className="text-sm text-muted-foreground">
+       Cadastre e organize os membros dizimistas.
+      </p>
+     </div>
+    </div>
+
+    <div className="flex flex-wrap gap-2">
+     <Button variant="outline" onClick={load}>
+      <RefreshCw className="mr-2 h-4 w-4"/>Atualizar
+     </Button>
+
+     <Button
+      onClick={()=>{reset();setOpen(true)}}
+      className="bg-[hsl(var(--neon-igreja))] text-[hsl(var(--background))]"
+     >
+      <Plus className="mr-2 h-4 w-4"/>Novo Dizimista
+     </Button>
+    </div>
+   </div>
+
+   <Card className="border-border bg-card/80">
+    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+     <div className="relative w-full max-w-md">
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+      <Input
+       value={search}
+       onChange={e=>setSearch(e.target.value)}
+       placeholder="Pesquisar dizimista..."
+       className="bg-input pl-9"
+      />
+     </div>
+
+     <span className="text-sm text-muted-foreground">
+      {filtered.length} registro(s)
+     </span>
+    </CardContent>
+   </Card>
+
+   <div className="grid gap-4 md:grid-cols-3">
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Dizimistas cadastrados</CardTitle></CardHeader>
+     <CardContent><p className="text-2xl font-bold text-[hsl(var(--neon-igreja))]">{data.length}</p></CardContent>
+    </Card>
+
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Resultado atual</CardTitle></CardHeader>
+     <CardContent><p className="text-2xl font-bold">{filtered.length}</p></CardContent>
+    </Card>
+
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Situação</CardTitle></CardHeader>
+     <CardContent><p className="text-2xl font-bold text-emerald-400">Ativo</p></CardContent>
+    </Card>
+   </div>
+
+   <Card className="border-border bg-card">
+    <CardHeader className="pb-3">
+     <CardTitle className="text-lg text-[hsl(var(--neon-igreja))]">
+      Dizimistas cadastrados
+     </CardTitle>
+    </CardHeader>
+
+    <CardContent className="p-0">
+     <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+       <thead>
+        <tr className="border-b border-border bg-muted/30">
+         <th className="p-4 text-left font-semibold text-muted-foreground">Nome</th>
+         <th className="p-4 text-left font-semibold text-muted-foreground">Telefone</th>
+         <th className="p-4 text-right font-semibold text-muted-foreground">Ações</th>
+        </tr>
+       </thead>
+
+       <tbody>
+        {loading?
+         <tr><td colSpan={3} className="p-10 text-center text-muted-foreground">Carregando...</td></tr>:
+         filtered.length?
+         filtered.map(x=>(
+          <tr key={x.id} className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-igreja)/.04)]">
+           <td className="p-4 font-medium">{x.nome}</td>
+           <td className="p-4 text-muted-foreground">{x.telefone||'-'}</td>
+
+           <td className="p-4">
+            <div className="flex justify-end gap-1">
+             <Button
+              variant="ghost"
+              size="icon"
+              onClick={()=>{setCurrent(x);setNome(x.nome||'');setTelefone(x.telefone||'');setOpen(true)}}
+              className="text-[hsl(var(--neon-igreja))]"
+              title="Editar"
+             >
+              <Edit className="h-4 w-4"/>
+             </Button>
+
+             <AlertDialog>
+              <AlertDialogTrigger asChild>
+               <Button variant="ghost" size="icon" className="text-red-400 hover:bg-red-500/10" title="Excluir">
+                <Trash2 className="h-4 w-4"/>
+               </Button>
+              </AlertDialogTrigger>
+
+              <AlertDialogContent className="dark-igreja">
+               <AlertDialogHeader>
+                <AlertDialogTitle>Excluir dizimista?</AlertDialogTitle>
+                <AlertDialogDescription>
+                 Deseja excluir "{x.nome}"?
+                </AlertDialogDescription>
+               </AlertDialogHeader>
+
+               <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600 hover:bg-red-700">
+                 Excluir
+                </AlertDialogAction>
+               </AlertDialogFooter>
+              </AlertDialogContent>
+             </AlertDialog>
             </div>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="dark-igreja bg-card border-green-500/20 text-foreground">
-                    <DialogHeader><DialogTitle className="text-green-400">{currentItem ? 'Editar Dizimista' : 'Novo Dizimista'}</DialogTitle><DialogDescription>Preencha os dados do membro.</DialogDescription></DialogHeader>
-                    <div className="py-4 space-y-4">
-                        <div><Label htmlFor="nome">Nome</Label><Input id="nome" value={formData.nome} onChange={(e) => setFormData({ ...formData, nome: e.target.value })} className="bg-background/70 text-white" /></div>
-                        <div><Label htmlFor="telefone">Telefone (Opcional)</Label><Input id="telefone" value={formData.telefone} onChange={handlePhoneChange} placeholder="(83) 99999-9999" className="bg-background/70 text-white" /></div>
-                    </div>
-                    <DialogFooter><Button variant="outline" onClick={closeDialog}>Cancelar</Button><Button onClick={handleSave} className="bg-green-600 hover:bg-green-700 text-white">Salvar</Button></DialogFooter>
-                </DialogContent>
-            </Dialog>
-            <div className="bg-card/80 backdrop-blur-sm border border-green-500/10 rounded-xl shadow-lg shadow-green-500/5 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead><tr className="border-b border-green-500/10"><th className="p-4 text-left font-semibold text-muted-foreground">Nome</th><th className="p-4 text-left font-semibold text-muted-foreground">Telefone</th><th className="p-4 text-right font-semibold text-muted-foreground">Ações</th></tr></thead>
-                        <tbody>
-                            {loading ? (<tr><td colSpan="3" className="p-8 text-center">Carregando...</td></tr>) : items.length === 0 ? (<tr><td colSpan="3" className="p-8 text-center text-muted-foreground"><Users className="mx-auto w-10 h-10 mb-2" />Nenhum dizimista cadastrado.</td></tr>) : (
-                                items.map((item) => (
-                                    <tr key={item.id} className="border-b border-green-500/10 last:border-b-0 hover:bg-accent/50">
-                                        <td className="p-4 text-foreground font-medium">{item.nome}</td>
-                                        <td className="p-4 text-foreground">{item.telefone || '-'}</td>
-                                        <td className="p-4 flex justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => openDialog(item)}><Edit className="w-4 h-4 text-green-400" /></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash className="w-4 h-4 text-red-500" /></Button></AlertDialogTrigger><AlertDialogContent className="dark-igreja"><AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Deseja remover este dizimista?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-red-600">Deletar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </motion.div>
-    );
+           </td>
+          </tr>
+         )):
+         <tr>
+          <td colSpan={3} className="p-12 text-center text-muted-foreground">
+           <Users className="mx-auto mb-3 h-10 w-10 opacity-40"/>
+           {data.length?'Nenhum dizimista corresponde à pesquisa.':'Nenhum dizimista cadastrado.'}
+          </td>
+         </tr>
+        }
+       </tbody>
+      </table>
+     </div>
+    </CardContent>
+   </Card>
+
+   <ModalLancamentoPadrao
+    open={open}
+    onClose={close}
+    title={current?'Editar Dizimista':'Novo Dizimista'}
+    description="Preencha os dados do dizimista."
+    icon={current?Edit:Users}
+    theme="green"
+    footer={
+     <>
+      <Button variant="outline" onClick={close}>Cancelar</Button>
+      <Button onClick={save} className="bg-[hsl(var(--neon-igreja))] text-[hsl(var(--background))]">
+       {current?'Salvar Alterações':'Salvar Dizimista'}
+      </Button>
+     </>
+    }
+   >
+    <div className="space-y-5">
+     <div className="space-y-2">
+      <Label>Nome</Label>
+      <Input
+       value={nome}
+       onChange={e=>setNome(e.target.value)}
+       placeholder="Nome completo"
+       className="h-11 rounded-xl bg-input"
+       autoFocus
+      />
+     </div>
+
+     <div className="space-y-2">
+      <Label>Telefone <span className="text-muted-foreground">(opcional)</span></Label>
+      <Input
+       value={telefone}
+       onChange={e=>setTelefone(formatPhone(e.target.value))}
+       placeholder="(83) 99999-9999"
+       className="h-11 rounded-xl bg-input"
+      />
+     </div>
+    </div>
+   </ModalLancamentoPadrao>
+  </div>
+ );
 };
 
 export default CadastroDizimistas;
