@@ -12,10 +12,14 @@ import{useToast}from'@/components/ui/use-toast';
 import{ScrollArea}from'@/components/ui/scroll-area';
 import{exportToExcel}from'@/lib/ExportUtils';
 
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
 const money=v=>new Intl.NumberFormat('pt-BR',{
  style:'currency',
- currency:'BRL'
-}).format(Number(v||0));
+ currency:'BRL',
+ minimumFractionDigits:2,
+ maximumFractionDigits:2
+}).format(fromCents(toCents(v)));
 
 const dateBR=v=>{
  if(!v)return'—';
@@ -169,9 +173,9 @@ const RelatorioReceitas=()=>{
   });
  },[receitas,filtros]);
 
- const totalReceitas=useMemo(
+ const totalReceitasCents=useMemo(
   ()=>receitasFiltradas.reduce(
-   (sum,r)=>sum+Number(r.valor||0),
+   (sum,r)=>sum+toCents(r.valor),
    0
   ),
   [receitasFiltradas]
@@ -179,11 +183,13 @@ const RelatorioReceitas=()=>{
 
  const quantidade=receitasFiltradas.length;
 
- const media=quantidade?totalReceitas/quantidade:0;
+ const mediaCents=quantidade
+  ?Math.round(totalReceitasCents/quantidade)
+  :0;
 
  const maiorReceita=useMemo(
   ()=>receitasFiltradas.reduce(
-   (max,r)=>Number(r.valor||0)>Number(max.valor||0)?r:max,
+   (max,r)=>toCents(r.valor)>toCents(max.valor)?r:max,
    {valor:0}
   ),
   [receitasFiltradas]
@@ -204,7 +210,7 @@ const RelatorioReceitas=()=>{
     Data:dateBR(r.data),
     Tipo:r.receita||'-',
     Origem:r.origem||'-',
-    Valor:Number(r.valor||0)
+    Valor:fromCents(toCents(r.valor))
    })),
    'Relatorio_Receitas',
    'Receitas'
@@ -361,7 +367,7 @@ const RelatorioReceitas=()=>{
    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
     <StatCard
      label="Total de Receitas"
-     value={money(totalReceitas)}
+     value={money(fromCents(totalReceitasCents))}
      icon={TrendingUp}
      type="blue"
     />
@@ -375,7 +381,7 @@ const RelatorioReceitas=()=>{
 
     <StatCard
      label="Média por Receita"
-     value={money(media)}
+     value={money(fromCents(mediaCents))}
      icon={WalletCards}
      type="blue"
     />
