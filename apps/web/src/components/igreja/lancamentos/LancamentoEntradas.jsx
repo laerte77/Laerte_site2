@@ -12,7 +12,7 @@ import{Card,CardContent}from'@/components/ui/card';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import SearchableModal from'@/components/SearchableModal';
-import ModalLancamentoPadrao from'@/components/pessoal/ModalLancamentoPadrao';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 import{exportToExcel}from'@/lib/ExportUtils';
 
 const TZ='America/Sao_Paulo';
