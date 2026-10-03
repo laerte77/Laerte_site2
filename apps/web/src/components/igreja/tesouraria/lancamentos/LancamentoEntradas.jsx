@@ -257,7 +257,7 @@ const LancamentoEntradas=()=>{
 
      <div className="space-y-2">
       <Label>Tipo de Entrada</Label>
-      <Select value={form.tipo_entrada} onValueChange=v=>setForm({...form,tipo_entrada:v,dizimista_id:''})>
+      <Select value={form.tipo_entrada} onValueChange={v=>setForm({...form,tipo_entrada:v,dizimista_id:''})}>
        <SelectTrigger className="bg-input"><SelectValue placeholder="Selecione"/></SelectTrigger>
        <SelectContent className="dark-igreja bg-card igreja-select-hover"><ScrollArea className="h-48">{[...tipos].sort((a,b)=>a.entrada.localeCompare(b.entrada,'pt-BR')).map(t=><SelectItem key={t.id} value={t.entrada}>{t.entrada}</SelectItem>)}</ScrollArea></SelectContent>
       </Select>
