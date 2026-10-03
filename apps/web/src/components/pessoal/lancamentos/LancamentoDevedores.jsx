@@ -9,7 +9,7 @@ import{useToast}from'@/components/ui/use-toast';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import SearchableModal from'@/components/SearchableModal';
-import ModalLancamentoPadrao from'@/components/pessoal/ModalLancamentoPadrao';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 import{exportToExcel}from'@/lib/ExportUtils';
 
 const TZ='America/Sao_Paulo';
