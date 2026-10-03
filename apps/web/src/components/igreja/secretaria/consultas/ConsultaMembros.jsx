@@ -176,7 +176,7 @@ table{width:100%;border-collapse:collapse;font-size:5.8px;table-layout:fixed}th{
 .summary{margin-top:6px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:6px;display:grid;grid-template-columns:repeat(5,1fr);font-size:6px}.summary span{font-weight:700;color:#1e3a8a}.footer{margin-top:7px;border-top:1px solid #cbd5e1;padding-top:3px;display:grid;grid-template-columns:1fr auto 1fr;font-size:5px;color:#64748b}.footer span:nth-child(2){font-weight:700;color:#1e3a8a;text-align:center}.footer span:last-child{text-align:right}
 </style></head><body>
 <div class="header"><img src="${LOGO}" class="logo"><div class="inst">IGREJA ASSEMBLEIA DE DEUS MINISTÉRIO PLANTAR</div><div class="city">LEROLÂNDIA</div><div class="title">LISTAGEM GERAL DE MEMBROS</div></div>
-<div class="meta"><div>Status: ${escapeHtml(statusLabel)}</div><div>${search.trim()?`Busca: ${escapeHtml(search.trim())}`:escapeHtml(conjuntoLabel)}</div><div>${filtered.length} registro(s) • ${new Date().toLocaleDateString('pt-BR')}</div></div>
+<div class="meta"><div>Status: ${escapeHtml(statusLabel)}</div><div>${search.trim()?`Busca: ${escapeHtml(search.trim())`:escapeHtml(conjuntoLabel)}</div><div>${filtered.length} registro(s) • ${new Date().toLocaleDateString('pt-BR')}</div></div>
 <div class="cards"><div class="card"><div class="label">MEMBROS</div><div class="value">${filtered.length}</div></div><div class="card"><div class="label">ATIVOS</div><div class="value">${ativos}</div></div><div class="card"><div class="label">INATIVOS</div><div class="value">${inativos}</div></div><div class="card"><div class="label">COM CONJUNTO</div><div class="value">${comConjunto}</div></div><div class="card"><div class="label">BATIZADOS NAS ÁGUAS</div><div class="value">${batizados}</div></div></div>
 <table><thead><tr><th>NOME</th><th>NASC.</th><th>ADM.</th><th>CARGO</th><th>FUNÇÃO</th><th>CONJUNTO</th><th>DIRIGE</th><th>EST. CIVIL</th><th>BAT. ÁGUAS</th><th>BAT. E.S.</th><th>STATUS</th></tr></thead><tbody>${rows}</tbody></table>
 <div class="summary"><span>Total: ${filtered.length}</span><span>Ativos: ${ativos}</span><span>Inativos: ${inativos}</span><span>Sem conjunto: ${semConjunto}</span><span>Batizados nas águas: ${batizados}</span></div>
@@ -369,7 +369,7 @@ ${block('REGISTROS ECLESIÁSTICOS',fields.slice(11,14))}
    </div>
 
    <AnimatePresence>
-    {showFilters&&<motion.div initial={{height:0,opacity:0}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} className="overflow-hidden">
+    {showFilters&&<motion.div initial={{height:0,opacity:1}} animate={{height:'auto',opacity:1}} exit={{height:0,opacity:0}} className="overflow-hidden">
      <Card className="border-border bg-card">
       <CardHeader className="border-b border-border pb-3"><CardTitle className="flex items-center text-base"><Filter className="mr-2 h-4 w-4 text-yellow-400"/>Filtros</CardTitle></CardHeader>
       <CardContent className="grid grid-cols-1 gap-3 pt-4 md:grid-cols-3">
