@@ -10,6 +10,10 @@ import{formatCurrency}from'@/lib/utils';
 import{Download,RefreshCw,CalendarDays,TrendingUp,Receipt,Loader2}from'lucide-react';
 import{exportToExcel}from'@/lib/ExportUtils';
 
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
+const moneyFromCents=v=>formatCurrency(fromCents(v));
+
 const MONTHS=[
  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
@@ -37,7 +41,6 @@ const StatCard=({label,value,icon:Icon,red=false})=>(
 export default function ConsultaDividasPrevisadasMesAMes(){
  const{user}=useAuth();
  const{toast}=useToast();
-
  const[selectedYear,setSelectedYear]=useState(String(currentYear));
  const[monthlyData,setMonthlyData]=useState(
   MONTHS.map(month=>({month,total:0,percentage:0}))
@@ -66,7 +69,7 @@ export default function ConsultaDividasPrevisadasMesAMes(){
 
    data?.forEach(item=>{
     const month=new Date(item.data_vencimento).getUTCMonth();
-    totals[month]+=Number(item.valor)||0;
+    totals[month]+=toCents(item.valor);
    });
 
    const total=totals.reduce((sum,value)=>sum+value,0);
@@ -99,8 +102,7 @@ export default function ConsultaDividasPrevisadasMesAMes(){
   [monthlyData]
  );
 
- const averageMonth=totalYear/12;
-
+ const averageMonth=Math.round(totalYear/12);
  const monthsWithDebt=monthlyData.filter(item=>item.total>0).length;
 
  const highestMonth=useMemo(
@@ -117,7 +119,7 @@ export default function ConsultaDividasPrevisadasMesAMes(){
   exportToExcel(
    monthlyData.map(item=>({
     Mês:item.month,
-    'Total Previsto':item.total,
+    'Total Previsto':fromCents(item.total),
     'Percentual do Ano':`${item.percentage.toFixed(2)}%`
    })),
    `Dividas_Previstas_${selectedYear}`,
@@ -142,13 +144,11 @@ export default function ConsultaDividasPrevisadasMesAMes(){
 
     <div className="flex flex-wrap gap-2">
      <Button variant="outline" onClick={handleExport}>
-      <Download className="mr-2 h-4 w-4"/>
-      Exportar
+      <Download className="mr-2 h-4 w-4"/>Exportar
      </Button>
 
      <Button variant="outline" onClick={fetchData}>
-      <RefreshCw className="mr-2 h-4 w-4"/>
-      Atualizar
+      <RefreshCw className="mr-2 h-4 w-4"/>Atualizar
      </Button>
     </div>
    </div>
@@ -186,9 +186,9 @@ export default function ConsultaDividasPrevisadasMesAMes(){
    </Card>
 
    <div className="grid gap-4 md:grid-cols-4">
-    <StatCard label="Total Previsto" value={formatCurrency(totalYear)} icon={Receipt} red/>
-    <StatCard label="Média Mensal" value={formatCurrency(averageMonth)} icon={TrendingUp} red/>
-    <StatCard label="Maior Mês" value={highestMonth.total?formatCurrency(highestMonth.total):'R$ 0,00'} icon={CalendarDays} red/>
+    <StatCard label="Total Previsto" value={moneyFromCents(totalYear)} icon={Receipt} red/>
+    <StatCard label="Média Mensal" value={moneyFromCents(averageMonth)} icon={TrendingUp} red/>
+    <StatCard label="Maior Mês" value={highestMonth.total?moneyFromCents(highestMonth.total):'R$ 0,00'} icon={CalendarDays} red/>
     <StatCard label="Ano" value={selectedYear} icon={CalendarDays}/>
    </div>
 
@@ -199,7 +199,7 @@ export default function ConsultaDividasPrevisadasMesAMes(){
        <CardTitle className="text-lg">Resumo de {selectedYear}</CardTitle>
        <p className="text-sm text-muted-foreground">Distribuição das despesas previstas por mês.</p>
       </div>
-      <span className="text-lg font-bold text-red-400">{formatCurrency(totalYear)}</span>
+      <span className="text-lg font-bold text-red-400">{moneyFromCents(totalYear)}</span>
      </div>
     </CardHeader>
 
@@ -228,7 +228,7 @@ export default function ConsultaDividasPrevisadasMesAMes(){
            <TableCell className="font-medium">{item.month}</TableCell>
 
            <TableCell className={`text-right font-semibold ${item.total>0?'text-red-400':'text-muted-foreground'}`}>
-            {formatCurrency(item.total)}
+            {moneyFromCents(item.total)}
            </TableCell>
 
            <TableCell className="text-right text-muted-foreground">
