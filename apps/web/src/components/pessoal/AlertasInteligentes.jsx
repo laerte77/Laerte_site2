@@ -14,13 +14,25 @@ import{useToast}from'@/components/ui/use-toast';
 
 const BLUE='hsl(var(--neon-pessoal))',RED='hsl(0 84% 60%)',GREEN='hsl(142 70% 45%)';
 const TAXA_ANUAL=.15;
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
+const formatCurrency=v=>new Intl.NumberFormat('pt-BR',{
+ style:'currency',
+ currency:'BRL',
+ minimumFractionDigits:2,
+ maximumFractionDigits:2
+}).format(fromCents(v));
 
 const AlertasInteligentes=()=>{
  const{user}=useAuth(),{toast}=useToast();
  const[loading,setLoading]=useState(true),[analysis,setAnalysis]=useState([]);
- const[summary,setSummary]=useState({totalSavingsPotential:0,investmentGoal:0,monthlyExcess:0,totalCurrent:0,totalPrev:0});
-
- const formatCurrency=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v);
+ const[summary,setSummary]=useState({
+  totalSavingsPotential:0,
+  investmentGoal:0,
+  monthlyExcess:0,
+  totalCurrent:0,
+  totalPrev:0
+ });
 
  const getRecommendation=(category,diff)=>{
   const name=(category||'').toLowerCase();
@@ -44,7 +56,11 @@ const AlertasInteligentes=()=>{
   const prevEnd=new Date(year,month,0,23,59,59).toISOString();
 
   try{
-   const{data:tipos,error:tiposError}=await supabase.from('tipos_despesa').select('nome_despesa,categoria').eq('user_id',user.id);
+   const{data:tipos,error:tiposError}=await supabase
+    .from('tipos_despesa')
+    .select('nome_despesa,categoria')
+    .eq('user_id',user.id);
+
    if(tiposError)throw tiposError;
 
    const tipoMap={},categories=new Set(),tiposSet=new Set();
@@ -57,7 +73,13 @@ const AlertasInteligentes=()=>{
    });
 
    const getExpenses=async(start,end)=>{
-    const{data,error}=await supabase.from('despesas').select('valor,despesa,categoria').eq('user_id',user.id).gte('data',start).lte('data',end);
+    const{data,error}=await supabase
+     .from('despesas')
+     .select('valor,despesa,categoria')
+     .eq('user_id',user.id)
+     .gte('data',start)
+     .lte('data',end);
+
     if(error)throw error;
     return data||[];
    };
@@ -72,7 +94,7 @@ const AlertasInteligentes=()=>{
 
     data.forEach(item=>{
      const name=item.despesa||'Outros';
-     sums[name]=(sums[name]||0)+Number(item.valor||0);
+     sums[name]=(sums[name]||0)+toCents(item.valor);
 
      if(!tipoMap[name]){
       tipoMap[name]=item.categoria||'Sem Categoria';
@@ -84,17 +106,23 @@ const AlertasInteligentes=()=>{
     return sums;
    };
 
-   const currentSums=sumByTipo(currentData),prevSums=sumByTipo(prevData);
+   const currentSums=sumByTipo(currentData);
+   const prevSums=sumByTipo(prevData);
+
    let totalCurrent=0,totalPrev=0,totalExcess=0;
    const grouped=[];
 
    Array.from(categories).forEach(category=>{
     const types=Array.from(tiposSet).filter(name=>tipoMap[name]===category);
 
-    const items=types.map(name=>{
-     const current=currentSums[name]||0,previous=prevSums[name]||0;
-     return{name,current,previous,diff:current-previous};
-    }).filter(item=>item.previous>0).sort((a,b)=>b.current-a.current);
+    const items=types
+     .map(name=>{
+      const current=currentSums[name]||0;
+      const previous=prevSums[name]||0;
+      return{name,current,previous,diff:current-previous};
+     })
+     .filter(item=>item.previous>0)
+     .sort((a,b)=>b.current-a.current);
 
     if(!items.length)return;
 
@@ -117,14 +145,18 @@ const AlertasInteligentes=()=>{
    setAnalysis(grouped);
    setSummary({
     totalSavingsPotential:totalExcess,
-    investmentGoal:totalExcess*.8,
+    investmentGoal:Math.round(totalExcess*.8),
     monthlyExcess:totalExcess,
     totalCurrent,
     totalPrev
    });
   }catch(error){
    console.error(error);
-   toast({title:'Erro na análise',description:'Não foi possível carregar os dados.',variant:'destructive'});
+   toast({
+    title:'Erro na análise',
+    description:'Não foi possível carregar os dados.',
+    variant:'destructive'
+   });
   }finally{
    setLoading(false);
   }
@@ -153,7 +185,6 @@ const AlertasInteligentes=()=>{
      <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/10">
       <Lightbulb className="h-5 w-5 text-amber-400"/>
      </div>
-
      <div>
       <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-amber-400">Inteligência</p>
       <h1 className="text-2xl font-bold">Alertas Inteligentes</h1>
