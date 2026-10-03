@@ -13,7 +13,7 @@ import{
 }from'@/components/ui/alert-dialog';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
-import ModalLancamentoPadrao from'../ModalLancamentoPadrao';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const BLUE='hsl(var(--neon-pessoal))';
 
@@ -113,7 +113,10 @@ const TiposReceita=()=>{
 
     if(error)throw error;
 
-    toast({title:'Sucesso',description:'Tipo de receita atualizado.'});
+    toast({
+     title:'Sucesso',
+     description:'Tipo de receita atualizado.'
+    });
    }else{
     const{error}=await supabase
      .from('tipos_receita')
@@ -121,7 +124,10 @@ const TiposReceita=()=>{
 
     if(error)throw error;
 
-    toast({title:'Sucesso',description:'Tipo de receita cadastrado.'});
+    toast({
+     title:'Sucesso',
+     description:'Tipo de receita cadastrado.'
+    });
    }
 
    closeDialog();
@@ -151,7 +157,11 @@ const TiposReceita=()=>{
    return;
   }
 
-  toast({title:'Sucesso',description:'Tipo de receita excluído.'});
+  toast({
+   title:'Sucesso',
+   description:'Tipo de receita excluído.'
+  });
+
   fetchTipos();
  };
 
@@ -174,10 +184,7 @@ const TiposReceita=()=>{
        background:'hsl(var(--neon-pessoal)/.1)'
       }}
      >
-      <TrendingUp
-       className="h-5 w-5"
-       style={{color:BLUE}}
-      />
+      <TrendingUp className="h-5 w-5" style={{color:BLUE}}/>
      </div>
 
      <div>
@@ -199,10 +206,7 @@ const TiposReceita=()=>{
     </div>
 
     <div className="flex flex-wrap gap-2">
-     <Button
-      variant="outline"
-      onClick={fetchTipos}
-     >
+     <Button variant="outline" onClick={fetchTipos}>
       <RefreshCw className="mr-2 h-4 w-4"/>
       Atualizar
      </Button>
@@ -245,10 +249,7 @@ const TiposReceita=()=>{
       </CardTitle>
      </CardHeader>
      <CardContent>
-      <p
-       className="text-2xl font-bold"
-       style={{color:BLUE}}
-      >
+      <p className="text-2xl font-bold" style={{color:BLUE}}>
        {tipos.length}
       </p>
      </CardContent>
@@ -261,9 +262,7 @@ const TiposReceita=()=>{
       </CardTitle>
      </CardHeader>
      <CardContent>
-      <p className="text-2xl font-bold">
-       {tiposFiltrados.length}
-      </p>
+      <p className="text-2xl font-bold">{tiposFiltrados.length}</p>
      </CardContent>
     </Card>
 
@@ -274,9 +273,7 @@ const TiposReceita=()=>{
       </CardTitle>
      </CardHeader>
      <CardContent>
-      <p className="text-2xl font-bold text-emerald-400">
-       Ativo
-      </p>
+      <p className="text-2xl font-bold text-emerald-400">Ativo</p>
      </CardContent>
     </Card>
    </div>
@@ -330,10 +327,7 @@ const TiposReceita=()=>{
 
    <Card className="border-border bg-card">
     <CardHeader className="pb-3">
-     <CardTitle
-      className="text-lg"
-      style={{color:BLUE}}
-     >
+     <CardTitle className="text-lg" style={{color:BLUE}}>
       Tipos cadastrados
      </CardTitle>
     </CardHeader>
@@ -356,19 +350,13 @@ const TiposReceita=()=>{
        <tbody>
         {loading?(
          <tr>
-          <td
-           colSpan={2}
-           className="p-10 text-center text-muted-foreground"
-          >
+          <td colSpan={2} className="p-10 text-center text-muted-foreground">
            Carregando...
           </td>
          </tr>
         ):tiposFiltrados.length===0?(
          <tr>
-          <td
-           colSpan={2}
-           className="p-10 text-center text-muted-foreground"
-          >
+          <td colSpan={2} className="p-10 text-center text-muted-foreground">
            <TrendingUp className="mx-auto mb-2 h-10 w-10 opacity-50"/>
            {tipos.length
             ?'Nenhum tipo corresponde à pesquisa.'
@@ -381,9 +369,7 @@ const TiposReceita=()=>{
            key={tipo.id}
            className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-pessoal)/.04)]"
           >
-           <td className="p-4 font-medium">
-            {tipo.nome_receita}
-           </td>
+           <td className="p-4 font-medium">{tipo.nome_receita}</td>
 
            <td className="p-4 text-right">
             <div className="flex justify-end gap-1">
@@ -411,9 +397,7 @@ const TiposReceita=()=>{
 
               <AlertDialogContent className="dark-pessoal border-border bg-card">
                <AlertDialogHeader>
-                <AlertDialogTitle>
-                 Confirmar Exclusão
-                </AlertDialogTitle>
+                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
 
                 <AlertDialogDescription>
                  Deseja remover o tipo{' '}
@@ -422,9 +406,7 @@ const TiposReceita=()=>{
                </AlertDialogHeader>
 
                <AlertDialogFooter>
-                <AlertDialogCancel>
-                 Cancelar
-                </AlertDialogCancel>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
 
                 <AlertDialogAction
                  onClick={()=>handleDelete(tipo.id)}
