@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useState}from'react';
-import{Plus,Edit,Trash2,Briefcase}from'lucide-react';
+import{Plus,Edit,Trash2,Briefcase,RefreshCw,Search}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -10,17 +10,28 @@ import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{supabase}from'@/lib/customSupabaseClient';
 import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
+const GOLD='hsl(var(--neon-igreja))';
+
 export default function CadastroCargos(){
  const{user}=useAuth(),{toast}=useToast();
  const[data,setData]=useState([]),[loading,setLoading]=useState(true);
+ const[search,setSearch]=useState('');
  const[open,setOpen]=useState(false),[current,setCurrent]=useState(null),[nome,setNome]=useState('');
 
  const load=useCallback(async()=>{
   if(!user)return;
   setLoading(true);
-  const{data,error}=await supabase.from('cargos_igreja').select('*').order('nome_cargo');
-  if(error)toast({title:'Erro',description:error.message,variant:'destructive'});
-  else setData(data||[]);
+
+  const{data,error}=await supabase
+   .from('cargos_igreja')
+   .select('*')
+   .order('nome_cargo');
+
+  if(error)
+   toast({title:'Erro ao carregar cargos',description:error.message,variant:'destructive'});
+  else
+   setData(data||[]);
+
   setLoading(false);
  },[user,toast]);
 
@@ -28,79 +39,210 @@ export default function CadastroCargos(){
 
  useEffect(()=>{
   if(!user)return;
-  const ch=supabase.channel('cargos_igreja').on('postgres_changes',{event:'*',schema:'public',table:'cargos_igreja'},load).subscribe();
+
+  const ch=supabase
+   .channel('cargos_igreja_changes')
+   .on('postgres_changes',{
+    event:'*',
+    schema:'public',
+    table:'cargos_igreja'
+   },load)
+   .subscribe();
+
   return()=>supabase.removeChannel(ch);
  },[user,load]);
 
- const close=()=>{setOpen(false);setCurrent(null);setNome('')};
+ const close=()=>{
+  setOpen(false);
+  setCurrent(null);
+  setNome('');
+ };
 
  const save=async()=>{
   if(!nome.trim()){
-   toast({title:'Campo obrigatório',description:'Informe o nome do cargo.',variant:'destructive'});
+   toast({
+    title:'Campo obrigatório',
+    description:'Informe o nome do cargo.',
+    variant:'destructive'
+   });
    return;
   }
 
   const q=current
-   ?await supabase.from('cargos_igreja').update({nome_cargo:nome.trim()}).eq('id',current.id)
-   :await supabase.from('cargos_igreja').insert({nome_cargo:nome.trim(),user_id:user.id});
+   ?await supabase.from('cargos_igreja').update({
+     nome_cargo:nome.trim()
+    }).eq('id',current.id)
+   :await supabase.from('cargos_igreja').insert({
+     nome_cargo:nome.trim(),
+     user_id:user.id
+    });
 
-  if(q.error)toast({title:'Erro ao salvar',description:q.error.message,variant:'destructive'});
-  else{toast({title:'Sucesso',description:current?'Cargo atualizado.':'Cargo cadastrado.'});close();load()}
+  if(q.error){
+   toast({
+    title:'Erro ao salvar',
+    description:q.error.message,
+    variant:'destructive'
+   });
+   return;
+  }
+
+  toast({
+   title:'Sucesso',
+   description:current?'Cargo atualizado.':'Cargo cadastrado.'
+  });
+
+  close();
+  load();
  };
 
  const remove=async id=>{
-  const{error}=await supabase.from('cargos_igreja').delete().eq('id',id);
-  if(error)toast({title:'Erro ao remover',description:error.message,variant:'destructive'});
-  else{toast({title:'Cargo removido'});load()}
+  const{error}=await supabase
+   .from('cargos_igreja')
+   .delete()
+   .eq('id',id);
+
+  if(error){
+   toast({
+    title:'Erro ao remover',
+    description:error.message,
+    variant:'destructive'
+   });
+   return;
+  }
+
+  toast({title:'Cargo removido'});
+  load();
  };
 
+ const filtered=data.filter(x=>{
+  const t=search.trim().toLowerCase();
+  return !t||String(x.nome_cargo||'').toLowerCase().includes(t);
+ });
+
  return(
-  <div className="dark-igreja space-y-5">
-   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-    <div>
-     <p className="text-xs font-semibold uppercase tracking-[.2em] text-[hsl(var(--neon-igreja))]">Secretaria</p>
-     <h1 className="text-2xl font-bold md:text-3xl">Cargos</h1>
-     <p className="mt-1 text-sm text-muted-foreground">Cargos ministeriais e administrativos.</p>
+  <div className="dark-igreja space-y-4">
+
+   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
+
+    <div className="flex items-center gap-3">
+
+     <div
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border"
+      style={{
+       borderColor:`${GOLD.replace(')','/.20)')}`,
+       background:`${GOLD.replace(')','/.08)')}`
+      }}
+     >
+      <Briefcase className="h-5 w-5" style={{color:GOLD}}/>
+     </div>
+
+     <div>
+      <p
+       className="text-[11px] font-semibold uppercase tracking-[.2em]"
+       style={{color:GOLD}}
+      >
+       Cadastros
+      </p>
+
+      <h1 className="text-2xl font-bold tracking-tight">
+       Cargos
+      </h1>
+
+      <p className="text-sm text-muted-foreground">
+       Cargos ministeriais e administrativos da igreja.
+      </p>
+     </div>
+
     </div>
-    <Button onClick={()=>{setCurrent(null);setNome('');setOpen(true)}} className="bg-[hsl(var(--neon-igreja))] text-[hsl(var(--background))]">
-     <Plus className="mr-2 h-4 w-4"/>Novo Cargo
-    </Button>
+
+    <div className="flex flex-wrap gap-2">
+
+     <Button variant="outline" onClick={load}>
+      <RefreshCw className="mr-2 h-4 w-4"/>
+      Atualizar
+     </Button>
+
+     <Button
+      onClick={()=>{
+       setCurrent(null);
+       setNome('');
+       setOpen(true);
+      }}
+      className="text-[hsl(var(--background))]"
+      style={{background:GOLD}}
+     >
+      <Plus className="mr-2 h-4 w-4"/>
+      Novo Cargo
+     </Button>
+
+    </div>
    </div>
 
-   <Card className="border-border bg-card">
-    <CardHeader><CardTitle>Cargos cadastrados</CardTitle></CardHeader>
-    <CardContent className="p-0">
-     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-       <thead><tr className="border-b border-border"><th className="p-4 text-left">Cargo</th><th className="p-4 text-right">Ações</th></tr></thead>
-       <tbody>
-        {loading?
-         <tr><td colSpan={2} className="p-10 text-center">Carregando...</td></tr>:
-         data.length?
-         data.map(x=>(
-          <tr key={x.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
-           <td className="p-4 font-medium">{x.nome_cargo}</td>
-           <td className="p-4">
-            <div className="flex justify-end gap-1">
-             <Button variant="ghost" size="icon" onClick={()=>{setCurrent(x);setNome(x.nome_cargo||'');setOpen(true)}}><Edit className="h-4 w-4 text-[hsl(var(--neon-igreja))]"/></Button>
-             <AlertDialog>
-              <AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-destructive"/></Button></AlertDialogTrigger>
-              <AlertDialogContent className="dark-igreja">
-               <AlertDialogHeader><AlertDialogTitle>Excluir cargo?</AlertDialogTitle><AlertDialogDescription>Deseja excluir "{x.nome_cargo}"?</AlertDialogDescription></AlertDialogHeader>
-               <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-destructive">Excluir</AlertDialogAction></AlertDialogFooter>
-              </AlertDialogContent>
-             </AlertDialog>
-            </div>
-           </td>
-          </tr>
-         )):
-         <tr><td colSpan={2} className="p-12 text-center text-muted-foreground"><Briefcase className="mx-auto mb-3 h-10 w-10 opacity-40"/>Nenhum cargo cadastrado.</td></tr>
-        }
-       </tbody>
-      </table>
+   <Card className="border-border bg-card/80">
+    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+
+     <div className="relative w-full max-w-md">
+
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+
+      <Input
+       value={search}
+       onChange={e=>setSearch(e.target.value)}
+       placeholder="Pesquisar cargo..."
+       className="bg-input pl-9"
+      />
+
      </div>
+
+     <span className="text-sm text-muted-foreground">
+      {filtered.length} cargo(s)
+     </span>
+
     </CardContent>
    </Card>
+
+   <div className="grid gap-4 md:grid-cols-3">
+
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-medium text-muted-foreground">
+       Cargos cadastrados
+      </CardTitle>
+     </CardHeader>
+     <CardContent>
+      <p className="text-2xl font-bold" style={{color:GOLD}}>
+       {data.length}
+      </p>
+     </CardContent>
+    </Card>
+
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-medium text-muted-foreground">
+       Resultado atual
+      </CardTitle>
+     </CardHeader>
+     <CardContent>
+      <p className="text-2xl font-bold">
+       {filtered.length}
+      </p>
+     </CardContent>
+    </Card>
+
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-medium text-muted-foreground">
+       Situação
+      </CardTitle>
+     </CardHeader>
+     <CardContent>
+      <p className="text-2xl font-bold text-emerald-400">
+       Ativo
+      </p>
+     </CardContent>
+    </Card>
+
+   </div>
 
    <ModalLancamentoPadrao
     open={open}
@@ -109,13 +251,172 @@ export default function CadastroCargos(){
     description="Informe o nome do cargo."
     icon={current?Edit:Briefcase}
     theme="gold"
-    footer={<><Button variant="outline" onClick={close}>Cancelar</Button><Button onClick={save} className="bg-[hsl(var(--neon-igreja))] text-[hsl(var(--background))]">Salvar</Button></>}
+    footer={
+     <>
+      <Button variant="outline" onClick={close}>
+       Cancelar
+      </Button>
+
+      <Button
+       onClick={save}
+       className="text-[hsl(var(--background))]"
+       style={{background:GOLD}}
+      >
+       Salvar
+      </Button>
+     </>
+    }
    >
-    <div className="space-y-2">
-     <Label>Nome do cargo</Label>
-     <Input value={nome} onChange={e=>setNome(e.target.value)} placeholder="Ex.: Diácono, Presbítero, Tesoureiro" autoFocus/>
-    </div>
+    <form
+     id="form-cargo"
+     onSubmit={e=>{
+      e.preventDefault();
+      save();
+     }}
+     className="space-y-5"
+    >
+     <div className="space-y-2">
+
+      <Label>Nome do cargo</Label>
+
+      <Input
+       value={nome}
+       onChange={e=>setNome(e.target.value)}
+       placeholder="Ex.: Diácono, Presbítero, Tesoureiro"
+       className="h-11 rounded-xl bg-input"
+       autoFocus
+       required
+      />
+
+     </div>
+    </form>
    </ModalLancamentoPadrao>
+
+   <Card className="border-border bg-card">
+
+    <CardHeader className="pb-3">
+     <CardTitle className="text-lg" style={{color:GOLD}}>
+      Cargos cadastrados
+     </CardTitle>
+    </CardHeader>
+
+    <CardContent className="p-0">
+
+     <div className="overflow-x-auto">
+
+      <table className="w-full">
+
+       <thead>
+        <tr className="border-b border-border bg-muted/30">
+         <th className="p-4 text-left text-sm font-semibold text-muted-foreground">
+          Cargo
+         </th>
+
+         <th className="p-4 text-right text-sm font-semibold text-muted-foreground">
+          Ações
+         </th>
+        </tr>
+       </thead>
+
+       <tbody>
+
+        {loading?(
+         <tr>
+          <td colSpan={2} className="p-10 text-center text-muted-foreground">
+           Carregando...
+          </td>
+         </tr>
+        ):filtered.length===0?(
+         <tr>
+          <td colSpan={2} className="p-10 text-center text-muted-foreground">
+           <Briefcase className="mx-auto mb-2 h-10 w-10 opacity-50"/>
+           {data.length
+            ?'Nenhum cargo corresponde à pesquisa.'
+            :'Nenhum cargo cadastrado.'}
+          </td>
+         </tr>
+        ):(
+         filtered.map(x=>(
+          <tr
+           key={x.id}
+           className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-igreja)/.04)]"
+          >
+           <td className="p-4 font-medium">
+            {x.nome_cargo}
+           </td>
+
+           <td className="p-4 text-right">
+            <div className="flex justify-end gap-1">
+
+             <Button
+              variant="ghost"
+              size="icon"
+              onClick={()=>{
+               setCurrent(x);
+               setNome(x.nome_cargo||'');
+               setOpen(true);
+              }}
+              className="text-[hsl(var(--neon-igreja))]"
+              title="Editar"
+             >
+              <Edit className="h-4 w-4"/>
+             </Button>
+
+             <AlertDialog>
+              <AlertDialogTrigger asChild>
+               <Button
+                variant="ghost"
+                size="icon"
+                className="text-red-400 hover:bg-red-500/10"
+                title="Excluir"
+               >
+                <Trash2 className="h-4 w-4"/>
+               </Button>
+              </AlertDialogTrigger>
+
+              <AlertDialogContent className="dark-igreja border-border bg-card">
+
+               <AlertDialogHeader>
+                <AlertDialogTitle>
+                 Confirmar Exclusão
+                </AlertDialogTitle>
+
+                <AlertDialogDescription>
+                 Deseja remover o cargo{' '}
+                 <strong>{x.nome_cargo}</strong>?
+                </AlertDialogDescription>
+               </AlertDialogHeader>
+
+               <AlertDialogFooter>
+                <AlertDialogCancel>
+                 Cancelar
+                </AlertDialogCancel>
+
+                <AlertDialogAction
+                 onClick={()=>remove(x.id)}
+                 className="bg-red-600 hover:bg-red-700"
+                >
+                 Excluir
+                </AlertDialogAction>
+               </AlertDialogFooter>
+
+              </AlertDialogContent>
+             </AlertDialog>
+
+            </div>
+           </td>
+          </tr>
+         ))
+        )}
+
+       </tbody>
+
+      </table>
+
+     </div>
+    </CardContent>
+   </Card>
+
   </div>
  );
 }
