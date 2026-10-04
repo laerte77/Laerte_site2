@@ -1,5 +1,5 @@
 import React,{useState,useEffect,useMemo,useCallback}from'react';
-import{BarChart,ArrowDownCircle,DollarSign,Calendar,Filter,FileDown,Printer,Eye,BookOpen,Gift}from'lucide-react';
+import{FileBarChart,ArrowDownCircle,DollarSign,Calendar,Filter,FileDown,Printer,Eye,BookOpen,Gift,RefreshCw}from'lucide-react';
 import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{Input}from'@/components/ui/input';
@@ -19,9 +19,10 @@ const TooltipCustom=({active,payload,label})=>{
  if(!active||!payload?.length)return null;
  const entradas=payload.find(p=>p.dataKey==='entradas')?.value||0;
  const despesas=payload.find(p=>p.dataKey==='despesas')?.value||0;
+
  return(
-  <div className="rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
-   <p className="mb-2 font-bold text-white">{label}</p>
+  <div className="rounded-xl border border-[hsl(var(--neon-igreja)/.25)] bg-card p-3 shadow-xl">
+   <p className="mb-2 font-bold">{label}</p>
    <p className="text-green-400">Entradas: {money(entradas)}</p>
    <p className="text-red-400">Despesas: {money(despesas)}</p>
   </div>
@@ -29,8 +30,7 @@ const TooltipCustom=({active,payload,label})=>{
 };
 
 export default function RelatorioFluxoCaixa(){
- const{user}=useAuth();
- const{toast}=useToast();
+ const{user}=useAuth(),{toast}=useToast();
  const[entradas,setEntradas]=useState([]);
  const[despesas,setDespesas]=useState([]);
  const[loading,setLoading]=useState(true);
@@ -94,7 +94,6 @@ export default function RelatorioFluxoCaixa(){
 
    fe=entradas.filter(v=>new Date(v.data)>=ini&&new Date(v.data)<=fim);
    fd=despesas.filter(v=>new Date(v.data)>=ini&&new Date(v.data)<=fim);
-
    titulo=`${ini.toLocaleDateString('pt-BR',{timeZone:'UTC'})} a ${fim.toLocaleDateString('pt-BR',{timeZone:'UTC'})}`;
   }
 
@@ -160,18 +159,12 @@ export default function RelatorioFluxoCaixa(){
 
  const url=()=>{
   let q=`?filterType=${filterType}`;
-
-  if(filterType==='anual')
-   q+=`&year=${filters.year}&month=${filters.month}`;
-  else
-   q+=`&startDate=${filters.startDate}&endDate=${filters.endDate}`;
-
+  if(filterType==='anual')q+=`&year=${filters.year}&month=${filters.month}`;
+  else q+=`&startDate=${filters.startDate}&endDate=${filters.endDate}`;
   return`/igreja/relatorios/fluxo-caixa-pdf${q}`;
  };
 
- const visualizar=()=>{
-  window.open(url(),'_blank');
- };
+ const visualizar=()=>window.open(url(),'_blank');
 
  const imprimir=()=>{
   const w=window.open(`${url()}&print=true`,'_blank');
@@ -179,93 +172,130 @@ export default function RelatorioFluxoCaixa(){
  };
 
  return(
-  <div className="min-h-full space-y-6 bg-slate-950 p-4 text-slate-100">
+  <div className="space-y-6 animate-in fade-in duration-500 theme-igreja">
 
-   <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+
     <div className="flex items-center gap-3">
-     <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3">
-      <BarChart className="h-6 w-6 text-blue-400"/>
+     <div className="p-3 rounded-xl bg-[hsl(var(--neon-igreja))]/10 glow-igreja">
+      <FileBarChart className="w-6 h-6 text-[hsl(var(--neon-igreja))]"/>
      </div>
+
      <div>
-      <h2 className="text-2xl font-bold text-white">Fluxo de Caixa</h2>
-      <p className="text-sm text-slate-400">Comparativo entre entradas e despesas.</p>
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">
+       Relatórios • Tesouraria
+      </p>
+      <h1 className="text-2xl font-bold">
+       Fluxo de Caixa
+      </h1>
+      <p className="text-sm text-muted-foreground">
+       Comparativo entre entradas e despesas.
+      </p>
      </div>
     </div>
 
-    <DropdownMenu>
-     <DropdownMenuTrigger asChild>
-      <Button className="border border-blue-500/40 bg-blue-600 hover:bg-blue-700">
-       <FileDown className="mr-2 h-4 w-4"/>
-       Gerar Relatório
-      </Button>
-     </DropdownMenuTrigger>
+    <div className="flex flex-wrap gap-2">
+     <Button variant="outline" onClick={load} disabled={loading}>
+      <RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>
+      Atualizar
+     </Button>
 
-     <DropdownMenuContent>
-      <DropdownMenuItem onClick={visualizar}>
-       <Eye className="mr-2 h-4 w-4"/>
-       Visualizar Relatório
-      </DropdownMenuItem>
-      <DropdownMenuItem onClick={imprimir}>
-       <Printer className="mr-2 h-4 w-4"/>
-       Imprimir Relatório
-      </DropdownMenuItem>
-     </DropdownMenuContent>
-    </DropdownMenu>
+     <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+       <Button
+        variant="outline"
+        className="border-[hsl(var(--neon-igreja))]/50"
+       >
+        <FileDown className="mr-2 h-4 w-4"/>
+        Gerar Relatório
+       </Button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent className="dark-igreja">
+       <DropdownMenuItem onSelect={visualizar}>
+        <Eye className="mr-2 h-4 w-4"/>
+        Visualizar Relatório
+       </DropdownMenuItem>
+
+       <DropdownMenuItem onSelect={imprimir}>
+        <Printer className="mr-2 h-4 w-4"/>
+        Imprimir Relatório
+       </DropdownMenuItem>
+      </DropdownMenuContent>
+     </DropdownMenu>
+    </div>
+
    </div>
 
-   <Card className="border-slate-800 bg-slate-900/70">
-    <CardHeader>
-     <CardTitle className="flex items-center text-white">
-      <Filter className="mr-2 h-5 w-5 text-blue-400"/>
+   <Card className="bg-card border-border/60">
+    <CardHeader className="border-b border-border/60">
+     <CardTitle className="flex items-center">
+      <Filter className="mr-2 h-5 w-5"/>
       Filtros
      </CardTitle>
     </CardHeader>
 
     <CardContent className="space-y-4">
      <Select value={filterType} onValueChange={setFilterType}>
-      <SelectTrigger className="bg-slate-800 border-slate-700 md:w-72">
+      <SelectTrigger className="bg-input md:w-72">
        <SelectValue/>
       </SelectTrigger>
-      <SelectContent>
+
+      <SelectContent className="dark-igreja">
        <SelectItem value="anual">Por Ano / Mês</SelectItem>
        <SelectItem value="periodo">Por Período</SelectItem>
       </SelectContent>
      </Select>
 
-     {filterType==='anual'&&(
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-       <Select value={String(filters.year)} onValueChange={v=>change('year',Number(v))}>
-        <SelectTrigger className="bg-slate-800 border-slate-700">
-         <Calendar className="mr-2 h-4 w-4"/>
-         <SelectValue/>
-        </SelectTrigger>
-        <SelectContent>
-         {anos.map(a=><SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
-        </SelectContent>
-       </Select>
+     {filterType==='anual'?(
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-       <Select value={String(filters.month)} onValueChange={v=>change('month',v)}>
-        <SelectTrigger className="bg-slate-800 border-slate-700">
-         <Calendar className="mr-2 h-4 w-4"/>
-         <SelectValue/>
-        </SelectTrigger>
-        <SelectContent>
-         <SelectItem value="all">Todos os Meses</SelectItem>
-         {meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
-        </SelectContent>
-       </Select>
+       <div>
+        <Label>Ano</Label>
+        <Select
+         value={String(filters.year)}
+         onValueChange={v=>change('year',Number(v))}
+        >
+         <SelectTrigger className="bg-input mt-2">
+          <Calendar className="mr-2 h-4 w-4"/>
+          <SelectValue/>
+         </SelectTrigger>
+
+         <SelectContent className="dark-igreja">
+          {anos.map(a=><SelectItem key={a} value={String(a)}>{a}</SelectItem>)}
+         </SelectContent>
+        </Select>
+       </div>
+
+       <div>
+        <Label>Mês</Label>
+        <Select
+         value={String(filters.month)}
+         onValueChange={v=>change('month',v)}
+        >
+         <SelectTrigger className="bg-input mt-2">
+          <Calendar className="mr-2 h-4 w-4"/>
+          <SelectValue/>
+         </SelectTrigger>
+
+         <SelectContent className="dark-igreja">
+          <SelectItem value="all">Todos os Meses</SelectItem>
+          {meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
+         </SelectContent>
+        </Select>
+       </div>
+
       </div>
-     )}
+     ):(
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-     {filterType==='periodo'&&(
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
        <div>
         <Label>Data de Início</Label>
         <Input
          type="date"
          value={filters.startDate}
          onChange={e=>change('startDate',e.target.value)}
-         className="mt-1 bg-slate-800 border-slate-700"
+         className="bg-input mt-2"
         />
        </div>
 
@@ -275,9 +305,10 @@ export default function RelatorioFluxoCaixa(){
          type="date"
          value={filters.endDate}
          onChange={e=>change('endDate',e.target.value)}
-         className="mt-1 bg-slate-800 border-slate-700"
+         className="bg-input mt-2"
         />
        </div>
+
       </div>
      )}
     </CardContent>
@@ -285,73 +316,87 @@ export default function RelatorioFluxoCaixa(){
 
    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 
-    <Card className="border-l-4 border-l-green-500 border-slate-800 bg-slate-900">
+    <Card className="bg-card border-l-4 border-l-green-500">
      <CardHeader className="flex-row items-center justify-between pb-2">
-      <CardTitle className="text-sm text-slate-400">Total Dízimos</CardTitle>
+      <CardTitle className="text-sm text-muted-foreground">Total Dízimos</CardTitle>
       <BookOpen className="h-5 w-5 text-green-400"/>
      </CardHeader>
      <CardContent>
-      <div className="text-2xl font-bold text-white">{money(resumo['DÍZIMO']||resumo['Dizimo']||0)}</div>
-      <p className="text-xs text-slate-500">{dados.titulo}</p>
+      <div className="text-2xl font-bold">{money(resumo['DÍZIMO']||resumo['Dizimo']||0)}</div>
+      <p className="text-xs text-muted-foreground">{dados.titulo}</p>
      </CardContent>
     </Card>
 
-    <Card className="border-l-4 border-l-emerald-500 border-slate-800 bg-slate-900">
+    <Card className="bg-card border-l-4 border-l-emerald-500">
      <CardHeader className="flex-row items-center justify-between pb-2">
-      <CardTitle className="text-sm text-slate-400">Total Ofertas</CardTitle>
+      <CardTitle className="text-sm text-muted-foreground">Total Ofertas</CardTitle>
       <Gift className="h-5 w-5 text-emerald-400"/>
      </CardHeader>
      <CardContent>
-      <div className="text-2xl font-bold text-white">{money(resumo['OFERTA']||resumo['Oferta']||0)}</div>
-      <p className="text-xs text-slate-500">{dados.titulo}</p>
+      <div className="text-2xl font-bold">{money(resumo['OFERTA']||resumo['Oferta']||0)}</div>
+      <p className="text-xs text-muted-foreground">{dados.titulo}</p>
      </CardContent>
     </Card>
 
-    <Card className="border-l-4 border-l-red-500 border-slate-800 bg-slate-900">
+    <Card className="bg-card border-l-4 border-l-red-500">
      <CardHeader className="flex-row items-center justify-between pb-2">
-      <CardTitle className="text-sm text-slate-400">Total Despesas</CardTitle>
+      <CardTitle className="text-sm text-muted-foreground">Total Despesas</CardTitle>
       <ArrowDownCircle className="h-5 w-5 text-red-400"/>
      </CardHeader>
      <CardContent>
-      <div className="text-2xl font-bold text-white">{money(resumo.despesasPeriodo)}</div>
-      <p className="text-xs text-slate-500">{dados.titulo}</p>
+      <div className="text-2xl font-bold">{money(resumo.despesasPeriodo)}</div>
+      <p className="text-xs text-muted-foreground">{dados.titulo}</p>
      </CardContent>
     </Card>
 
-    <Card className={`border-l-4 border-slate-800 bg-slate-900 ${resumo.saldoGeral<0?'border-l-red-500':'border-l-blue-500'}`}>
+    <Card className={`bg-card border-l-4 ${resumo.saldoGeral<0?'border-l-red-500':'border-l-[hsl(var(--neon-igreja))]'}`}>
      <CardHeader className="flex-row items-center justify-between pb-2">
-      <CardTitle className="text-sm text-slate-400">Saldo Geral</CardTitle>
-      <DollarSign className={`h-5 w-5 ${resumo.saldoGeral<0?'text-red-400':'text-blue-400'}`}/>
+      <CardTitle className="text-sm text-muted-foreground">Saldo Geral</CardTitle>
+      <DollarSign className={`h-5 w-5 ${resumo.saldoGeral<0?'text-red-400':'text-[hsl(var(--neon-igreja))]'}`}/>
      </CardHeader>
      <CardContent>
-      <div className={`text-2xl font-bold ${resumo.saldoGeral<0?'text-red-400':'text-blue-400'}`}>
+      <div className={`text-2xl font-bold ${resumo.saldoGeral<0?'text-red-400':'text-[hsl(var(--neon-igreja))]'}`}>
        {money(resumo.saldoGeral)}
       </div>
-      <p className="text-xs text-slate-500">Saldo de todo o período</p>
+      <p className="text-xs text-muted-foreground">Saldo de todo o período</p>
      </CardContent>
     </Card>
 
    </div>
 
-   <Card className="border-slate-800 bg-slate-900/70">
-    <CardHeader>
-     <CardTitle className="flex items-center text-white">
-      <BarChart className="mr-2 h-5 w-5 text-blue-400"/>
+   <Card className="bg-card border-border/60">
+    <CardHeader className="border-b border-border/60">
+     <CardTitle className="flex items-center">
+      <FileBarChart className="mr-2 h-5 w-5"/>
       Entradas x Despesas
      </CardTitle>
     </CardHeader>
 
     <CardContent>
      {loading?
-      <div className="p-8 text-center text-slate-400">Carregando gráfico...</div>:
+      <div className="p-8 text-center text-muted-foreground">
+       Carregando gráfico...
+      </div>:
       <ResponsiveContainer width="100%" height={400}>
        <ComposedChart data={grafico}>
-        <XAxis dataKey="name" stroke="#94a3b8"/>
-        <YAxis stroke="#94a3b8" tickFormatter={v=>`R$${(v/1000).toLocaleString('pt-BR')}k`}/>
+        <XAxis dataKey="name"/>
+        <YAxis tickFormatter={v=>`R$${(v/1000).toLocaleString('pt-BR')}k`}/>
         <Tooltip content={<TooltipCustom/>}/>
         <Legend/>
-        <RechartsBar dataKey="entradas" name="Entradas" fill="#22C55E" radius={[4,4,0,0]}/>
-        <RechartsBar dataKey="despesas" name="Despesas" fill="#EF4444" radius={[4,4,0,0]}/>
+
+        <RechartsBar
+         dataKey="entradas"
+         name="Entradas"
+         fill="hsl(var(--neon-igreja))"
+         radius={[4,4,0,0]}
+        />
+
+        <RechartsBar
+         dataKey="despesas"
+         name="Despesas"
+         fill="#EF4444"
+         radius={[4,4,0,0]}
+        />
        </ComposedChart>
       </ResponsiveContainer>
      }
