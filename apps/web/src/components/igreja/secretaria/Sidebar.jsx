@@ -1,6 +1,6 @@
 import React from'react';
 import{Link,useLocation}from'react-router-dom';
-import{Church,Home,ChevronLeft,ChevronRight,LayoutGrid,LogOut,UserPlus,BookUser,Briefcase,Users,GraduationCap,Heart,UserCheck,History,Contact,FileText,PieChart,Zap}from'lucide-react';
+import{Church,Home,ChevronLeft,ChevronRight,LayoutGrid,LogOut,UserPlus,BookUser,Briefcase,Users,GraduationCap,Heart,UserCheck,History,Contact,PieChart}from'lucide-react';
 import{Accordion,AccordionContent,AccordionItem,AccordionTrigger}from'@/components/ui/accordion';
 import{Button}from'@/components/ui/button';
 import{cn}from'@/lib/utils';
@@ -102,15 +102,6 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
        icon={Home}
       >
        {(isOpen||isMobile)&&'Dashboard'}
-      </NavLink>
-     </li>
-
-     <li>
-      <NavLink
-       to="/igreja/secretaria/dashboard/alertas"
-       icon={Zap}
-      >
-       {(isOpen||isMobile)&&'Alertas Inteligentes'}
       </NavLink>
      </li>
 
@@ -272,7 +263,7 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
    <div className="shrink-0 space-y-1 border-t border-border p-2">
 
     <Link
-     to="/"
+     to="/modules"
      className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-[hsl(var(--neon-gold)/.08)] hover:text-foreground"
     >
      <LayoutGrid className="h-4 w-4 shrink-0"/>
