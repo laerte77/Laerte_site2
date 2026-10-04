@@ -1,5 +1,5 @@
 import React,{useState,useEffect,useMemo,useCallback,useRef}from'react';
-import{FileSearch,Download,RefreshCw,FileBarChart3}from'lucide-react';
+import{FileSearch,Download,RefreshCw,FileBarChart}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -11,8 +11,8 @@ import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{ScrollArea}from'@/components/ui/scroll-area';
 
 const meses=[
- 'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
- 'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
+'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
 ];
 
 export default function RelatorioDespesas(){
@@ -157,7 +157,7 @@ export default function RelatorioDespesas(){
    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
     <div className="flex items-center gap-3">
      <div className="p-3 rounded-xl bg-[hsl(var(--neon-igreja))]/10 glow-igreja">
-      <FileBarChart3 className="w-6 h-6 text-[hsl(var(--neon-igreja))]"/>
+      <FileBarChart className="w-6 h-6 text-[hsl(var(--neon-igreja))]"/>
      </div>
 
      <div>
