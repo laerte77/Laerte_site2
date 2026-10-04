@@ -1,5 +1,5 @@
 import React,{useState,useEffect,useCallback,useRef}from'react';
-import{Calendar,Filter,FileDown,Printer,Eye,AlertCircle,Loader2,FileBarChart3}from'lucide-react';
+import{Calendar,Filter,FileDown,Printer,Eye,AlertCircle,Loader2,FileBarChart}from'lucide-react';
 import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{Input}from'@/components/ui/input';
@@ -222,7 +222,7 @@ export default function RelatorioEntradasDespesas(){
 
     <div className="flex items-center gap-3">
      <div className="p-3 rounded-xl bg-[hsl(var(--neon-igreja))]/10 glow-igreja">
-      <FileBarChart3 className="w-6 h-6 text-[hsl(var(--neon-igreja))]"/>
+      <FileBarChart className="w-6 h-6 text-[hsl(var(--neon-igreja))]"/>
      </div>
 
      <div>
