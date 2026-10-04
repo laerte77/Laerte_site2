@@ -4,7 +4,7 @@ import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
 import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{Button}from'@/components/ui/button';
-import{Download,FileText,Printer,Search,Loader2}from'lucide-react';
+import{Download,FileText,Printer,Search,Loader2,Filter,CalendarClock,DollarSign}from'lucide-react';
 import{supabase}from'@/lib/customSupabaseClient';
 import{formatCurrency}from'@/lib/utils';
 import{format,parseISO}from'date-fns';
@@ -12,435 +12,255 @@ import{generatePDF,exportToExcel}from'@/lib/ExportUtils';
 import{useToast}from'@/components/ui/use-toast';
 
 const meses=[
- {val:'1',label:'Janeiro'},{val:'2',label:'Fevereiro'},
- {val:'3',label:'Março'},{val:'4',label:'Abril'},
- {val:'5',label:'Maio'},{val:'6',label:'Junho'},
- {val:'7',label:'Julho'},{val:'8',label:'Agosto'},
- {val:'9',label:'Setembro'},{val:'10',label:'Outubro'},
- {val:'11',label:'Novembro'},{val:'12',label:'Dezembro'}
+ {val:'1',label:'Janeiro'},{val:'2',label:'Fevereiro'},{val:'3',label:'Março'},
+ {val:'4',label:'Abril'},{val:'5',label:'Maio'},{val:'6',label:'Junho'},
+ {val:'7',label:'Julho'},{val:'8',label:'Agosto'},{val:'9',label:'Setembro'},
+ {val:'10',label:'Outubro'},{val:'11',label:'Novembro'},{val:'12',label:'Dezembro'}
 ];
 
-const mesesExtenso=meses.map(m=>m.label);
-
 export default function ConsultaDespesasPrevisadasMesAMes(){
- const{user}=useAuth();
- const{toast}=useToast();
-
- const[despesasPrevistas,setDespesasPrevistas]=useState([]);
- const[tiposDespesa,setTiposDespesa]=useState([]);
- const[loading,setLoading]=useState(true);
-
- const currentDate=new Date();
- const[filterMonth,setFilterMonth]=useState(
-  (currentDate.getMonth()+1).toString()
- );
- const[filterYear,setFilterYear]=useState(
-  currentDate.getFullYear().toString()
- );
+ const{user}=useAuth(),{toast}=useToast();
+ const[despesas,setDespesas]=useState([]),[tipos,setTipos]=useState([]),[loading,setLoading]=useState(true);
+ const now=new Date();
+ const[filterMonth,setFilterMonth]=useState(String(now.getMonth()+1));
+ const[filterYear,setFilterYear]=useState(String(now.getFullYear()));
  const[filterTipo,setFilterTipo]=useState('Todos');
 
- const anos=Array.from(
-  {length:5},
-  (_,i)=>(currentDate.getFullYear()-2+i).toString()
- );
-
- const fetchTiposDespesa=async()=>{
-  try{
-   const{data,error}=await supabase
-    .from('igreja_tipos_despesa')
-    .select('despesa')
-    .eq('user_id',user.id)
-    .order('despesa',{ascending:true});
-
-   if(!error)setTiposDespesa((data||[]).map(d=>d.despesa));
-  }catch{}
- };
-
- const fetchDespesasPrevistas=async()=>{
-  setLoading(true);
-
-  try{
-   const{data,error}=await supabase
-    .from('igreja_despesas_previstas')
-    .select('*')
-    .eq('user_id',user.id)
-    .order('vencimento',{ascending:true});
-
-   if(error)throw error;
-
-   setDespesasPrevistas(data||[]);
-  }catch{
-   toast({
-    title:'Erro',
-    description:'Erro ao buscar despesas previstas',
-    variant:'destructive'
-   });
-  }finally{
-   setLoading(false);
-  }
- };
+ const anos=Array.from({length:5},(_,i)=>String(now.getFullYear()-2+i));
 
  useEffect(()=>{
-  if(user){
-   fetchTiposDespesa();
-   fetchDespesasPrevistas();
-  }
- },[user]);
+  if(!user)return;
 
- const filteredData=useMemo(()=>{
-  return despesasPrevistas.filter(item=>{
-   if(!item.vencimento)return false;
+  const load=async()=>{
+   setLoading(true);
 
-   const date=parseISO(item.vencimento);
+   try{
+    const[a,b]=await Promise.all([
+     supabase.from('igreja_despesas_previstas').select('*').eq('user_id',user.id).order('vencimento',{ascending:true}),
+     supabase.from('igreja_tipos_despesa').select('despesa').eq('user_id',user.id).order('despesa',{ascending:true})
+    ]);
 
-   const monthMatches=
-    filterMonth==='Todos'||
-    (date.getMonth()+1).toString()===filterMonth;
+    if(a.error)throw a.error;
+    if(b.error)throw b.error;
 
-   const yearMatches=
-    filterYear==='Todos'||
-    date.getFullYear().toString()===filterYear;
+    setDespesas(a.data||[]);
+    setTipos((b.data||[]).map(x=>x.despesa));
+   }catch(e){
+    toast({title:'Erro',description:e.message,variant:'destructive'});
+   }finally{
+    setLoading(false);
+   }
+  };
 
-   const tipoMatches=
-    filterTipo==='Todos'||
-    item.despesa===filterTipo;
+  load();
+ },[user,toast]);
 
-   return monthMatches&&yearMatches&&tipoMatches;
-  });
- },[
-  despesasPrevistas,
-  filterMonth,
-  filterYear,
-  filterTipo
- ]);
+ const filtered=useMemo(()=>despesas.filter(item=>{
+  if(!item.vencimento)return false;
 
- const groupedData=useMemo(()=>{
+  const d=parseISO(item.vencimento);
+  return(
+   (filterMonth==='Todos'||String(d.getMonth()+1)===filterMonth)&&
+   (filterYear==='Todos'||String(d.getFullYear())===filterYear)&&
+   (filterTipo==='Todos'||item.despesa===filterTipo)
+  );
+ }),[despesas,filterMonth,filterYear,filterTipo]);
+
+ const total=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
+
+ const grouped=useMemo(()=>{
   const groups={};
 
-  filteredData.forEach(item=>{
-   const date=parseISO(item.vencimento);
-   const key=`${date.getFullYear()}-${date.getMonth()}`;
+  filtered.forEach(x=>{
+   const d=parseISO(x.vencimento),key=`${d.getFullYear()}-${d.getMonth()}`;
 
-   if(!groups[key]){
-    groups[key]={
-     items:[],
-     total:0,
-     month:date.getMonth(),
-     year:date.getFullYear()
-    };
-   }
+   if(!groups[key])
+    groups[key]={items:[],total:0,month:d.getMonth(),year:d.getFullYear()};
 
-   groups[key].items.push(item);
-   groups[key].total+=Number(item.valor)||0;
+   groups[key].items.push(x);
+   groups[key].total+=Number(x.valor||0);
   });
 
-  return Object.values(groups).sort((a,b)=>{
-   if(a.year!==b.year)return a.year-b.year;
-   return a.month-b.month;
-  });
- },[filteredData]);
+  return Object.values(groups).sort((a,b)=>
+   a.year-b.year||a.month-b.month
+  );
+ },[filtered]);
 
- const totalValor=useMemo(
-  ()=>filteredData.reduce(
-   (acc,curr)=>acc+(Number(curr.valor)||0),0
-  ),
-  [filteredData]
- );
-
- const handleExportExcel=()=>{
-  if(!filteredData.length){
-   toast({
-    title:'Aviso',
-    description:'Não há dados para exportar'
-   });
+ const exportExcel=()=>{
+  if(!filtered.length){
+   toast({title:'Aviso',description:'Não há dados para exportar.',variant:'destructive'});
    return;
   }
 
-  const exportData=filteredData.map(d=>({
-   'Data Vencimento':format(parseISO(d.vencimento),'dd/MM/yyyy'),
-   'Tipo da Despesa':d.despesa,
-   'Valor da Despesa':Number(d.valor)
-  }));
-
   exportToExcel(
-   exportData,
+   filtered.map(x=>({
+    'Data Vencimento':format(parseISO(x.vencimento),'dd/MM/yyyy'),
+    'Tipo da Despesa':x.despesa,
+    'Valor da Despesa':Number(x.valor)
+   })),
    `Despesas_Previstas_${filterMonth}_${filterYear}`
   );
  };
 
- const handleExportPDF=()=>{
-  if(!filteredData.length){
-   toast({
-    title:'Aviso',
-    description:'Não há dados para exportar'
-   });
+ const exportPDF=()=>{
+  if(!filtered.length){
+   toast({title:'Aviso',description:'Não há dados para exportar.',variant:'destructive'});
    return;
   }
 
-  const headers=[
-   'Data Vencimento',
-   'Tipo da Despesa',
-   'Valor da Despesa'
-  ];
-
-  const rows=filteredData.map(d=>[
-   format(parseISO(d.vencimento),'dd/MM/yyyy'),
-   d.despesa,
-   formatCurrency(d.valor)
-  ]);
-
-  rows.push([
-   'TOTAL',
-   '',
-   formatCurrency(totalValor)
-  ]);
-
   generatePDF(
    `Despesas Previstas - ${filterMonth}/${filterYear}`,
-   headers,
-   rows,
+   ['Data Vencimento','Tipo da Despesa','Valor da Despesa'],
+   [
+    ...filtered.map(x=>[
+     format(parseISO(x.vencimento),'dd/MM/yyyy'),
+     x.despesa,
+     formatCurrency(x.valor)
+    ]),
+    ['TOTAL','',formatCurrency(total)]
+   ],
    `Despesas_Previstas_${filterMonth}_${filterYear}`
   );
  };
 
  return(
-  <div className="space-y-6 animate-in fade-in duration-500 theme-igreja">
+  <div className="dark-igreja space-y-4">
 
-   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-    <div className="flex items-center gap-3">
-     <div className="p-3 rounded-xl bg-[hsl(var(--neon-igreja))]/10 glow-igreja">
-      <Search className="w-6 h-6 text-[hsl(var(--neon-igreja))]"/>
+   <div className="rounded-xl border border-border bg-card/70">
+    <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+     <div className="flex items-center gap-4">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[hsl(var(--neon-igreja)/.25)] bg-[hsl(var(--neon-igreja)/.10)]">
+       <CalendarClock className="h-7 w-7 text-[hsl(var(--neon-igreja))]"/>
+      </div>
+
+      <div>
+       <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-[hsl(var(--neon-igreja))]">Consultas • Tesouraria</p>
+       <h1 className="text-2xl font-bold text-[hsl(var(--neon-igreja))]">Despesas Previstas Mês a Mês</h1>
+       <p className="text-sm text-muted-foreground">Filtre e analise as despesas previstas da igreja.</p>
+      </div>
      </div>
 
-     <div>
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-       Relatórios • Tesouraria
-      </p>
+     <div className="flex flex-wrap gap-2">
+      <Button variant="outline" onClick={exportExcel}>
+       <Download className="mr-2 h-4 w-4"/>Excel
+      </Button>
 
-      <h1 className="text-2xl font-bold text-foreground">
-       Despesas Previstas Mês a Mês
-      </h1>
+      <Button variant="outline" onClick={exportPDF}>
+       <FileText className="mr-2 h-4 w-4"/>PDF
+      </Button>
 
-      <p className="text-sm text-muted-foreground">
-       Filtre e analise as despesas previstas da igreja.
-      </p>
+      <Button variant="outline" onClick={()=>window.print()}>
+       <Printer className="mr-2 h-4 w-4"/>Imprimir
+      </Button>
      </div>
-    </div>
-
-    <div className="flex flex-wrap gap-2">
-     <Button
-      onClick={handleExportExcel}
-      variant="outline"
-      className="text-emerald-500 border-emerald-500/50"
-     >
-      <Download className="w-4 h-4 mr-2"/>
-      Excel
-     </Button>
-
-     <Button
-      onClick={handleExportPDF}
-      variant="outline"
-      className="text-destructive border-destructive/50"
-     >
-      <FileText className="w-4 h-4 mr-2"/>
-      PDF
-     </Button>
-
-     <Button
-      onClick={()=>window.print()}
-      variant="outline"
-      className="text-primary border-primary/50"
-     >
-      <Printer className="w-4 h-4 mr-2"/>
-      Imprimir
-     </Button>
     </div>
    </div>
 
-   <Card className="bg-card border-border/60">
-    <CardHeader className="border-b border-border/60">
-     <CardTitle>Filtros de Pesquisa</CardTitle>
+   <Card className="border-border bg-card/80">
+    <CardHeader className="border-b border-border bg-muted/20 pb-3">
+     <CardTitle className="flex items-center text-base"><Filter className="mr-2 h-4 w-4 text-[hsl(var(--neon-igreja))]"/>Filtros</CardTitle>
     </CardHeader>
 
-    <CardContent>
-     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <CardContent className="grid grid-cols-1 gap-3 p-4 md:grid-cols-3">
+     <Select value={filterMonth} onValueChange={setFilterMonth}>
+      <SelectTrigger className="bg-input"><SelectValue placeholder="Mês"/></SelectTrigger>
+      <SelectContent className="dark-igreja bg-card">
+       {meses.map(m=><SelectItem key={m.val} value={m.val}>{m.label}</SelectItem>)}
+      </SelectContent>
+     </Select>
 
-      <div className="space-y-2">
-       <label className="text-sm font-medium text-muted-foreground">
-        Mês
-       </label>
+     <Select value={filterYear} onValueChange={setFilterYear}>
+      <SelectTrigger className="bg-input"><SelectValue placeholder="Ano"/></SelectTrigger>
+      <SelectContent className="dark-igreja bg-card">
+       {anos.map(y=><SelectItem key={y} value={y}>{y}</SelectItem>)}
+      </SelectContent>
+     </Select>
 
-       <Select
-        value={filterMonth}
-        onValueChange={setFilterMonth}
-       >
-        <SelectTrigger className="bg-input">
-         <SelectValue/>
-        </SelectTrigger>
-
-        <SelectContent>
-         <SelectItem value="Todos">
-          Todos os Meses
-         </SelectItem>
-
-         {meses.map(m=>(
-          <SelectItem key={m.val} value={m.val}>
-           {m.label}
-          </SelectItem>
-         ))}
-        </SelectContent>
-       </Select>
-      </div>
-
-      <div className="space-y-2">
-       <label className="text-sm font-medium text-muted-foreground">
-        Ano
-       </label>
-
-       <Select
-        value={filterYear}
-        onValueChange={setFilterYear}
-       >
-        <SelectTrigger className="bg-input">
-         <SelectValue/>
-        </SelectTrigger>
-
-        <SelectContent>
-         <SelectItem value="Todos">
-          Todos os Anos
-         </SelectItem>
-
-         {anos.map(a=>(
-          <SelectItem key={a} value={a}>
-           {a}
-          </SelectItem>
-         ))}
-        </SelectContent>
-       </Select>
-      </div>
-
-      <div className="space-y-2">
-       <label className="text-sm font-medium text-muted-foreground">
-        Tipo de Despesa
-       </label>
-
-       <Select
-        value={filterTipo}
-        onValueChange={setFilterTipo}
-       >
-        <SelectTrigger className="bg-input">
-         <SelectValue/>
-        </SelectTrigger>
-
-        <SelectContent>
-         <SelectItem value="Todos">
-          Todos os Tipos
-         </SelectItem>
-
-         {tiposDespesa.map(t=>(
-          <SelectItem key={t} value={t}>
-           {t}
-          </SelectItem>
-         ))}
-        </SelectContent>
-       </Select>
-      </div>
-
-     </div>
+     <Select value={filterTipo} onValueChange={setFilterTipo}>
+      <SelectTrigger className="bg-input"><SelectValue placeholder="Tipo"/></SelectTrigger>
+      <SelectContent className="dark-igreja bg-card">
+       <SelectItem value="Todos">Todos os Tipos</SelectItem>
+       {tipos.map(t=><SelectItem key={t} value={t}>{t}</SelectItem>)}
+      </SelectContent>
+     </Select>
     </CardContent>
    </Card>
 
-   <Card className="bg-card border-border/60 overflow-hidden">
+   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <Card><CardContent className="flex items-center gap-3 p-4"><CalendarClock className="h-6 w-6 text-[hsl(var(--neon-igreja))]"/><div><p className="text-[11px] uppercase text-muted-foreground">Registros</p><p className="text-2xl font-bold">{filtered.length}</p></div></CardContent></Card>
+    <Card><CardContent className="flex items-center gap-3 p-4"><DollarSign className="h-6 w-6 text-red-400"/><div><p className="text-[11px] uppercase text-muted-foreground">Total Previsto</p><p className="text-2xl font-bold text-red-400">{formatCurrency(total)}</p></div></CardContent></Card>
+    <Card><CardContent className="flex items-center gap-3 p-4"><Search className="h-6 w-6 text-[hsl(var(--neon-igreja))]"/><div><p className="text-[11px] uppercase text-muted-foreground">Tipos</p><p className="text-2xl font-bold">{new Set(filtered.map(x=>x.despesa)).size}</p></div></CardContent></Card>
+   </div>
+
+   <Card className="overflow-hidden border-border bg-card/70">
+    <CardHeader className="border-b border-border bg-muted/20 pb-3">
+     <CardTitle className="text-lg text-[hsl(var(--neon-igreja))]">Despesas previstas</CardTitle>
+    </CardHeader>
+
     <CardContent className="p-0">
 
      {loading?(
-      <div className="flex justify-center items-center p-12">
-       <Loader2 className="w-8 h-8 animate-spin text-[hsl(var(--neon-igreja))]"/>
+      <div className="flex items-center justify-center p-12">
+       <Loader2 className="h-8 w-8 animate-spin text-[hsl(var(--neon-igreja))]"/>
       </div>
      ):(
-      <div className="responsive-table-wrapper">
+      <div className="overflow-x-auto">
        <Table>
 
-        <TableHeader className="bg-muted/50">
+        <TableHeader className="bg-secondary/30">
          <TableRow>
           <TableHead>Data Vencimento</TableHead>
           <TableHead>Tipo da Despesa</TableHead>
-          <TableHead className="text-right">
-           Valor da Despesa
-          </TableHead>
+          <TableHead className="text-right">Valor</TableHead>
          </TableRow>
         </TableHeader>
 
         <TableBody>
 
-         {!filteredData.length?(
+         {!filtered.length?(
           <TableRow>
-           <TableCell
-            colSpan={3}
-            className="h-24 text-center text-muted-foreground"
-           >
+           <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
             Nenhuma despesa prevista encontrada.
            </TableCell>
           </TableRow>
          ):(
-          groupedData.map(group=>(
-           <React.Fragment
-            key={`${group.year}-${group.month}`}
-           >
+          grouped.map(group=>(
+           <React.Fragment key={`${group.year}-${group.month}`}>
 
             {group.items.map(item=>(
-             <TableRow
-              key={item.id}
-              className="hover:bg-primary/5"
-             >
+             <TableRow key={item.id} className="hover:bg-[hsl(var(--neon-igreja)/.04)]">
               <TableCell className="font-medium">
-               {format(
-                parseISO(item.vencimento),
-                'dd/MM/yyyy'
-               )}
+               <div className="flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-[hsl(var(--neon-igreja))]"/>
+                {format(parseISO(item.vencimento),'dd/MM/yyyy')}
+               </div>
               </TableCell>
 
-              <TableCell>
-               {item.despesa}
-              </TableCell>
+              <TableCell>{item.despesa}</TableCell>
 
-              <TableCell className="text-right font-medium text-destructive">
+              <TableCell className="text-right font-bold text-red-400">
                {formatCurrency(item.valor)}
               </TableCell>
              </TableRow>
             ))}
 
-            {(filterMonth==='Todos'||filterYear==='Todos')&&(
-             <TableRow className="bg-muted/30 font-bold">
-              <TableCell
-               colSpan={2}
-               className="text-right uppercase text-muted-foreground"
-              >
-               {mesesExtenso[group.month]} {group.year}:
-              </TableCell>
-
-              <TableCell className="text-right text-destructive">
-               {formatCurrency(group.total)}
-              </TableCell>
-             </TableRow>
-            )}
+            <TableRow className="bg-secondary/20">
+             <TableCell colSpan={2} className="text-right font-semibold text-muted-foreground">
+              {meses[group.month].label} {group.year}
+             </TableCell>
+             <TableCell className="text-right font-bold text-red-400">
+              {formatCurrency(group.total)}
+             </TableCell>
+            </TableRow>
 
            </React.Fragment>
           ))
          )}
 
-         {filteredData.length>0&&(
-          <TableRow className="bg-muted/50 font-bold border-t-2">
-           <TableCell
-            colSpan={2}
-            className="text-right uppercase text-muted-foreground"
-           >
-            Total no Período:
-           </TableCell>
-
-           <TableCell className="text-right text-destructive text-lg">
-            {formatCurrency(totalValor)}
-           </TableCell>
+         {filtered.length>0&&(
+          <TableRow className="bg-secondary/30 font-bold">
+           <TableCell colSpan={2} className="text-right">Total no Período:</TableCell>
+           <TableCell className="text-right text-lg text-red-400">{formatCurrency(total)}</TableCell>
           </TableRow>
          )}
 
