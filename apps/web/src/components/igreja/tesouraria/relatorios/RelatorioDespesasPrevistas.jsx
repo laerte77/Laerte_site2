@@ -1,5 +1,5 @@
 import React,{useState,useEffect,useMemo,useCallback,useRef}from'react';
-import{FileSearch,CheckCircle,FileBarChart3,RefreshCw}from'lucide-react';
+import{FileSearch,CheckCircle,FileBarChart,RefreshCw}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{useToast}from'@/components/ui/use-toast';
 import{supabase}from'@/lib/customSupabaseClient';
@@ -190,7 +190,7 @@ export default function RelatorioDespesasPrevistas(){
    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
     <div className="flex items-center gap-3">
      <div className="p-3 rounded-xl bg-[hsl(var(--neon-igreja))]/10 glow-igreja">
-      <FileBarChart3 className="w-6 h-6 text-[hsl(var(--neon-igreja))]"/>
+      <FileBarChart className="w-6 h-6 text-[hsl(var(--neon-igreja))]"/>
      </div>
 
      <div>
