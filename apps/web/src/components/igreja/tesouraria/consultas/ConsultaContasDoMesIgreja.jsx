@@ -6,194 +6,204 @@ import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/component
 import{Button}from'@/components/ui/button';
 import{Badge}from'@/components/ui/badge';
 import{formatCurrency}from'@/lib/utils';
-import{AlertCircle,RefreshCw,CheckCircle2,Clock,CalendarClock,FileBarChart}from'lucide-react';
+import{AlertCircle,RefreshCw,CheckCircle2,Clock,CalendarClock,FileBarChart,FileText,Filter}from'lucide-react';
 import{format,parseISO,endOfMonth,isBefore,startOfDay}from'date-fns';
 import{supabase}from'@/lib/customSupabaseClient';
 import LoadingSkeleton from'@/components/ui/LoadingSkeleton';
 
 const MONTHS=[
-{value:1,label:'Janeiro'},{value:2,label:'Fevereiro'},{value:3,label:'Março'},
-{value:4,label:'Abril'},{value:5,label:'Maio'},{value:6,label:'Junho'},
-{value:7,label:'Julho'},{value:8,label:'Agosto'},{value:9,label:'Setembro'},
-{value:10,label:'Outubro'},{value:11,label:'Novembro'},{value:12,label:'Dezembro'}
+ {value:1,label:'Janeiro'},{value:2,label:'Fevereiro'},{value:3,label:'Março'},
+ {value:4,label:'Abril'},{value:5,label:'Maio'},{value:6,label:'Junho'},
+ {value:7,label:'Julho'},{value:8,label:'Agosto'},{value:9,label:'Setembro'},
+ {value:10,label:'Outubro'},{value:11,label:'Novembro'},{value:12,label:'Dezembro'}
 ];
 
 export default function ConsultaContasDoMesIgreja(){
- const{user}=useAuth(),currentDate=new Date();
- const[selectedMonth,setSelectedMonth]=useState(currentDate.getMonth()+1);
- const[selectedYear,setSelectedYear]=useState(currentDate.getFullYear());
+ const{user}=useAuth(),now=new Date();
+ const[selectedMonth,setSelectedMonth]=useState(now.getMonth()+1);
+ const[selectedYear,setSelectedYear]=useState(now.getFullYear());
  const[selectedStatus,setSelectedStatus]=useState('Todos');
- const[contasMes,setContasMes]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(null);
+ const[data,setData]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(null);
 
  const fetchData=useCallback(async()=>{
   if(!user)return;
   setLoading(true);setError(null);
+
   try{
    const startDate=format(new Date(selectedYear,selectedMonth-1,1),'yyyy-MM-dd');
    const endDate=format(endOfMonth(new Date(selectedYear,selectedMonth-1,1)),'yyyy-MM-dd');
 
-   const{data:previstas,error:previstasError}=await supabase
-    .from('igreja_despesas_previstas').select('*').eq('user_id',user.id)
-    .gte('vencimento',startDate).lte('vencimento',endDate);
-   if(previstasError)throw previstasError;
+   const{data:previstas,error:a}=await supabase
+    .from('igreja_despesas_previstas')
+    .select('*')
+    .eq('user_id',user.id)
+    .gte('vencimento',startDate)
+    .lte('vencimento',endDate);
 
-   const{data:reais,error:reaisError}=await supabase
-    .from('igreja_despesas').select('*').eq('user_id',user.id)
-    .gte('data',startDate).lte('data',endDate);
-   if(reaisError)throw reaisError;
+   if(a)throw a;
 
-   const processedData=previstas.map(prevista=>{
-    const valorPrevisto=Number(prevista.valor)||0;
-    const descPrevista=(prevista.despesa||'').toLowerCase().trim();
-    const matchedReais=reais.filter(r=>(r.despesa||'').toLowerCase().trim()===descPrevista);
-    const valorReal=matchedReais.reduce((sum,r)=>sum+(Number(r.valor)||0),0);
-    const diferenca=valorReal-valorPrevisto;
-    let calculatedStatus='Pendente';
+   const{data:reais,error:b}=await supabase
+    .from('igreja_despesas')
+    .select('*')
+    .eq('user_id',user.id)
+    .gte('data',startDate)
+    .lte('data',endDate);
 
-    if(valorReal>=valorPrevisto&&valorPrevisto>0)calculatedStatus='Pago';
-    else if(valorReal===0)calculatedStatus='Pendente';
+   if(b)throw b;
 
-    const vencimentoDate=parseISO(prevista.vencimento);
-    if(calculatedStatus==='Pendente'&&isBefore(vencimentoDate,startOfDay(new Date())))
-     calculatedStatus='Vencido';
-    if(valorReal===0&&prevista.status==='Pago')calculatedStatus='Pago';
+   const processed=(previstas||[]).map(p=>{
+    const previsto=Number(p.valor)||0;
+    const desc=(p.despesa||'').toLowerCase().trim();
+    const reaisMes=(reais||[]).filter(r=>
+     (r.despesa||'').toLowerCase().trim()===desc
+    );
+
+    const real=reaisMes.reduce((s,r)=>s+Number(r.valor||0),0);
+    const diferenca=real-previsto;
+    let status='Pendente';
+
+    if(real>=previsto&&previsto>0)status='Pago';
+    else if(real===0)status='Pendente';
+
+    const venc=parseISO(p.vencimento);
+
+    if(status==='Pendente'&&isBefore(venc,startOfDay(new Date())))
+     status='Vencido';
+
+    if(real===0&&p.status==='PAGO')status='Pago';
 
     return{
-     id:prevista.id,
-     data_vencimento:prevista.vencimento,
-     descricao:prevista.despesa,
+     id:p.id,
+     data_vencimento:p.vencimento,
+     descricao:p.despesa,
      categoria:'Despesa Fixa',
-     valor_previsto:valorPrevisto,
-     valor_real:valorReal,
+     valor_previsto:previsto,
+     valor_real:real,
      diferenca,
-     status:calculatedStatus
+     status
     };
    });
 
-   processedData.sort((a,b)=>new Date(a.data_vencimento)-new Date(b.data_vencimento));
-   setContasMes(processedData);
-  }catch(err){setError(err.message)}
-  finally{setLoading(false)}
+   processed.sort((a,b)=>new Date(a.data_vencimento)-new Date(b.data_vencimento));
+   setData(processed);
+  }catch(e){
+   setError(e.message);
+  }finally{
+   setLoading(false);
+  }
  },[user,selectedMonth,selectedYear]);
 
  useEffect(()=>{fetchData()},[fetchData]);
 
+ const filtered=useMemo(
+  ()=>data.filter(x=>selectedStatus==='Todos'||x.status===selectedStatus),
+  [data,selectedStatus]
+ );
+
+ const totals=useMemo(()=>filtered.reduce((a,c)=>({
+  previsto:a.previsto+c.valor_previsto,
+  real:a.real+c.valor_real,
+  diferenca:a.diferenca+c.diferenca
+ }),{previsto:0,real:0,diferenca:0}),[filtered]);
+
  const years=useMemo(()=>{
-  const current=new Date().getFullYear();
-  return[current-2,current-1,current,current+1,current+2];
+  const y=new Date().getFullYear();
+  return[y-2,y-1,y,y+1,y+2];
  },[]);
 
- const filteredData=useMemo(()=>contasMes.filter(item=>selectedStatus==='Todos'||item.status===selectedStatus),[contasMes,selectedStatus]);
-
- const subtotals=useMemo(()=>filteredData.reduce((acc,curr)=>({
-  previsto:acc.previsto+curr.valor_previsto,
-  real:acc.real+curr.valor_real,
-  diferenca:acc.diferenca+curr.diferenca
- }),{previsto:0,real:0,diferenca:0}),[filteredData]);
-
- const getStatusBadge=status=>{
-  if(status==='Pago')return <Badge className="badge-pago"><CheckCircle2 className="w-3 h-3 mr-1"/>Pago</Badge>;
-  if(status==='Vencido')return <Badge className="badge-vencido"><AlertCircle className="w-3 h-3 mr-1"/>Vencido</Badge>;
-  return <Badge className="badge-pendente"><Clock className="w-3 h-3 mr-1"/>Pendente</Badge>;
+ const statusBadge=s=>{
+  if(s==='Pago')
+   return <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"><CheckCircle2 className="mr-1 h-3 w-3"/>Pago</Badge>;
+  if(s==='Vencido')
+   return <Badge className="bg-red-500/10 text-red-400 border border-red-500/30"><AlertCircle className="mr-1 h-3 w-3"/>Vencido</Badge>;
+  return <Badge className="bg-yellow-500/10 text-yellow-400 border border-yellow-500/30"><Clock className="mr-1 h-3 w-3"/>Pendente</Badge>;
  };
 
  return(
-  <div className="space-y-6 animate-in fade-in duration-500 theme-igreja">
+  <div className="dark-igreja space-y-4">
 
-   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-    <div className="flex items-center gap-3">
-     <div className="p-3 rounded-xl bg-[hsl(var(--neon-igreja))]/10 glow-igreja">
-      <FileBarChart className="w-6 h-6 text-[hsl(var(--neon-igreja))]"/>
+   <div className="rounded-xl border border-border bg-card/70">
+    <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+     <div className="flex items-center gap-4">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[hsl(var(--neon-igreja)/.25)] bg-[hsl(var(--neon-igreja)/.10)]">
+       <FileBarChart className="h-7 w-7 text-[hsl(var(--neon-igreja))]"/>
+      </div>
+      <div>
+       <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-[hsl(var(--neon-igreja))]">Consultas • Tesouraria</p>
+       <h1 className="text-2xl font-bold tracking-tight text-[hsl(var(--neon-igreja))]">Contas do Mês</h1>
+       <p className="text-sm text-muted-foreground">Acompanhamento das despesas previstas e realizadas.</p>
+      </div>
      </div>
-     <div>
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Relatórios • Tesouraria</p>
-      <h1 className="text-2xl font-bold text-foreground">Contas do Mês</h1>
-      <p className="text-sm text-muted-foreground">Acompanhamento das despesas previstas, realizadas e respectivos status.</p>
-     </div>
+
+     <Button variant="outline" onClick={fetchData} disabled={loading}>
+      <RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>
+      Atualizar
+     </Button>
     </div>
-    <Button variant="outline" onClick={fetchData} disabled={loading} className="border-[hsl(var(--neon-igreja))]/40">
-     <RefreshCw className={`w-4 h-4 mr-2 ${loading?'animate-spin':''}`}/>Atualizar
-    </Button>
    </div>
 
-   <Card className="bg-card border-border/60">
-    <CardHeader className="border-b border-border/60"><CardTitle className="text-base">Filtros do relatório</CardTitle></CardHeader>
-    <CardContent>
-     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   <Card className="border-border bg-card/80">
+    <CardHeader className="border-b border-border bg-muted/20 pb-3">
+     <CardTitle className="flex items-center text-base"><Filter className="mr-2 h-4 w-4 text-[hsl(var(--neon-igreja))]"/>Filtros</CardTitle>
+    </CardHeader>
+    <CardContent className="p-4">
+     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
 
-      <div className="space-y-2">
-       <label className="text-sm font-medium text-muted-foreground">Mês</label>
-       <Select value={selectedMonth.toString()} onValueChange={val=>setSelectedMonth(Number(val))}>
-        <SelectTrigger className="bg-input"><SelectValue placeholder="Mês"/></SelectTrigger>
-        <SelectContent>{MONTHS.map(month=><SelectItem key={month.value} value={month.value.toString()}>{month.label}</SelectItem>)}</SelectContent>
-       </Select>
-      </div>
+      <Select value={String(selectedMonth)} onValueChange={v=>setSelectedMonth(Number(v))}>
+       <SelectTrigger className="bg-input"><SelectValue placeholder="Mês"/></SelectTrigger>
+       <SelectContent className="dark-igreja bg-card">
+        {MONTHS.map(m=><SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+       </SelectContent>
+      </Select>
 
-      <div className="space-y-2">
-       <label className="text-sm font-medium text-muted-foreground">Ano</label>
-       <Select value={selectedYear.toString()} onValueChange={val=>setSelectedYear(Number(val))}>
-        <SelectTrigger className="bg-input"><SelectValue placeholder="Ano"/></SelectTrigger>
-        <SelectContent>{years.map(year=><SelectItem key={year} value={year.toString()}>{year}</SelectItem>)}</SelectContent>
-       </Select>
-      </div>
+      <Select value={String(selectedYear)} onValueChange={v=>setSelectedYear(Number(v))}>
+       <SelectTrigger className="bg-input"><SelectValue placeholder="Ano"/></SelectTrigger>
+       <SelectContent className="dark-igreja bg-card">
+        {years.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+       </SelectContent>
+      </Select>
 
-      <div className="space-y-2">
-       <label className="text-sm font-medium text-muted-foreground">Status</label>
-       <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-        <SelectTrigger className="bg-input"><SelectValue placeholder="Status"/></SelectTrigger>
-        <SelectContent>
-         <SelectItem value="Todos">Todos os Status</SelectItem>
-         <SelectItem value="Pago">Pago</SelectItem>
-         <SelectItem value="Pendente">Pendente</SelectItem>
-         <SelectItem value="Vencido">Vencido</SelectItem>
-        </SelectContent>
-       </Select>
-      </div>
+      <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+       <SelectTrigger className="bg-input"><SelectValue placeholder="Status"/></SelectTrigger>
+       <SelectContent className="dark-igreja bg-card">
+        <SelectItem value="Todos">Todos os Status</SelectItem>
+        <SelectItem value="Pago">Pago</SelectItem>
+        <SelectItem value="Pendente">Pendente</SelectItem>
+        <SelectItem value="Vencido">Vencido</SelectItem>
+       </SelectContent>
+      </Select>
 
      </div>
     </CardContent>
    </Card>
 
-   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-    <Card className="bg-card border-border/60"><CardContent className="p-5">
-     <p className="text-xs uppercase tracking-wider text-muted-foreground">Total Previsto</p>
-     <p className="text-2xl font-bold mt-1">{formatCurrency(subtotals.previsto)}</p>
-    </CardContent></Card>
-
-    <Card className="bg-card border-border/60"><CardContent className="p-5">
-     <p className="text-xs uppercase tracking-wider text-muted-foreground">Total Realizado</p>
-     <p className="text-2xl font-bold mt-1 text-emerald-500">{formatCurrency(subtotals.real)}</p>
-    </CardContent></Card>
-
-    <Card className="bg-card border-border/60"><CardContent className="p-5">
-     <p className="text-xs uppercase tracking-wider text-muted-foreground">Diferença</p>
-     <p className={`text-2xl font-bold mt-1 ${subtotals.diferenca<0?'text-emerald-500':subtotals.diferenca>0?'text-destructive':'text-muted-foreground'}`}>
-      {formatCurrency(subtotals.diferenca)}
-     </p>
-    </CardContent></Card>
-
+   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <Card><CardContent className="p-4"><p className="text-[11px] uppercase tracking-wider text-muted-foreground">Total Previsto</p><p className="mt-1 text-2xl font-bold text-[hsl(var(--neon-igreja))]">{formatCurrency(totals.previsto)}</p></CardContent></Card>
+    <Card><CardContent className="p-4"><p className="text-[11px] uppercase tracking-wider text-muted-foreground">Total Realizado</p><p className="mt-1 text-2xl font-bold text-emerald-400">{formatCurrency(totals.real)}</p></CardContent></Card>
+    <Card><CardContent className="p-4"><p className="text-[11px] uppercase tracking-wider text-muted-foreground">Diferença</p><p className={`mt-1 text-2xl font-bold ${totals.diferenca<0?'text-emerald-400':totals.diferenca>0?'text-red-400':'text-muted-foreground'}`}>{formatCurrency(totals.diferenca)}</p></CardContent></Card>
    </div>
 
    {error?(
-    <Card className="bg-destructive/10 border-destructive/20">
-     <CardContent className="flex flex-col items-center justify-center p-8 gap-3 text-destructive">
-      <AlertCircle className="w-8 h-8"/>
+    <Card className="border-red-500/30 bg-red-500/10">
+     <CardContent className="flex flex-col items-center gap-3 p-8 text-red-400">
+      <AlertCircle className="h-8 w-8"/>
       <p>Erro ao carregar dados: {error}</p>
-      <Button variant="outline" onClick={fetchData}>Tentar Novamente</Button>
+      <Button variant="outline" onClick={fetchData}>Tentar novamente</Button>
      </CardContent>
     </Card>
    ):(
-    <Card className="bg-card border-border/60 overflow-hidden">
-     <CardHeader className="border-b border-border/60"><CardTitle className="text-lg">Contas do período selecionado</CardTitle></CardHeader>
-     <CardContent className="p-0">
+    <Card className="overflow-hidden border-border bg-card/70">
+     <CardHeader className="border-b border-border bg-muted/20 pb-3">
+      <CardTitle className="text-lg text-[hsl(var(--neon-igreja))]">Contas do período</CardTitle>
+     </CardHeader>
 
+     <CardContent className="p-0">
       {loading?(
        <div className="p-6"><LoadingSkeleton count={5} height="h-12"/></div>
       ):(
-       <div className="responsive-table-wrapper">
-        <Table className="neon-zebra-table">
-         <TableHeader className="bg-muted/50">
+       <div className="overflow-x-auto">
+        <Table>
+         <TableHeader className="bg-secondary/30">
           <TableRow>
            <TableHead>Vencimento</TableHead>
            <TableHead>Descrição</TableHead>
@@ -206,39 +216,26 @@ export default function ConsultaContasDoMesIgreja(){
          </TableHeader>
 
          <TableBody>
-          {!filteredData.length?(
-           <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-            Nenhuma conta encontrada para o período e filtros selecionados.
-           </TableCell></TableRow>
-          ):(
-           filteredData.map(item=>(
-            <TableRow key={item.id} className="hover:bg-primary/5">
-             <TableCell className="font-medium whitespace-nowrap">
-              <div className="flex items-center gap-2">
-               <CalendarClock className="w-4 h-4 text-[hsl(var(--neon-igreja))]"/>
-               {format(parseISO(item.data_vencimento),'dd/MM/yyyy')}
-              </div>
-             </TableCell>
-             <TableCell className="font-medium">{item.descricao}</TableCell>
-             <TableCell className="text-muted-foreground">{item.categoria}</TableCell>
-             <TableCell className="text-right font-medium">{formatCurrency(item.valor_previsto)}</TableCell>
-             <TableCell className="text-right text-emerald-500 font-medium">{item.valor_real>0?formatCurrency(item.valor_real):'-'}</TableCell>
-             <TableCell className={`text-right font-medium ${item.diferenca<0?'text-emerald-500':item.diferenca>0?'text-destructive':'text-muted-foreground'}`}>
-              {formatCurrency(item.diferenca)}
-             </TableCell>
-             <TableCell className="text-center">{getStatusBadge(item.status)}</TableCell>
-            </TableRow>
-           ))
-          )}
+          {!filtered.length?(
+           <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">Nenhuma conta encontrada.</TableCell></TableRow>
+          ):filtered.map(x=>(
+           <TableRow key={x.id} className="hover:bg-[hsl(var(--neon-igreja)/.04)]">
+            <TableCell className="font-medium"><div className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-[hsl(var(--neon-igreja))]"/>{format(parseISO(x.data_vencimento),'dd/MM/yyyy')}</div></TableCell>
+            <TableCell className="font-medium">{x.descricao}</TableCell>
+            <TableCell className="text-muted-foreground">{x.categoria}</TableCell>
+            <TableCell className="text-right">{formatCurrency(x.valor_previsto)}</TableCell>
+            <TableCell className="text-right font-medium text-emerald-400">{x.valor_real?formatCurrency(x.valor_real):'-'}</TableCell>
+            <TableCell className={`text-right font-medium ${x.diferenca<0?'text-emerald-400':x.diferenca>0?'text-red-400':'text-muted-foreground'}`}>{formatCurrency(x.diferenca)}</TableCell>
+            <TableCell className="text-center">{statusBadge(x.status)}</TableCell>
+           </TableRow>
+          ))}
 
-          {filteredData.length>0&&(
-           <TableRow className="bg-muted/50 font-bold border-t">
+          {filtered.length>0&&(
+           <TableRow className="bg-secondary/30 font-bold">
             <TableCell colSpan={3} className="text-right">Totais:</TableCell>
-            <TableCell className="text-right">{formatCurrency(subtotals.previsto)}</TableCell>
-            <TableCell className="text-right text-emerald-500">{formatCurrency(subtotals.real)}</TableCell>
-            <TableCell className={`text-right ${subtotals.diferenca<0?'text-emerald-500':subtotals.diferenca>0?'text-destructive':'text-muted-foreground'}`}>
-             {formatCurrency(subtotals.diferenca)}
-            </TableCell>
+            <TableCell className="text-right">{formatCurrency(totals.previsto)}</TableCell>
+            <TableCell className="text-right text-emerald-400">{formatCurrency(totals.real)}</TableCell>
+            <TableCell className="text-right">{formatCurrency(totals.diferenca)}</TableCell>
             <TableCell/>
            </TableRow>
           )}
@@ -246,7 +243,6 @@ export default function ConsultaContasDoMesIgreja(){
         </Table>
        </div>
       )}
-
      </CardContent>
     </Card>
    )}
