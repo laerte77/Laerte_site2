@@ -38,6 +38,7 @@ export default function IgrejaDashboard(){
  },[session,loading,navigate]);
 
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
+
  useEffect(()=>{
   if(isMobile)setSidebarOpen(false);
  },[location.pathname,isMobile]);
@@ -49,27 +50,23 @@ export default function IgrejaDashboard(){
  );
 
  return(
-  <div
-   className="flex min-h-screen w-full overflow-hidden bg-gradient-professional"
-   style={{'--primary':'var(--neon-gold)','--ring':'var(--neon-gold)'}}
-  >
-   <Sidebar
-    isOpen={isSidebarOpen}
-    setOpen={setSidebarOpen}
-    isMobile={isMobile}
-   />
+  <div className="flex min-h-screen w-full overflow-hidden bg-gradient-professional" style={{'--primary':'var(--neon-gold)','--ring':'var(--neon-gold)'}}>
+
+   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
 
    <div className={cn(
-    'flex h-screen flex-1 flex-col transition-[margin] duration-300',
+    'flex flex-1 flex-col transition-[margin] duration-300',
     !isMobile&&(isSidebarOpen?'ml-60':'ml-20')
    )}>
+
     <Header
      toggleSidebar={()=>setSidebarOpen(v=>!v)}
      submodule="Tesouraria"
      isSidebarOpen={isSidebarOpen}
     />
 
-    <main className="flex-1 overflow-y-auto bg-transparent p-4 md:p-6 lg:p-8 [&_.neon-card]:neon-border-gold [&_.neon-card]:neon-hover-gold">
+    <main className="relative flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5 [&_.neon-card]:neon-border-gold [&_.neon-card]:neon-hover-gold">
+
      <Routes>
       <Route path="/" element={<DashboardHome/>}/>
 
@@ -96,16 +93,18 @@ export default function IgrejaDashboard(){
 
       <Route path="*" element={<Navigate to="/igreja/tesouraria" replace/>}/>
      </Routes>
+
     </main>
    </div>
 
    {isMobile&&isSidebarOpen&&(
     <div
      onClick={()=>setSidebarOpen(false)}
-     className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm"
+     className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
      aria-hidden="true"
     />
    )}
+
   </div>
  );
 }
