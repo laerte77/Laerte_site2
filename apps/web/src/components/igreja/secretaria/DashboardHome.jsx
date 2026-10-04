@@ -7,43 +7,116 @@ import KPICard from'@/components/ui/KPICard';
 import NeonCard from'@/components/ui/NeonCard';
 import{BarChart,Bar,XAxis,YAxis,CartesianGrid,Tooltip,ResponsiveContainer,PieChart,Pie,Cell,Legend}from'recharts';
 
-const fmtNumber=value=>new Intl.NumberFormat('pt-BR').format(Number(value||0));
-const chartColors=['hsl(var(--neon-igreja))','hsl(var(--neon-igreja)/.8)','hsl(var(--neon-igreja)/.65)','hsl(var(--neon-igreja)/.5)','hsl(var(--neon-igreja)/.35)','hsl(var(--muted-foreground))'];
-const StatPlaceholder=({message='Dados insuficientes'})=><div className="flex h-full items-center justify-center text-sm text-muted-foreground">{message}</div>;
+const fmtNumber=v=>new Intl.NumberFormat('pt-BR').format(Number(v||0));
+const chartColors=[
+ 'hsl(var(--neon-igreja))',
+ 'hsl(var(--neon-igreja)/.8)',
+ 'hsl(var(--neon-igreja)/.65)',
+ 'hsl(var(--neon-igreja)/.5)',
+ 'hsl(var(--neon-igreja)/.35)',
+ 'hsl(var(--muted-foreground))'
+];
+
+const Empty=({message='Dados insuficientes'})=>(
+ <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+  {message}
+ </div>
+);
 
 export default function DashboardHome(){
  const{user}=useAuth();
  const{toast}=useToast();
+
  const[loading,setLoading]=useState(true);
  const[error,setError]=useState(null);
- const[stats,setStats]=useState({totalMembros:0,membrosAtivos:0,membrosInativos:0,dirigentes:0,membrosEbd:0,batizadosAguas:0,batizadosEspiritoSanto:0,semFuncao:0,semConjunto:0,semClasseEbd:0});
- const[charts,setCharts]=useState({funcoes:[],conjuntos:[],classes:[]});
+
+ const[stats,setStats]=useState({
+  totalMembros:0,
+  membrosAtivos:0,
+  membrosInativos:0,
+  dirigentes:0,
+  membrosEbd:0,
+  batizadosAguas:0,
+  batizadosEspiritoSanto:0,
+  semFuncao:0,
+  semConjunto:0,
+  semClasseEbd:0
+ });
+
+ const[charts,setCharts]=useState({
+  funcoes:[],
+  conjuntos:[],
+  classes:[]
+ });
 
  const fetchData=useCallback(async()=>{
   if(!user)return;
+
   setLoading(true);
   setError(null);
 
   try{
    const[membrosRes,funcoesRes,conjuntosRes,classesRes]=await Promise.all([
-    supabase.from('igreja_membros').select('id,status,is_batizado_aguas,is_batizado_espirito,is_dirigente,funcao_id,conjunto_id,classe_id'),
-    supabase.from('igreja_funcoes').select('id,nome_funcao'),
-    supabase.from('igreja_conjuntos').select('id,nome_conjunto'),
-    supabase.from('igreja_classes').select('id,nome_classe')
+    supabase
+     .from('igreja_membros')
+     .select('id,status,is_batizado_aguas,is_batizado_espirito,is_dirigente,funcao_id,conjunto_id,classe_id'),
+
+    supabase
+     .from('igreja_funcoes')
+     .select('id,nome_funcao'),
+
+    supabase
+     .from('igreja_conjuntos')
+     .select('id,nome_conjunto'),
+
+    supabase
+     .from('igreja_classes')
+     .select('id,nome_classe')
    ]);
 
-   const firstError=[membrosRes.error,funcoesRes.error,conjuntosRes.error,classesRes.error].find(Boolean);
-   if(firstError)throw new Error(firstError.message||'Não foi possível carregar os dados da Secretaria.');
+   const firstError=[
+    membrosRes.error,
+    funcoesRes.error,
+    conjuntosRes.error,
+    classesRes.error
+   ].find(Boolean);
+
+   if(firstError)
+    throw new Error(
+     firstError.message||
+     'Não foi possível carregar os dados da Secretaria.'
+    );
 
    const membros=membrosRes.data||[];
    const funcoes=funcoesRes.data||[];
    const conjuntos=conjuntosRes.data||[];
    const classes=classesRes.data||[];
+
    const ativos=membros.filter(m=>m.status==='ATIVO');
 
-   const porFuncao=funcoes.map(f=>({name:f.nome_funcao,value:membros.filter(m=>m.funcao_id===f.id).length})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value);
-   const porConjunto=conjuntos.map(c=>({name:c.nome_conjunto,value:membros.filter(m=>m.conjunto_id===c.id).length})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value);
-   const porClasse=classes.map(c=>({name:c.nome_classe,value:membros.filter(m=>m.classe_id===c.id).length})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value);
+   const porFuncao=funcoes
+    .map(f=>({
+     name:f.nome_funcao,
+     value:membros.filter(m=>m.funcao_id===f.id).length
+    }))
+    .filter(x=>x.value>0)
+    .sort((a,b)=>b.value-a.value);
+
+   const porConjunto=conjuntos
+    .map(c=>({
+     name:c.nome_conjunto,
+     value:membros.filter(m=>m.conjunto_id===c.id).length
+    }))
+    .filter(x=>x.value>0)
+    .sort((a,b)=>b.value-a.value);
+
+   const porClasse=classes
+    .map(c=>({
+     name:c.nome_classe,
+     value:membros.filter(m=>m.classe_id===c.id).length
+    }))
+    .filter(x=>x.value>0)
+    .sort((a,b)=>b.value-a.value);
 
    setStats({
     totalMembros:membros.length,
@@ -58,11 +131,30 @@ export default function DashboardHome(){
     semClasseEbd:membros.filter(m=>m.classe_id==null).length
    });
 
-   setCharts({funcoes:porFuncao,conjuntos:porConjunto,classes:porClasse});
+   setCharts({
+    funcoes:porFuncao,
+    conjuntos:porConjunto,
+    classes:porClasse
+   });
+
   }catch(err){
-   console.error('Erro ao carregar dashboard da Secretaria:',err);
-   setError(err?.message||'Não foi possível carregar o dashboard.');
-   toast({title:'Erro ao carregar dados',description:err?.message||'Não foi possível carregar o dashboard.',variant:'destructive'});
+   console.error(
+    'Erro ao carregar dashboard da Secretaria:',
+    err
+   );
+
+   setError(
+    err?.message||
+    'Não foi possível carregar o dashboard.'
+   );
+
+   toast({
+    title:'Erro ao carregar dados',
+    description:err?.message||
+     'Não foi possível carregar o dashboard.',
+    variant:'destructive'
+   });
+
   }finally{
    setLoading(false);
   }
@@ -70,13 +162,47 @@ export default function DashboardHome(){
 
  useEffect(()=>{
   fetchData();
+
   if(!user)return;
 
-  const channel=supabase.channel('secretaria_dashboard_changes')
-   .on('postgres_changes',{event:'*',schema:'public',table:'igreja_membros'},fetchData)
-   .on('postgres_changes',{event:'*',schema:'public',table:'igreja_funcoes'},fetchData)
-   .on('postgres_changes',{event:'*',schema:'public',table:'igreja_conjuntos'},fetchData)
-   .on('postgres_changes',{event:'*',schema:'public',table:'igreja_classes'},fetchData)
+  const channel=supabase
+   .channel('secretaria_dashboard_changes')
+   .on(
+    'postgres_changes',
+    {
+     event:'*',
+     schema:'public',
+     table:'igreja_membros'
+    },
+    fetchData
+   )
+   .on(
+    'postgres_changes',
+    {
+     event:'*',
+     schema:'public',
+     table:'igreja_funcoes'
+    },
+    fetchData
+   )
+   .on(
+    'postgres_changes',
+    {
+     event:'*',
+     schema:'public',
+     table:'igreja_conjuntos'
+    },
+    fetchData
+   )
+   .on(
+    'postgres_changes',
+    {
+     event:'*',
+     schema:'public',
+     table:'igreja_classes'
+    },
+    fetchData
+   )
    .subscribe();
 
   const interval=setInterval(fetchData,30000);
@@ -88,103 +214,466 @@ export default function DashboardHome(){
  },[user,fetchData]);
 
  const pendencias=useMemo(()=>[
-  stats.semFuncao>0&&{tipo:'warning',icon:Settings,title:`${fmtNumber(stats.semFuncao)} membro(s) sem função`,description:'Existem membros cadastrados sem função vinculada.'},
-  stats.semConjunto>0&&{tipo:'warning',icon:Church,title:`${fmtNumber(stats.semConjunto)} membro(s) sem conjunto`,description:'Existem membros ainda não vinculados a um conjunto.'},
-  stats.semClasseEbd>0&&{tipo:'warning',icon:GraduationCap,title:`${fmtNumber(stats.semClasseEbd)} membro(s) sem classe de EBD`,description:'Existem membros sem classe de Escola Bíblica Dominical.'}
+  stats.semFuncao>0&&{
+   icon:Settings,
+   title:`${fmtNumber(stats.semFuncao)} membro(s) sem função`,
+   description:'Existem membros cadastrados sem função vinculada.'
+  },
+
+  stats.semConjunto>0&&{
+   icon:Church,
+   title:`${fmtNumber(stats.semConjunto)} membro(s) sem conjunto`,
+   description:'Existem membros ainda não vinculados a um conjunto.'
+  },
+
+  stats.semClasseEbd>0&&{
+   icon:GraduationCap,
+   title:`${fmtNumber(stats.semClasseEbd)} membro(s) sem classe de EBD`,
+   description:'Existem membros sem classe de Escola Bíblica Dominical.'
+  }
  ].filter(Boolean),[stats]);
 
- if(loading)return <div className="p-8 text-center text-muted-foreground animate-pulse">Atualizando painel da Secretaria...</div>;
-
- if(error)return <div className="w-full p-4 md:p-6"><NeonCard colorScheme="igreja" className="p-6 text-center"><AlertTriangle className="mx-auto mb-3 h-10 w-10 text-destructive"/><p className="font-semibold text-destructive">Não foi possível carregar o painel.</p><p className="mt-2 text-sm text-muted-foreground">{error}</p></NeonCard></div>;
-
- return <div className="w-full space-y-4 md:space-y-6">
-  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-   <div>
-    <h1 className="text-center text-2xl font-bold md:text-left md:text-3xl">Painel da Secretaria</h1>
-    <div className="mx-auto mt-3 h-1 w-16 rounded-full bg-[hsl(var(--neon-igreja))] md:mx-0"/>
-    <p className="mt-1 text-center text-sm text-muted-foreground md:text-left">Acompanhe os dados e a organização dos membros da igreja</p>
+ if(loading)
+  return(
+   <div className="p-8 text-center text-muted-foreground animate-pulse">
+    Atualizando painel da Secretaria...
    </div>
-  </div>
+  );
 
-  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-5">
-   <KPICard colorScheme="igreja" icon={Users} label="Total de Membros" value={stats.totalMembros} iconColor="gold" className="w-full"/>
-   <KPICard colorScheme="igreja" icon={UserCheck} label="Membros Ativos" value={stats.membrosAtivos} iconColor="igreja" className="w-full"/>
-   <KPICard colorScheme="igreja" icon={UserX} label="Membros Inativos" value={stats.membrosInativos} iconColor="igreja" className="w-full"/>
-   <KPICard colorScheme="igreja" icon={Crown} label="Dirigentes" value={stats.dirigentes} iconColor="gold" className="w-full"/>
-   <KPICard colorScheme="igreja" icon={GraduationCap} label="Membros na EBD" value={stats.membrosEbd} iconColor="gold" className="w-full"/>
-  </div>
+ if(error)
+  return(
+   <div className="w-full p-4 md:p-6">
+    <NeonCard
+     colorScheme="igreja"
+     className="p-6 text-center"
+    >
+     <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-destructive"/>
+     <p className="font-semibold text-destructive">
+      Não foi possível carregar o painel.
+     </p>
+     <p className="mt-2 text-sm text-muted-foreground">
+      {error}
+     </p>
+    </NeonCard>
+   </div>
+  );
 
-  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-5 lg:grid-cols-5">
-   <KPICard colorScheme="igreja" icon={Droplets} label="Batizados em Águas" value={stats.batizadosAguas} iconColor="blue" className="w-full"/>
-   <KPICard colorScheme="igreja" icon={Wind} label="Batizados no Espírito Santo" value={stats.batizadosEspiritoSanto} iconColor="igreja" className="w-full"/>
-   <KPICard colorScheme="igreja" icon={Settings} label="Sem Função" value={stats.semFuncao} iconColor="orange" className="w-full"/>
-   <KPICard colorScheme="igreja" icon={Church} label="Sem Conjunto" value={stats.semConjunto} iconColor="orange" className="w-full"/>
-   <KPICard colorScheme="igreja" icon={GraduationCap} label="Sem Classe EBD" value={stats.semClasseEbd} iconColor="orange" className="w-full"/>
-  </div>
+ return(
+  <div className="w-full space-y-5 md:space-y-6">
 
-  <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 md:gap-6">
-   <NeonCard colorScheme="igreja" className="h-[300px] overflow-hidden md:h-[380px]">
-    <h3 className="mb-4 text-lg font-semibold md:text-xl">Membros por Função</h3>
-    <ResponsiveContainer width="100%" height="85%">
-     {charts.funcoes.length?<BarChart data={charts.funcoes} margin={{top:10,right:10,left:-20,bottom:20}}>
-      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))"/>
-      <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} fontSize={11}/>
-      <YAxis stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} fontSize={11}/>
-      <Tooltip cursor={{fill:'hsl(var(--neon-igreja)/.08)'}} formatter={value=>[fmtNumber(value),'Membros']} contentStyle={{backgroundColor:'hsl(var(--card))',border:'1px solid hsl(var(--neon-igreja)/.3)',borderRadius:'10px'}}/>
-      <Bar dataKey="value" fill="hsl(var(--neon-igreja))" radius={[4,4,0,0]}/>
-     </BarChart>:<StatPlaceholder/>}
-    </ResponsiveContainer>
-   </NeonCard>
+   {/* CABEÇALHO PADRONIZADO */}
+   <div className="relative flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-end lg:justify-between">
 
-   <NeonCard colorScheme="igreja" className="h-[300px] overflow-hidden md:h-[380px]">
-    <h3 className="mb-4 text-lg font-semibold md:text-xl">Membros por Conjunto</h3>
-    <ResponsiveContainer width="100%" height="85%">
-     {charts.conjuntos.length?<PieChart>
-      <Pie data={charts.conjuntos} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value" stroke="none">
-       {charts.conjuntos.map((entry,index)=><Cell key={`conjunto-${index}`} fill={chartColors[index%chartColors.length]}/>)}
-      </Pie>
-      <Tooltip formatter={value=>[fmtNumber(value),'Membros']} contentStyle={{backgroundColor:'hsl(var(--card))',border:'1px solid hsl(var(--neon-igreja)/.3)',borderRadius:'10px'}}/>
-      <Legend wrapperStyle={{fontSize:'11px'}}/>
-     </PieChart>:<StatPlaceholder/>}
-    </ResponsiveContainer>
-   </NeonCard>
-  </div>
-
-  <NeonCard colorScheme="igreja" className="h-[300px] overflow-hidden md:h-[360px]">
-   <h3 className="mb-4 text-lg font-semibold md:text-xl">Membros por Classe de EBD</h3>
-   <ResponsiveContainer width="100%" height="85%">
-    {charts.classes.length?<BarChart data={charts.classes} layout="vertical" margin={{top:10,right:30,left:30,bottom:10}}>
-     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))"/>
-     <XAxis type="number" stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} fontSize={11}/>
-     <YAxis dataKey="name" type="category" stroke="hsl(var(--muted-foreground))" tickLine={false} axisLine={false} fontSize={11} width={150}/>
-     <Tooltip cursor={{fill:'hsl(var(--neon-igreja)/.08)'}} formatter={value=>[fmtNumber(value),'Membros']} contentStyle={{backgroundColor:'hsl(var(--card))',border:'1px solid hsl(var(--neon-igreja)/.3)',borderRadius:'10px'}}/>
-     <Bar dataKey="value" fill="hsl(var(--neon-igreja))" radius={[0,4,4,0]} barSize={24}/>
-    </BarChart>:<StatPlaceholder/>}
-   </ResponsiveContainer>
-  </NeonCard>
-
-  <NeonCard colorScheme="igreja" className="overflow-hidden p-5">
-   <div className="mb-4 flex items-start justify-between gap-3">
     <div>
-     <h3 className="text-lg font-semibold">Atenção da Secretaria</h3>
-     <p className="mt-1 text-xs text-muted-foreground">Pendências encontradas no cadastro dos membros</p>
+     <p className="text-[11px] font-semibold uppercase tracking-[.22em] text-[hsl(var(--neon-igreja))]">
+      Igreja • Secretaria
+     </p>
+
+     <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+      Painel da Secretaria
+     </h1>
+
+     <p className="mt-1 text-sm text-muted-foreground">
+      Visão geral dos membros e da organização da igreja
+     </p>
     </div>
-    <span className="shrink-0 rounded-full bg-[hsl(var(--neon-igreja)/.1)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--neon-igreja))]">{pendencias.length} {pendencias.length===1?'pendência':'pendências'}</span>
+
+    <div className="flex items-center gap-2 rounded-lg border border-[hsl(var(--neon-igreja)/.25)] bg-background/40 px-3 py-2">
+     <Users className="h-4 w-4 text-[hsl(var(--neon-igreja))]"/>
+     <span className="text-xs text-muted-foreground">
+      Total cadastrado:
+     </span>
+     <strong className="text-sm">
+      {fmtNumber(stats.totalMembros)}
+     </strong>
+    </div>
+
    </div>
 
-   {pendencias.length>0
-    ?<div className="space-y-3">{pendencias.map((item,index)=>{
-      const Icon=item.icon;
-      return <div key={`${item.title}-${index}`} className="flex items-start gap-3 rounded-xl border border-[hsl(var(--neon-igreja)/.25)] bg-background/30 p-3">
-       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--neon-igreja)/.1)] text-[hsl(var(--neon-igreja))]"><Icon className="h-4 w-4"/></div>
-       <div><p className="font-medium">{item.title}</p><p className="mt-1 text-xs text-muted-foreground">{item.description}</p></div>
-      </div>;
-     })}</div>
-    :<div className="flex flex-col items-center justify-center py-7 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[hsl(var(--neon-igreja)/.1)] text-[hsl(var(--neon-igreja))]"><CheckCircle2 className="h-5 w-5"/></div>
-      <p className="mt-3 font-medium">Cadastro em dia</p>
-      <p className="mt-1 text-xs text-muted-foreground">Não foram encontradas pendências cadastrais.</p>
-     </div>}
-  </NeonCard>
- </div>;
+   {/* INDICADORES PRINCIPAIS */}
+   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+
+    <KPICard
+     colorScheme="igreja"
+     icon={Users}
+     label="Total de Membros"
+     value={stats.totalMembros}
+     iconColor="gold"
+     className="w-full"
+    />
+
+    <KPICard
+     colorScheme="igreja"
+     icon={UserCheck}
+     label="Membros Ativos"
+     value={stats.membrosAtivos}
+     iconColor="igreja"
+     className="w-full"
+    />
+
+    <KPICard
+     colorScheme="igreja"
+     icon={UserX}
+     label="Membros Inativos"
+     value={stats.membrosInativos}
+     iconColor="orange"
+     className="w-full"
+    />
+
+    <KPICard
+     colorScheme="igreja"
+     icon={Crown}
+     label="Dirigentes"
+     value={stats.dirigentes}
+     iconColor="gold"
+     className="w-full"
+    />
+
+    <KPICard
+     colorScheme="igreja"
+     icon={GraduationCap}
+     label="Membros na EBD"
+     value={stats.membrosEbd}
+     iconColor="gold"
+     className="w-full"
+    />
+
+   </div>
+
+   {/* INDICADORES COMPLEMENTARES */}
+   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+
+    <KPICard
+     colorScheme="igreja"
+     icon={Droplets}
+     label="Batizados em Águas"
+     value={stats.batizadosAguas}
+     iconColor="blue"
+     className="w-full"
+    />
+
+    <KPICard
+     colorScheme="igreja"
+     icon={Wind}
+     label="Batizados no Espírito Santo"
+     value={stats.batizadosEspiritoSanto}
+     iconColor="igreja"
+     className="w-full"
+    />
+
+    <KPICard
+     colorScheme="igreja"
+     icon={Settings}
+     label="Sem Função"
+     value={stats.semFuncao}
+     iconColor="orange"
+     className="w-full"
+    />
+
+    <KPICard
+     colorScheme="igreja"
+     icon={Church}
+     label="Sem Conjunto"
+     value={stats.semConjunto}
+     iconColor="orange"
+     className="w-full"
+    />
+
+    <KPICard
+     colorScheme="igreja"
+     icon={GraduationCap}
+     label="Sem Classe EBD"
+     value={stats.semClasseEbd}
+     iconColor="orange"
+     className="w-full"
+    />
+
+   </div>
+
+   {/* GRÁFICOS */}
+   <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+
+    <NeonCard
+     colorScheme="igreja"
+     className="h-[340px] overflow-hidden md:h-[380px]"
+    >
+     <h3 className="mb-4 text-lg font-semibold">
+      Membros por Função
+     </h3>
+
+     <ResponsiveContainer width="100%" height="85%">
+      {charts.funcoes.length?(
+       <BarChart
+        data={charts.funcoes}
+        margin={{
+         top:10,
+         right:10,
+         left:-20,
+         bottom:20
+        }}
+       >
+        <CartesianGrid
+         strokeDasharray="3 3"
+         vertical={false}
+         stroke="hsl(var(--border))"
+        />
+
+        <XAxis
+         dataKey="name"
+         stroke="hsl(var(--muted-foreground))"
+         tickLine={false}
+         axisLine={false}
+         fontSize={11}
+        />
+
+        <YAxis
+         stroke="hsl(var(--muted-foreground))"
+         tickLine={false}
+         axisLine={false}
+         fontSize={11}
+        />
+
+        <Tooltip
+         cursor={{
+          fill:'hsl(var(--neon-igreja)/.08)'
+         }}
+         formatter={value=>[
+          fmtNumber(value),
+          'Membros'
+         ]}
+         contentStyle={{
+          backgroundColor:'hsl(var(--card))',
+          border:'1px solid hsl(var(--neon-igreja)/.3)',
+          borderRadius:'10px'
+         }}
+        />
+
+        <Bar
+         dataKey="value"
+         fill="hsl(var(--neon-igreja))"
+         radius={[4,4,0,0]}
+        />
+
+       </BarChart>
+      ):(
+       <Empty/>
+      )}
+     </ResponsiveContainer>
+    </NeonCard>
+
+    <NeonCard
+     colorScheme="igreja"
+     className="h-[340px] overflow-hidden md:h-[380px]"
+    >
+     <h3 className="mb-4 text-lg font-semibold">
+      Membros por Conjunto
+     </h3>
+
+     <ResponsiveContainer width="100%" height="85%">
+      {charts.conjuntos.length?(
+       <PieChart>
+
+        <Pie
+         data={charts.conjuntos}
+         cx="50%"
+         cy="50%"
+         innerRadius={55}
+         outerRadius={85}
+         paddingAngle={4}
+         dataKey="value"
+         stroke="none"
+        >
+         {charts.conjuntos.map((entry,index)=>(
+          <Cell
+           key={`conjunto-${index}`}
+           fill={
+            chartColors[
+             index%chartColors.length
+            ]
+           }
+          />
+         ))}
+        </Pie>
+
+        <Tooltip
+         formatter={value=>[
+          fmtNumber(value),
+          'Membros'
+         ]}
+         contentStyle={{
+          backgroundColor:'hsl(var(--card))',
+          border:'1px solid hsl(var(--neon-igreja)/.3)',
+          borderRadius:'10px'
+         }}
+        />
+
+        <Legend
+         wrapperStyle={{
+          fontSize:'11px'
+         }}
+        />
+
+       </PieChart>
+      ):(
+       <Empty/>
+      )}
+     </ResponsiveContainer>
+    </NeonCard>
+
+   </div>
+
+   {/* EBD */}
+   <NeonCard
+    colorScheme="igreja"
+    className="h-[340px] overflow-hidden md:h-[380px]"
+   >
+    <h3 className="mb-4 text-lg font-semibold">
+     Membros por Classe de EBD
+    </h3>
+
+    <ResponsiveContainer width="100%" height="85%">
+     {charts.classes.length?(
+      <BarChart
+       data={charts.classes}
+       layout="vertical"
+       margin={{
+        top:10,
+        right:30,
+        left:30,
+        bottom:10
+       }}
+      >
+       <CartesianGrid
+        strokeDasharray="3 3"
+        horizontal={false}
+        stroke="hsl(var(--border))"
+       />
+
+       <XAxis
+        type="number"
+        stroke="hsl(var(--muted-foreground))"
+        tickLine={false}
+        axisLine={false}
+        fontSize={11}
+       />
+
+       <YAxis
+        dataKey="name"
+        type="category"
+        stroke="hsl(var(--muted-foreground))"
+        tickLine={false}
+        axisLine={false}
+        fontSize={11}
+        width={150}
+       />
+
+       <Tooltip
+        cursor={{
+         fill:'hsl(var(--neon-igreja)/.08)'
+        }}
+        formatter={value=>[
+         fmtNumber(value),
+         'Membros'
+        ]}
+        contentStyle={{
+         backgroundColor:'hsl(var(--card))',
+         border:'1px solid hsl(var(--neon-igreja)/.3)',
+         borderRadius:'10px'
+        }}
+       />
+
+       <Bar
+        dataKey="value"
+        fill="hsl(var(--neon-igreja))"
+        radius={[0,4,4,0]}
+        barSize={24}
+       />
+
+      </BarChart>
+     ):(
+      <Empty/>
+     )}
+    </ResponsiveContainer>
+   </NeonCard>
+
+   {/* PENDÊNCIAS */}
+   <NeonCard
+    colorScheme="igreja"
+    className="overflow-hidden p-5"
+   >
+
+    <div className="mb-4 flex items-start justify-between gap-3">
+
+     <div>
+      <h3 className="text-lg font-semibold">
+       Atenção da Secretaria
+      </h3>
+
+      <p className="mt-1 text-xs text-muted-foreground">
+       Pendências encontradas no cadastro dos membros
+      </p>
+     </div>
+
+     <span className="shrink-0 rounded-full bg-[hsl(var(--neon-igreja)/.1)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--neon-igreja))]">
+      {pendencias.length}{' '}
+      {pendencias.length===1
+       ?'pendência'
+       :'pendências'}
+     </span>
+
+    </div>
+
+    {pendencias.length>0?(
+     <div className="space-y-3">
+
+      {pendencias.map((item,index)=>{
+       const Icon=item.icon;
+
+       return(
+        <div
+         key={`${item.title}-${index}`}
+         className="flex items-start gap-3 rounded-xl border border-[hsl(var(--neon-igreja)/.25)] bg-background/30 p-3"
+        >
+
+         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--neon-igreja)/.1)] text-[hsl(var(--neon-igreja))]">
+          <Icon className="h-4 w-4"/>
+         </div>
+
+         <div>
+          <p className="font-medium">
+           {item.title}
+          </p>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+           {item.description}
+          </p>
+         </div>
+
+        </div>
+       );
+      })}
+
+     </div>
+    ):(
+     <div className="flex flex-col items-center justify-center py-7 text-center">
+
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[hsl(var(--neon-igreja)/.1)] text-[hsl(var(--neon-igreja))]">
+       <CheckCircle2 className="h-5 w-5"/>
+      </div>
+
+      <p className="mt-3 font-medium">
+       Cadastro em dia
+      </p>
+
+      <p className="mt-1 text-xs text-muted-foreground">
+       Não foram encontradas pendências cadastrais.
+      </p>
+
+     </div>
+    )}
+
+   </NeonCard>
+
+  </div>
+ );
 }
