@@ -31,7 +31,7 @@ const NavLink=({to,icon:Icon,children})=>{
  );
 };
 
-const Sidebar=({isOpen,setOpen,isMobile})=>{
+export default function Sidebar({isOpen,setOpen,isMobile}){
  const{signOut}=useAuth();
 
  const trigger='flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[hsl(var(--neon-gold)/.08)] hover:text-foreground';
@@ -45,11 +45,8 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
      :isOpen?'w-60':'w-20'
    )}
   >
-
    <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
-
     <div className="flex items-center gap-2 overflow-hidden">
-
      <div
       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md shadow-[0_0_12px_hsl(var(--neon-gold)/.35)]"
       style={{background:`linear-gradient(135deg,${GOLD},#d97706)`}}
@@ -59,19 +56,10 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
 
      {(isOpen||isMobile)&&(
       <div className="leading-tight">
-       <div className="text-sm font-bold uppercase text-white">
-        IGREJA
-       </div>
-
-       <div
-        className="text-[11px] font-bold uppercase tracking-widest"
-        style={{color:GOLD}}
-       >
-        SECRETARIA
-       </div>
+       <div className="text-sm font-bold uppercase text-white">IGREJA</div>
+       <div className="text-[11px] font-bold uppercase tracking-widest" style={{color:GOLD}}>SECRETARIA</div>
       </div>
      )}
-
     </div>
 
     {!isMobile&&(
@@ -83,24 +71,16 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
       className="ml-auto shrink-0 hover:bg-[hsl(var(--neon-gold)/.08)]"
       style={{color:GOLD}}
      >
-      {isOpen
-       ?<ChevronLeft className="h-5 w-5"/>
-       :<ChevronRight className="h-5 w-5"/>
-      }
+      {isOpen?<ChevronLeft className="h-5 w-5"/>:<ChevronRight className="h-5 w-5"/>}
      </Button>
     )}
-
    </div>
 
    <nav className="flex-1 overflow-auto px-2 py-4 text-sm font-medium">
-
     <ul className="space-y-1">
 
      <li>
-      <NavLink
-       to="/igreja/secretaria"
-       icon={Home}
-      >
+      <NavLink to="/igreja/secretaria" icon={Home}>
        {(isOpen||isMobile)&&'Dashboard'}
       </NavLink>
      </li>
@@ -108,160 +88,55 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
      <Accordion type="single" collapsible className="w-full">
 
       <AccordionItem value="cadastros">
-
        <AccordionTrigger className={trigger}>
-        <span className="flex items-center gap-3">
-         📋 {(isOpen||isMobile)&&'Cadastros'}
-        </span>
+        <span className="flex items-center gap-3">📋 {(isOpen||isMobile)&&'Cadastros'}</span>
        </AccordionTrigger>
-
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-
-        <NavLink
-         to="/igreja/secretaria/cadastros/membros"
-         icon={UserPlus}
-        >
-         Membros
-        </NavLink>
-
-        <NavLink
-         to="/igreja/secretaria/cadastros/funcoes"
-         icon={BookUser}
-        >
-         Funções
-        </NavLink>
-
-        <NavLink
-         to="/igreja/secretaria/cadastros/cargos"
-         icon={Briefcase}
-        >
-         Cargos
-        </NavLink>
-
-        <NavLink
-         to="/igreja/secretaria/cadastros/conjuntos"
-         icon={Users}
-        >
-         Conjuntos
-        </NavLink>
-
-        <NavLink
-         to="/igreja/secretaria/cadastros/classes"
-         icon={GraduationCap}
-        >
-         Classes
-        </NavLink>
-
+        <NavLink to="/igreja/secretaria/cadastros/membros" icon={UserPlus}>Membros</NavLink>
+        <NavLink to="/igreja/secretaria/cadastros/funcoes" icon={BookUser}>Funções</NavLink>
+        <NavLink to="/igreja/secretaria/cadastros/cargos" icon={Briefcase}>Cargos</NavLink>
+        <NavLink to="/igreja/secretaria/cadastros/conjuntos" icon={Users}>Conjuntos</NavLink>
+        <NavLink to="/igreja/secretaria/cadastros/classes" icon={GraduationCap}>Classes</NavLink>
        </AccordionContent>
-
       </AccordionItem>
 
       <AccordionItem value="lancamentos">
-
        <AccordionTrigger className={trigger}>
-        <span className="flex items-center gap-3">
-         ↔️ {(isOpen||isMobile)&&'Lançamentos'}
-        </span>
+        <span className="flex items-center gap-3">↔️ {(isOpen||isMobile)&&'Lançamentos'}</span>
        </AccordionTrigger>
-
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-
-        <NavLink
-         to="/igreja/secretaria/lancamentos/casamentos"
-         icon={Heart}
-        >
-         Casamentos
-        </NavLink>
-
+        <NavLink to="/igreja/secretaria/lancamentos/casamentos" icon={Heart}>Casamentos</NavLink>
        </AccordionContent>
-
       </AccordionItem>
 
       <AccordionItem value="consultas">
-
        <AccordionTrigger className={trigger}>
-        <span className="flex items-center gap-3">
-         🔎 {(isOpen||isMobile)&&'Consultas'}
-        </span>
+        <span className="flex items-center gap-3">🔎 {(isOpen||isMobile)&&'Consultas'}</span>
        </AccordionTrigger>
-
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-
-        <NavLink
-         to="/igreja/secretaria/consultas/membros"
-         icon={UserCheck}
-        >
-         Membros
-        </NavLink>
-
-        <NavLink
-         to="/igreja/secretaria/consultas/historico-membro"
-         icon={History}
-        >
-         Histórico de Membro
-        </NavLink>
-
-        <NavLink
-         to="/igreja/secretaria/consultas/dirigentes-conjunto"
-         icon={Contact}
-        >
-         Dirigentes/Conj.
-        </NavLink>
-
-        <NavLink
-         to="/igreja/secretaria/consultas/membros-conjunto"
-         icon={Users}
-        >
-         Membros/Conj.
-        </NavLink>
-
+        <NavLink to="/igreja/secretaria/consultas/membros" icon={UserCheck}>Membros</NavLink>
+        <NavLink to="/igreja/secretaria/consultas/historico-membro" icon={History}>Histórico de Membro</NavLink>
+        <NavLink to="/igreja/secretaria/consultas/dirigentes-conjunto" icon={Contact}>Dirigentes/Conj.</NavLink>
+        <NavLink to="/igreja/secretaria/consultas/membros-conjunto" icon={Users}>Membros/Conj.</NavLink>
        </AccordionContent>
-
       </AccordionItem>
 
       <AccordionItem value="relatorios">
-
        <AccordionTrigger className={trigger}>
-        <span className="flex items-center gap-3">
-         📊 {(isOpen||isMobile)&&'Relatórios'}
-        </span>
+        <span className="flex items-center gap-3">📊 {(isOpen||isMobile)&&'Relatórios'}</span>
        </AccordionTrigger>
-
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-
-        <NavLink
-         to="/igreja/secretaria/relatorios/membros-cargo"
-         icon={Briefcase}
-        >
-         Membros por Cargo
-        </NavLink>
-
-        <NavLink
-         to="/igreja/secretaria/relatorios/membros-funcao"
-         icon={BookUser}
-        >
-         Membros por Função
-        </NavLink>
-
-        <NavLink
-         to="/igreja/secretaria/relatorios/estatistico"
-         icon={PieChart}
-        >
-         Estatístico
-        </NavLink>
-
+        <NavLink to="/igreja/secretaria/relatorios/membros-cargo" icon={Briefcase}>Membros por Cargo</NavLink>
+        <NavLink to="/igreja/secretaria/relatorios/membros-funcao" icon={BookUser}>Membros por Função</NavLink>
+        <NavLink to="/igreja/secretaria/relatorios/estatistico" icon={PieChart}>Estatístico</NavLink>
        </AccordionContent>
-
       </AccordionItem>
 
      </Accordion>
-
     </ul>
-
    </nav>
 
    <div className="shrink-0 space-y-1 border-t border-border p-2">
-
     <Link
      to="/modules"
      className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-[hsl(var(--neon-gold)/.08)] hover:text-foreground"
@@ -278,11 +153,7 @@ const Sidebar=({isOpen,setOpen,isMobile})=>{
      <LogOut className="h-4 w-4 shrink-0"/>
      {(isOpen||isMobile)&&'Sair'}
     </button>
-
    </div>
-
   </aside>
  );
-};
-
-export default Sidebar;
+}
