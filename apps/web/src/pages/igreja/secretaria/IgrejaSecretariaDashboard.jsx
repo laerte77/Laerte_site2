@@ -30,8 +30,10 @@ import{DeviceContext}from'@/App';
 import{cn}from'@/lib/utils';
 import{SecretariaSharedDataProvider}from'@/contexts/SecretariaSharedDataContext';
 
-const IgrejaSecretariaDashboard=()=>{
- const navigate=useNavigate(),location=useLocation();
+export default function IgrejaSecretariaDashboard(){
+
+ const navigate=useNavigate();
+ const location=useLocation();
  const{session,loading,canAccessModule}=useAuth();
  const{isMobile}=useContext(DeviceContext);
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
@@ -41,7 +43,8 @@ const IgrejaSecretariaDashboard=()=>{
  const hasSecretariaAccess=canAccessModule('igreja:secretaria');
 
  useEffect(()=>{
-  if(!loading&&!session)navigate('/login');
+  if(!loading&&!session)
+   navigate('/login');
  },[session,loading,navigate]);
 
  useEffect(()=>{
@@ -49,35 +52,36 @@ const IgrejaSecretariaDashboard=()=>{
  },[isMobile]);
 
  useEffect(()=>{
-  if(isMobile)setSidebarOpen(false);
+  if(isMobile)
+   setSidebarOpen(false);
  },[location.pathname,isMobile]);
 
  if(loading){
   return(
    <div className="flex h-screen flex-col items-center justify-center text-foreground">
-    <Loader2 className="mb-4 h-10 w-10 animate-spin text-[hsl(var(--neon-igreja))] motion-reduce:animate-none"/>
+    <Loader2 className="mb-4 h-10 w-10 animate-spin text-[hsl(var(--neon-gold))]"/>
     <p>Carregando Módulo...</p>
    </div>
   );
  }
 
- if(!session){
-  return null;
- }
+ if(!session)return null;
 
  if(!hasSecretariaAccess){
   return(
-   <div className="flex min-h-screen flex-col items-center justify-center bg-transparent p-4 text-foreground">
+   <div className="flex min-h-screen flex-col items-center justify-center p-4 text-foreground">
     <div className="w-full max-w-md rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-center shadow-lg sm:p-8">
      <AlertCircle className="mx-auto mb-4 h-12 w-12 text-red-500"/>
-     <h2 className="mb-2 text-2xl font-bold">Acesso Negado</h2>
+     <h2 className="mb-2 text-2xl font-bold">
+      Acesso Negado
+     </h2>
      <p className="mb-6 text-muted-foreground">
       Você não possui permissão para acessar a Secretaria da Igreja.
      </p>
      <Button
       type="button"
       onClick={()=>navigate('/igreja')}
-      className="bg-[hsl(var(--neon-igreja))] text-[hsl(var(--background))] hover:bg-[hsl(var(--neon-igreja))]/90"
+      className="bg-[hsl(var(--neon-gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--neon-gold))]/90"
      >
       <ArrowLeft className="mr-2 h-4 w-4"/>
       Voltar
@@ -89,13 +93,15 @@ const IgrejaSecretariaDashboard=()=>{
 
  return(
   <SecretariaSharedDataProvider>
+
    <div
     className="flex min-h-screen w-full bg-gradient-professional"
     style={{
-     '--primary':'var(--neon-igreja)',
-     '--ring':'var(--neon-igreja)'
+     '--primary':'var(--neon-gold)',
+     '--ring':'var(--neon-gold)'
     }}
    >
+
     <Sidebar
      isOpen={isSidebarOpen}
      setOpen={setSidebarOpen}
@@ -108,6 +114,7 @@ const IgrejaSecretariaDashboard=()=>{
       !isMobile&&(isSidebarOpen?'ml-60':'ml-20')
      )}
     >
+
      <Header
       toggleSidebar={()=>setSidebarOpen(v=>!v)}
       submodule="Secretaria"
@@ -115,6 +122,7 @@ const IgrejaSecretariaDashboard=()=>{
      />
 
      <main className="relative flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5 [&_.neon-card]:neon-border-gold [&_.neon-card]:neon-hover-gold">
+
       <Routes>
 
        <Route
@@ -126,18 +134,22 @@ const IgrejaSecretariaDashboard=()=>{
         path="cadastros/membros"
         element={<CadastroMembros/>}
        />
+
        <Route
         path="cadastros/funcoes"
         element={<CadastroFuncoes/>}
        />
+
        <Route
         path="cadastros/cargos"
         element={<CadastroCargos/>}
        />
+
        <Route
         path="cadastros/conjuntos"
         element={<CadastroConjuntos/>}
        />
+
        <Route
         path="cadastros/classes"
         element={<CadastroClasses/>}
@@ -152,14 +164,17 @@ const IgrejaSecretariaDashboard=()=>{
         path="consultas/membros"
         element={<ConsultaMembros/>}
        />
+
        <Route
         path="consultas/historico-membro"
         element={<ConsultaHistoricoMembro/>}
        />
+
        <Route
         path="consultas/dirigentes-conjunto"
         element={<ConsultaDirigentesConjunto/>}
        />
+
        <Route
         path="consultas/membros-conjunto"
         element={<ConsultaMembrosConjunto/>}
@@ -169,10 +184,12 @@ const IgrejaSecretariaDashboard=()=>{
         path="relatorios/membros-cargo"
         element={<ConsultaMembrosCargoRelatorio/>}
        />
+
        <Route
         path="relatorios/membros-funcao"
         element={<ConsultaMembrosFuncaoRelatorio/>}
        />
+
        <Route
         path="relatorios/estatistico"
         element={<RelatorioEstatistico/>}
@@ -209,21 +226,23 @@ const IgrejaSecretariaDashboard=()=>{
        />
 
       </Routes>
+
      </main>
+
     </div>
 
     {isMobile&&isSidebarOpen&&(
      <div
       onClick={()=>setSidebarOpen(false)}
-      className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm"
       aria-hidden="true"
      />
     )}
 
     <Toaster/>
+
    </div>
+
   </SecretariaSharedDataProvider>
  );
-};
-
-export default IgrejaSecretariaDashboard;
+}
