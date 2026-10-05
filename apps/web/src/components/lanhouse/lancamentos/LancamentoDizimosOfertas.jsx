@@ -1,471 +1,1013 @@
 import React,{useState,useEffect,useCallback,useMemo,useRef}from'react';
-import{Plus,Edit,Trash2,Coins,Search,Download,RefreshCw}from'lucide-react';
-import{format,getMonth,getYear}from'date-fns';
+import{motion}from'framer-motion';
+import{Plus,Edit,Trash2,Heart,Search,Download,Receipt,DollarSign,TrendingDown,CalendarDays,RotateCcw}from'lucide-react';
+import{parseISO,getMonth,getYear}from'date-fns';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
 import{useToast}from'@/components/ui/use-toast';
-import{Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter}from'@/components/ui/dialog';
 import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{ScrollArea}from'@/components/ui/scroll-area';
-import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
+import{Card,CardContent}from'@/components/ui/card';
 import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
-import*as XLSX from'xlsx';
+import SearchableModal from'@/components/SearchableModal';
+import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
+import{exportToExcel}from'@/lib/ExportUtils';
 
-const C='hsl(var(--neon-lanhouse))';
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const moeda=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
+const TZ='America/Sao_Paulo';
+const CYAN='hsl(188 100% 50%)';
+const BRL=new Intl.NumberFormat('pt-BR',{
+ style:'currency',
+ currency:'BRL',
+ minimumFractionDigits:2,
+ maximumFractionDigits:2
+});
 
-const cleanupChannel=channel=>{
- try{
-  if(typeof supabase.removeChannel==='function'){
-   const r=supabase.removeChannel(channel);
-   if(r&&typeof r.catch==='function')r.catch(()=>{});
-   return;
-  }
-  if(channel&&typeof channel.unsubscribe==='function'){
-   const r=channel.unsubscribe();
-   if(r&&typeof r.catch==='function')r.catch(()=>{});
-  }
- }catch{}
+const toCents=v=>Math.round((Number(v)||0)*100);
+const fromCents=v=>(Number(v)||0)/100;
+const roundMoney=v=>fromCents(toCents(v));
+
+const getBRDate=()=>{
+ const p=new Intl.DateTimeFormat('en-CA',{
+  timeZone:TZ,
+  year:'numeric',
+  month:'2-digit',
+  day:'2-digit'
+ }).formatToParts(new Date());
+
+ const v={};
+
+ p.forEach(x=>{
+  if(x.type!=='literal')v[x.type]=x.value;
+ });
+
+ return`${v.year}-${v.month}-${v.day}`;
 };
 
+const moneyInput=v=>{
+ const d=String(v??'').replace(/\D/g,'');
+ return d?BRL.format(fromCents(Number(d))):'';
+};
+
+const moneyNum=v=>{
+ const d=String(v??'').replace(/\D/g,'');
+ return d?fromCents(Number(d)):0;
+};
+
+const moneyShow=v=>BRL.format(roundMoney(v));
+
+const brDate=d=>
+ d
+  ?new Date(d).toLocaleDateString('pt-BR',{timeZone:'UTC'})
+  :'—';
+
 export default function LancamentoDizimosOfertas(){
- const{toast}=useToast(),{user}=useAuth(),mounted=useRef(true);
- const[lancamentos,setLancamentos]=useState([]),[loading,setLoading]=useState(true);
- const[searchTerm,setSearchTerm]=useState(''),[selectSearch,setSelectSearch]=useState('');
+ const{toast}=useToast();
+ const{user}=useAuth();
+ const mounted=useRef(true);
+
+ const[lancamentos,setLancamentos]=useState([]);
+ const[loading,setLoading]=useState(true);
+ const[searchTerm,setSearchTerm]=useState('');
  const[selectedMonth,setSelectedMonth]=useState(String(new Date().getMonth()));
  const[selectedYear,setSelectedYear]=useState(String(new Date().getFullYear()));
- const[formOpen,setFormOpen]=useState(false),[selectOpen,setSelectOpen]=useState(false),[exportOpen,setExportOpen]=useState(false);
- const[currentId,setCurrentId]=useState(null),[selectedItem,setSelectedItem]=useState(null);
- const[exportFilters,setExportFilters]=useState({month:new Date().getMonth(),year:new Date().getFullYear()});
- const[form,setForm]=useState({data:format(new Date(),'yyyy-MM-dd'),valor:'',tipo_movimento:''});
- const tipos=['DÍZIMO','OFERTA','VOTO'];
+ const[currentPage,setCurrentPage]=useState(1);
 
- useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
+ const[isDialogOpen,setIsDialogOpen]=useState(false);
+ const[isSearchModalOpen,setIsSearchModalOpen]=useState(false);
+ const[isExportOpen,setIsExportOpen]=useState(false);
 
- const load=useCallback(async()=>{
+ const[currentLancamentoId,setCurrentLancamentoId]=useState(null);
+
+ const[exportFilters,setExportFilters]=useState({
+  month:new Date().getMonth(),
+  year:new Date().getFullYear()
+ });
+
+ const initialForm=()=>({
+  data:getBRDate(),
+  valor:'',
+  tipo_movimento:'DÍZIMO'
+ });
+
+ const[formData,setFormData]=useState(initialForm);
+
+ const pageSize=10;
+
+ useEffect(()=>{
+  mounted.current=true;
+
+  return()=>{
+   mounted.current=false;
+  };
+ },[]);
+
+ const availableYears=useMemo(()=>{
+  const years=lancamentos.map(d=>getYear(parseISO(d.data)));
+
+  years.push(new Date().getFullYear());
+
+  return[...new Set(years)].sort((a,b)=>b-a);
+ },[lancamentos]);
+
+ const fetchData=useCallback(async()=>{
   if(!user)return;
+
   setLoading(true);
+
   try{
-   const{data,error}=await supabase.from('lm_dizimos_ofertas').select('*').eq('user_id',user.id).order('data',{ascending:false});
+   const{data,error}=await supabase
+    .from('lm_dizimos_ofertas')
+    .select('*')
+    .eq('user_id',user.id)
+    .order('data',{ascending:false});
+
    if(error)throw error;
-   if(mounted.current)setLancamentos(data||[]);
-  }catch(e){
-   if(mounted.current)toast({title:'Erro ao buscar lançamentos',description:e.message,variant:'destructive'});
+
+   if(!mounted.current)return;
+
+   setLancamentos(data||[]);
+  }catch(error){
+   if(mounted.current){
+    toast({
+     title:'Erro ao carregar lançamentos',
+     description:error.message||'Não foi possível carregar os registros.',
+     variant:'destructive'
+    });
+   }
   }finally{
-   if(mounted.current)setLoading(false);
+   if(mounted.current){
+    setLoading(false);
+   }
   }
  },[user,toast]);
 
- useEffect(()=>load(),[load]);
-
  useEffect(()=>{
-  if(!user)return;
-  const ch=supabase.channel('lm_dizimos_ofertas_changes_v4')
-   .on('postgres_changes',{
-    event:'*',
-    schema:'public',
-    table:'lm_dizimos_ofertas',
-    filter:`user_id=eq.${user.id}`
-   },load)
-   .subscribe();
-  return()=>cleanupChannel(ch);
- },[user,load]);
+  fetchData();
 
- const years=useMemo(()=>{
-  const y=lancamentos.map(x=>new Date(x.data).getFullYear());
-  y.push(new Date().getFullYear());
-  return[...new Set(y)].sort((a,b)=>b-a);
- },[lancamentos]);
+  if(!user)return;
+
+  const channel=supabase
+   .channel('lm_dizimos_changes')
+   .on(
+    'postgres_changes',
+    {
+     event:'*',
+     schema:'public',
+     table:'lm_dizimos_ofertas'
+    },
+    ()=>fetchData()
+   )
+   .subscribe();
+
+  return()=>{
+   try{
+    supabase.removeChannel(channel);
+   }catch{}
+  };
+ },[user,fetchData]);
 
  const filtered=useMemo(()=>{
-  let r=lancamentos;
+  let result=lancamentos;
 
-  if(selectedYear!=='all')r=r.filter(x=>getYear(new Date(x.data)).toString()===selectedYear);
-  if(selectedMonth!=='all')r=r.filter(x=>getMonth(new Date(x.data)).toString()===selectedMonth);
-
-  if(searchTerm){
-   const s=searchTerm.toLowerCase();
-   r=r.filter(x=>String(x.tipo_movimento||'').toLowerCase().includes(s));
+  if(selectedYear!=='all'){
+   result=result.filter(
+    x=>String(getYear(parseISO(x.data)))===selectedYear
+   );
   }
 
-  return r;
- },[lancamentos,selectedYear,selectedMonth,searchTerm]);
+  if(selectedMonth!=='all'){
+   result=result.filter(
+    x=>String(getMonth(parseISO(x.data)))===selectedMonth
+   );
+  }
 
- const selectList=useMemo(()=>{
-  const s=selectSearch.toLowerCase().trim();
-  return lancamentos.filter(x=>!s||`${x.tipo_movimento||''}`.toLowerCase().includes(s));
- },[lancamentos,selectSearch]);
+  if(searchTerm.trim()){
+   const term=searchTerm.toLowerCase();
 
- const total=useMemo(()=>filtered.reduce((a,x)=>a+Number(x.valor||0),0),[filtered]);
- const totalDizimos=useMemo(()=>filtered.filter(x=>x.tipo_movimento==='DÍZIMO').reduce((a,x)=>a+Number(x.valor||0),0),[filtered]);
- const totalOfertas=useMemo(()=>filtered.filter(x=>x.tipo_movimento==='OFERTA').reduce((a,x)=>a+Number(x.valor||0),0),[filtered]);
- const totalVotos=useMemo(()=>filtered.filter(x=>x.tipo_movimento==='VOTO').reduce((a,x)=>a+Number(x.valor||0),0),[filtered]);
+   result=result.filter(
+    x=>(x.tipo_movimento||'').toLowerCase().includes(term)
+   );
+  }
 
- const reset=()=>{
-  setForm({
-   data:format(new Date(),'yyyy-MM-dd'),
-   valor:'',
-   tipo_movimento:''
-  });
-  setCurrentId(null);
- };
+  return result;
+ },[
+  lancamentos,
+  selectedYear,
+  selectedMonth,
+  searchTerm
+ ]);
 
- const openForm=item=>{
-  if(item){
-   setCurrentId(item.id);
-   setForm({
-    data:item.data||format(new Date(),'yyyy-MM-dd'),
-    valor:item.valor??'',
-    tipo_movimento:item.tipo_movimento||''
-   });
-  }else reset();
+ useEffect(()=>{
+  setCurrentPage(1);
+ },[
+  selectedYear,
+  selectedMonth,
+  searchTerm
+ ]);
 
-  setFormOpen(true);
- };
+ const totalC=filtered.reduce(
+  (s,x)=>s+toCents(x.valor),
+  0
+ );
 
- const closeForm=()=>{
-  setFormOpen(false);
-  reset();
- };
+ const averageC=
+  filtered.length
+   ?Math.round(totalC/filtered.length)
+   :0;
 
- const save=async e=>{
-  e.preventDefault();
+ const biggestC=filtered.reduce(
+  (m,x)=>Math.max(m,toCents(x.valor)),
+  0
+ );
 
-  if(!form.data||!form.valor||!form.tipo_movimento){
-   return toast({
+ const total=fromCents(totalC);
+ const average=fromCents(averageC);
+ const biggest=fromCents(biggestC);
+
+ const totalDizimos=filtered
+  .filter(x=>x.tipo_movimento==='DÍZIMO')
+  .reduce((s,x)=>s+toCents(x.valor),0);
+
+ const totalOfertas=filtered
+  .filter(x=>x.tipo_movimento==='OFERTA')
+  .reduce((s,x)=>s+toCents(x.valor),0);
+
+ const totalVotos=filtered
+  .filter(x=>x.tipo_movimento==='VOTO')
+  .reduce((s,x)=>s+toCents(x.valor),0);
+
+ const totalPages=Math.max(
+  1,
+  Math.ceil(filtered.length/pageSize)
+ );
+
+ const paginated=filtered.slice(
+  (currentPage-1)*pageSize,
+  currentPage*pageSize
+ );
+
+ const handleSave=async()=>{
+  if(
+   !formData.data||
+   !formData.valor||
+   !formData.tipo_movimento
+  ){
+   toast({
     title:'Campos obrigatórios',
     description:'Preencha todos os campos.',
     variant:'destructive'
    });
+
+   return;
   }
 
-  const payload={
-   data:form.data,
-   valor:Number(form.valor),
-   tipo_movimento:form.tipo_movimento,
-   user_id:user.id
+  const valor=roundMoney(
+   moneyNum(formData.valor)
+  );
+
+  if(valor<=0){
+   toast({
+    title:'Valor inválido',
+    description:'Informe um valor maior que zero.',
+    variant:'destructive'
+   });
+
+   return;
+  }
+
+  const dataToSave={
+   ...formData,
+   user_id:user.id,
+   valor
   };
 
-  const q=currentId
-   ?await supabase.from('lm_dizimos_ofertas').update(payload).eq('id',currentId).eq('user_id',user.id)
-   :await supabase.from('lm_dizimos_ofertas').insert(payload);
+  try{
+   const result=currentLancamentoId
+    ?await supabase
+      .from('lm_dizimos_ofertas')
+      .update(dataToSave)
+      .eq('id',currentLancamentoId)
+      .eq('user_id',user.id)
+    :await supabase
+      .from('lm_dizimos_ofertas')
+      .insert(dataToSave);
 
-  if(q.error){
-   return toast({
+   if(result.error)throw result.error;
+
+   toast({
+    title:'Sucesso',
+    description:currentLancamentoId
+     ?'Lançamento atualizado.'
+     :'Lançamento registrado.'
+   });
+
+   closeDialog();
+   fetchData();
+  }catch(error){
+   toast({
     title:'Erro ao salvar',
-    description:q.error.message,
+    description:error.message||'Não foi possível salvar o lançamento.',
     variant:'destructive'
    });
   }
-
-  toast({
-   title:'Sucesso',
-   description:currentId?'Lançamento atualizado.':'Lançamento registrado.'
-  });
-
-  closeForm();
-  load();
  };
 
- const remove=async id=>{
-  const{error}=await supabase
-   .from('lm_dizimos_ofertas')
-   .delete()
-   .eq('id',id)
-   .eq('user_id',user.id);
+ const openDialog=item=>{
+  if(item){
+   setCurrentLancamentoId(item.id);
 
-  if(error){
-   return toast({
+   setFormData({
+    data:item.data||getBRDate(),
+    valor:moneyInput(item.valor),
+    tipo_movimento:item.tipo_movimento||'DÍZIMO'
+   });
+  }else{
+   setCurrentLancamentoId(null);
+   setFormData(initialForm());
+  }
+
+  setIsDialogOpen(true);
+ };
+
+ const closeDialog=()=>{
+  setIsDialogOpen(false);
+  setCurrentLancamentoId(null);
+  setFormData(initialForm());
+ };
+
+ const handleDelete=async id=>{
+  try{
+   const{error}=await supabase
+    .from('lm_dizimos_ofertas')
+    .delete()
+    .eq('id',id)
+    .eq('user_id',user.id);
+
+   if(error)throw error;
+
+   toast({
+    title:'Removido',
+    description:'Lançamento removido.'
+   });
+
+   fetchData();
+  }catch(error){
+   toast({
     title:'Erro ao remover',
-    description:error.message,
+    description:error.message||'Não foi possível remover.',
     variant:'destructive'
    });
   }
-
-  toast({
-   title:'Removido',
-   description:'Lançamento removido.'
-  });
-
-  load();
  };
 
- const exportData=()=>{
-  const rows=lancamentos.filter(x=>{
-   const d=new Date(x.data);
-   return d.getMonth()===exportFilters.month&&d.getFullYear()===exportFilters.year;
+ const handleExport=()=>{
+  const exportData=lancamentos.filter(item=>{
+   const d=parseISO(item.data);
+
+   return(
+    getMonth(d)===exportFilters.month&&
+    getYear(d)===exportFilters.year
+   );
   });
 
-  if(!rows.length){
-   return toast({
-    title:'Nenhum dado para exportar',
+  if(!exportData.length){
+   toast({
+    title:'Sem dados',
     description:'Não há registros para o período selecionado.',
     variant:'destructive'
    });
+
+   return;
   }
 
-  const sheet=XLSX.utils.json_to_sheet(
-   rows.map(x=>({
-    DATA:new Date(x.data).toLocaleDateString('pt-BR',{timeZone:'UTC'}),
-    TIPO:x.tipo_movimento,
-    VALOR:Number(x.valor||0)
-   }))
+  exportToExcel(
+   exportData.map(item=>({
+    DATA:brDate(item.data),
+    TIPO:item.tipo_movimento,
+    VALOR:roundMoney(item.valor)
+   })),
+   `Dizimos_Ofertas_LM_${meses[exportFilters.month]}_${exportFilters.year}`,
+   'Dízimos e Ofertas'
   );
 
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,sheet,'Dízimos e Ofertas');
-  XLSX.writeFile(
-   wb,
-   `Dizimos_Ofertas_LM_${meses[exportFilters.month]}_${exportFilters.year}.xlsx`
-  );
-
-  setExportOpen(false);
+  setIsExportOpen(false);
  };
 
+ const limparFiltros=()=>{
+  setSearchTerm('');
+  setSelectedMonth(
+   String(new Date().getMonth())
+  );
+  setSelectedYear(
+   String(new Date().getFullYear())
+  );
+ };
+
+ const stats=[
+  {
+   label:'Lançamentos',
+   value:filtered.length,
+   icon:Receipt
+  },
+  {
+   label:'Total no Período',
+   value:moneyShow(total),
+   icon:DollarSign
+  },
+  {
+   label:'Dízimos',
+   value:moneyShow(fromCents(totalDizimos)),
+   icon:Heart
+  },
+  {
+   label:'Ofertas',
+   value:moneyShow(fromCents(totalOfertas)),
+   icon:TrendingDown
+  }
+ ];
+
  return(
-  <div className="dark-lm-impressoes space-y-4">
+  <motion.div
+   initial={{opacity:0,y:20}}
+   animate={{opacity:1,y:0}}
+   className="dark-lm-impressoes space-y-5"
+  >
 
-   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
-    <div className="flex items-center gap-3">
-     <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[hsl(var(--neon-lanhouse)/.20)] bg-[hsl(var(--neon-lanhouse)/.08)]">
-      <Coins className="h-5 w-5" style={{color:C}}/>
-     </div>
+   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div>
+     <p
+      className="text-xs font-semibold uppercase tracking-[.2em]"
+      style={{color:CYAN}}
+     >
+      LM Impressões
+     </p>
 
-     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[.2em]" style={{color:C}}>Lançamentos</p>
-      <h1 className="text-2xl font-bold">Dízimos e Ofertas</h1>
-      <p className="text-sm text-muted-foreground">Registre e gerencie as contribuições.</p>
-     </div>
+     <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">
+      Dízimos e Ofertas
+     </h1>
+
+     <p className="text-sm text-muted-foreground">
+      Registre e acompanhe suas contribuições.
+     </p>
     </div>
 
     <div className="flex flex-wrap gap-2">
-     <Button variant="outline" onClick={load}><RefreshCw className="mr-2 h-4 w-4"/>Atualizar</Button>
-     <Button variant="outline" onClick={()=>{setSelectSearch('');setSelectedItem(null);setSelectOpen(true)}}><Search className="mr-2 h-4 w-4"/>Selecionar</Button>
-     <Button variant="outline" onClick={()=>setExportOpen(true)}><Download className="mr-2 h-4 w-4"/>Exportar</Button>
-     <Button onClick={()=>openForm()} className="text-slate-950" style={{background:C}}><Plus className="mr-2 h-4 w-4"/>Novo Lançamento</Button>
+     <Button
+      variant="outline"
+      onClick={()=>setIsExportOpen(true)}
+      className="border-border"
+      style={{color:CYAN}}
+     >
+      <Download className="mr-2 h-4 w-4"/>
+      Exportar
+     </Button>
+
+     <Button
+      variant="outline"
+      onClick={()=>setIsSearchModalOpen(true)}
+      className="border-border"
+      style={{color:CYAN}}
+     >
+      <Search className="mr-2 h-4 w-4"/>
+      Selecionar
+     </Button>
+
+     <Button
+      onClick={()=>openDialog()}
+      className="text-slate-950 shadow-lg"
+      style={{
+       background:CYAN,
+       boxShadow:'0 0 18px hsl(188 100% 50% / .20)'
+      }}
+     >
+      <Plus className="mr-2 h-4 w-4"/>
+      Novo Lançamento
+     </Button>
     </div>
    </div>
 
-   <Card>
-    <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
-     <div className="relative w-full lg:max-w-md">
-      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-      <Input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Pesquisar por tipo..." className="pl-9"/>
-     </div>
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    {stats.map(({label,value,icon:Icon})=>(
+     <Card
+      key={label}
+      className="border-border bg-card"
+     >
+      <CardContent className="flex items-center justify-between p-4">
+       <div>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+         {label}
+        </p>
 
-     <div className="flex flex-wrap gap-2">
-      <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-       <SelectTrigger className="w-[150px]"><SelectValue/></SelectTrigger>
-       <SelectContent>
-        <SelectItem value="all">Todos os meses</SelectItem>
-        {meses.map((m,i)=><SelectItem key={m} value={String(i)}>{m}</SelectItem>)}
-       </SelectContent>
-      </Select>
+        <p
+         className="mt-1 text-xl font-bold tabular-nums"
+         style={{color:CYAN}}
+        >
+         {value}
+        </p>
+       </div>
 
-      <Select value={selectedYear} onValueChange={setSelectedYear}>
-       <SelectTrigger className="w-[120px]"><SelectValue/></SelectTrigger>
-       <SelectContent>
-        <SelectItem value="all">Todos os anos</SelectItem>
-        {years.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-       </SelectContent>
-      </Select>
+       <div
+        className="rounded-xl bg-[hsl(var(--neon-lanhouse)/.10)] p-2.5"
+        style={{color:CYAN}}
+       >
+        <Icon className="h-5 w-5"/>
+       </div>
+      </CardContent>
+     </Card>
+    ))}
+   </div>
+
+   <Card className="border-border bg-card">
+    <CardContent className="p-4">
+     <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+
+      <div className="relative min-w-0 flex-1">
+       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+
+       <Input
+        placeholder="Buscar por tipo..."
+        value={searchTerm}
+        onChange={e=>setSearchTerm(e.target.value)}
+        className="h-10 bg-input pl-9"
+       />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+
+       <Select
+        value={selectedMonth}
+        onValueChange={setSelectedMonth}
+       >
+        <SelectTrigger className="h-10 w-[140px] bg-input">
+         <SelectValue/>
+        </SelectTrigger>
+
+        <SelectContent className="dark-lm-impressoes">
+         <SelectItem value="all">
+          Todos os meses
+         </SelectItem>
+
+         {meses.map((mes,i)=>(
+          <SelectItem
+           key={i}
+           value={String(i)}
+          >
+           {mes}
+          </SelectItem>
+         ))}
+        </SelectContent>
+       </Select>
+
+       <Select
+        value={selectedYear}
+        onValueChange={setSelectedYear}
+       >
+        <SelectTrigger className="h-10 w-[110px] bg-input">
+         <SelectValue/>
+        </SelectTrigger>
+
+        <SelectContent className="dark-lm-impressoes">
+         <SelectItem value="all">
+          Todos os anos
+         </SelectItem>
+
+         {availableYears.map(y=>(
+          <SelectItem
+           key={y}
+           value={String(y)}
+          >
+           {y}
+          </SelectItem>
+         ))}
+        </SelectContent>
+       </Select>
+
+       <Button
+        variant="outline"
+        onClick={limparFiltros}
+        className="h-10 border-border"
+       >
+        <RotateCcw className="mr-2 h-4 w-4"/>
+        Limpar
+       </Button>
+      </div>
      </div>
     </CardContent>
    </Card>
 
-   <div className="grid gap-4 md:grid-cols-4">
-    {[
-     ['Total',total],
-     ['Dízimos',totalDizimos],
-     ['Ofertas',totalOfertas],
-     ['Votos',totalVotos]
-    ].map(([label,value])=>
-     <Card key={label}>
-      <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{label}</CardTitle></CardHeader>
-      <CardContent><p className="text-2xl font-bold" style={{color:C}}>{moeda(value)}</p></CardContent>
-     </Card>
-    )}
-   </div>
+   <SearchableModal
+    isOpen={isSearchModalOpen}
+    onClose={()=>setIsSearchModalOpen(false)}
+    onSelect={item=>{
+     openDialog(item);
+     setIsSearchModalOpen(false);
+    }}
+    tableName="lm_dizimos_ofertas"
+    searchField="tipo_movimento"
+    displayFields={[
+     {
+      key:'data',
+      label:'Data',
+      format:brDate
+     },
+     {
+      key:'tipo_movimento',
+      label:'Tipo'
+     },
+     {
+      key:'valor',
+      label:'Valor',
+      format:moneyShow
+     }
+    ]}
+    title="Buscar Lançamento"
+   />
 
-   <Dialog open={selectOpen} onOpenChange={v=>{if(!v){setSelectOpen(false);setSelectedItem(null)}}}>
-    <DialogContent className="dark-lm-impressoes bg-card text-foreground sm:max-w-2xl">
-     <DialogHeader>
-      <DialogTitle>Selecionar Lançamento</DialogTitle>
-      <DialogDescription>Escolha um registro para editar.</DialogDescription>
-     </DialogHeader>
-
-     <div className="relative">
-      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-      <Input value={selectSearch} onChange={e=>setSelectSearch(e.target.value)} placeholder="Pesquisar por tipo..." className="pl-9"/>
-     </div>
-
-     <ScrollArea className="h-[420px] rounded-lg border">
-      <div className="space-y-2 p-4">
-       {selectList.length===0?
-        <p className="py-10 text-center text-muted-foreground">Nenhum registro encontrado.</p>:
-        selectList.map(item=>
-         <button
-          type="button"
-          key={item.id}
-          onClick={()=>setSelectedItem(item)}
-          className={`w-full rounded-lg border p-4 text-left ${selectedItem?.id===item.id?'border-[hsl(var(--neon-lanhouse))] bg-[hsl(var(--neon-lanhouse)/.08)]':'border-border bg-card hover:bg-muted/50'}`}
-         >
-          <div className="flex items-center justify-between gap-4">
-           <div>
-            <p className="font-semibold">{item.tipo_movimento}</p>
-            <p className="text-sm text-muted-foreground">{new Date(item.data).toLocaleDateString('pt-BR',{timeZone:'UTC'})}</p>
-           </div>
-           <p className="font-semibold" style={{color:C}}>{moeda(item.valor)}</p>
-          </div>
-         </button>
-        )
-       }
-      </div>
-     </ScrollArea>
-
-     <DialogFooter>
-      <Button variant="outline" onClick={()=>{setSelectOpen(false);setSelectedItem(null)}}>Cancelar</Button>
-      <Button disabled={!selectedItem} onClick={()=>{openForm(selectedItem);setSelectOpen(false);setSelectedItem(null)}} className="text-slate-950" style={{background:C}}>Confirmar</Button>
-     </DialogFooter>
-    </DialogContent>
-   </Dialog>
-
-   <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-    <DialogContent className="dark-lm-impressoes bg-card text-foreground">
-     <DialogHeader>
-      <DialogTitle>Exportar Dízimos e Ofertas</DialogTitle>
-      <DialogDescription>Selecione o mês e o ano para exportar.</DialogDescription>
-     </DialogHeader>
-
-     <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-2">
-       <Label>Mês</Label>
-       <Select value={String(exportFilters.month)} onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}>
-        <SelectTrigger><SelectValue/></SelectTrigger>
-        <SelectContent>{meses.map((m,i)=><SelectItem key={m} value={String(i)}>{m}</SelectItem>)}</SelectContent>
-       </Select>
-      </div>
-
-      <div className="space-y-2">
-       <Label>Ano</Label>
-       <Select value={String(exportFilters.year)} onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}>
-        <SelectTrigger><SelectValue/></SelectTrigger>
-        <SelectContent>{years.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-       </Select>
-      </div>
-     </div>
-
-     <DialogFooter>
-      <Button variant="outline" onClick={()=>setExportOpen(false)}>Cancelar</Button>
-      <Button onClick={exportData} className="text-slate-950" style={{background:C}}>
-       <Download className="mr-2 h-4 w-4"/>Exportar
+   <ModalLancamentoPadrao
+    open={isExportOpen}
+    onClose={()=>setIsExportOpen(false)}
+    title="Exportar Dízimos e Ofertas"
+    description="Selecione o mês e o ano para exportar."
+    icon={Download}
+    theme="cyan"
+    footer={
+     <>
+      <Button
+       variant="outline"
+       onClick={()=>setIsExportOpen(false)}
+       className="h-10 rounded-xl"
+      >
+       Cancelar
       </Button>
-     </DialogFooter>
-    </DialogContent>
-   </Dialog>
 
-   <Dialog open={formOpen} onOpenChange={v=>{if(!v)closeForm()}}>
-    <DialogContent className="dark-lm-impressoes bg-card text-foreground sm:max-w-lg">
-     <DialogHeader>
-      <DialogTitle style={{color:C}}>{currentId?'Editar Lançamento':'Novo Lançamento'}</DialogTitle>
-      <DialogDescription>Registre uma contribuição.</DialogDescription>
-     </DialogHeader>
+      <Button
+       onClick={handleExport}
+       className="h-10 rounded-xl px-6 font-semibold text-slate-950"
+       style={{background:CYAN}}
+      >
+       Exportar
+      </Button>
+     </>
+    }
+   >
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
-     <form onSubmit={save} className="space-y-5 py-2">
-      <div className="grid gap-4 sm:grid-cols-2">
-       <div className="space-y-2">
-        <Label>Data</Label>
-        <Input type="date" value={form.data} onChange={e=>setForm({...form,data:e.target.value})} required/>
-       </div>
+     <div className="space-y-2">
+      <Label>Mês</Label>
 
-       <div className="space-y-2">
-        <Label>Valor (R$)</Label>
-        <Input type="number" step="0.01" min="0" value={form.valor} onChange={e=>setForm({...form,valor:e.target.value})} placeholder="0,00" required/>
-       </div>
+      <Select
+       value={String(exportFilters.month)}
+       onValueChange={v=>
+        setExportFilters(p=>({
+         ...p,
+         month:Number(v)
+        }))
+       }
+      >
+       <SelectTrigger className="h-11 rounded-xl bg-input">
+        <SelectValue/>
+       </SelectTrigger>
+
+       <SelectContent className="dark-lm-impressoes">
+        {meses.map((mes,i)=>(
+         <SelectItem
+          key={i}
+          value={String(i)}
+         >
+          {mes}
+         </SelectItem>
+        ))}
+       </SelectContent>
+      </Select>
+     </div>
+
+     <div className="space-y-2">
+      <Label>Ano</Label>
+
+      <Select
+       value={String(exportFilters.year)}
+       onValueChange={v=>
+        setExportFilters(p=>({
+         ...p,
+         year:Number(v)
+        }))
+       }
+      >
+       <SelectTrigger className="h-11 rounded-xl bg-input">
+        <SelectValue/>
+       </SelectTrigger>
+
+       <SelectContent className="dark-lm-impressoes">
+        {availableYears.map(y=>(
+         <SelectItem
+          key={y}
+          value={String(y)}
+         >
+          {y}
+         </SelectItem>
+        ))}
+       </SelectContent>
+      </Select>
+     </div>
+
+    </div>
+   </ModalLancamentoPadrao>
+
+   <ModalLancamentoPadrao
+    open={isDialogOpen}
+    onClose={closeDialog}
+    title={
+     currentLancamentoId
+      ?'Editar Lançamento'
+      :'Novo Lançamento'
+    }
+    description="Preencha os dados da contribuição."
+    icon={Heart}
+    theme="cyan"
+    footer={
+     <>
+      <Button
+       type="button"
+       variant="outline"
+       onClick={closeDialog}
+       className="h-10 rounded-xl"
+      >
+       Cancelar
+      </Button>
+
+      <Button
+       type="button"
+       onClick={handleSave}
+       className="h-10 rounded-xl px-7 font-semibold text-slate-950"
+       style={{background:CYAN}}
+      >
+       {currentLancamentoId
+        ?'Salvar Alterações'
+        :'Salvar Lançamento'}
+      </Button>
+     </>
+    }
+   >
+    <div className="space-y-5">
+
+     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+      <div className="space-y-2">
+       <Label>Data</Label>
+
+       <Input
+        type="date"
+        value={formData.data}
+        onChange={e=>
+         setFormData(p=>({
+          ...p,
+          data:e.target.value
+         }))
+        }
+        className="h-11 rounded-xl bg-input"
+        required
+       />
       </div>
 
       <div className="space-y-2">
-       <Label>Tipo de Movimento</Label>
-       <Select value={form.tipo_movimento} onValueChange={v=>setForm({...form,tipo_movimento:v})}>
-        <SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger>
-        <SelectContent>{tipos.map(t=><SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-       </Select>
+       <Label>Valor</Label>
+
+       <Input
+        type="text"
+        inputMode="numeric"
+        value={formData.valor}
+        onChange={e=>
+         setFormData(p=>({
+          ...p,
+          valor:moneyInput(e.target.value)
+         }))
+        }
+        placeholder="R$ 0,00"
+        className="h-11 rounded-xl bg-input font-semibold tabular-nums"
+        required
+       />
       </div>
 
-      <DialogFooter>
-       <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
-       <Button type="submit" className="text-slate-950" style={{background:C}}>Salvar</Button>
-      </DialogFooter>
-     </form>
-    </DialogContent>
-   </Dialog>
+     </div>
 
-   <Card className="overflow-hidden">
-    <CardHeader className="pb-3"><CardTitle className="text-lg" style={{color:C}}>Lançamentos</CardTitle></CardHeader>
+     <div className="space-y-2">
+      <Label>Tipo de Movimento</Label>
+
+      <Select
+       value={formData.tipo_movimento}
+       onValueChange={v=>
+        setFormData(p=>({
+         ...p,
+         tipo_movimento:v
+        }))
+       }
+      >
+       <SelectTrigger className="h-11 rounded-xl bg-input">
+        <SelectValue placeholder="Selecione"/>
+       </SelectTrigger>
+
+       <SelectContent className="dark-lm-impressoes">
+        <SelectItem value="DÍZIMO">
+         Dízimo
+        </SelectItem>
+
+        <SelectItem value="OFERTA">
+         Oferta
+        </SelectItem>
+
+        <SelectItem value="VOTO">
+         Voto
+        </SelectItem>
+       </SelectContent>
+      </Select>
+     </div>
+
+    </div>
+   </ModalLancamentoPadrao>
+
+   <Card className="border-border bg-card">
     <CardContent className="p-0">
+
      <ScrollArea className="h-[500px]">
       <Table>
-       <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur">
+
+       <TableHeader className="sticky top-0 z-10 bg-secondary/50 backdrop-blur-sm">
         <TableRow>
          <TableHead>Data</TableHead>
          <TableHead>Tipo</TableHead>
          <TableHead className="text-right">Valor</TableHead>
-         <TableHead className="text-right">Ações</TableHead>
+         <TableHead className="text-center">Ações</TableHead>
         </TableRow>
        </TableHeader>
 
        <TableBody>
-        {loading?
-         <TableRow><TableCell colSpan={4} className="py-12 text-center text-muted-foreground">Carregando...</TableCell></TableRow>:
-         filtered.length===0?
+
+        {loading?(
          <TableRow>
-          <TableCell colSpan={4} className="py-12 text-center text-muted-foreground">
-           <Coins className="mx-auto mb-2 h-10 w-10 opacity-40"/>
-           Nenhum lançamento encontrado.
+          <TableCell
+           colSpan={4}
+           className="py-12 text-center text-muted-foreground"
+          >
+           Carregando lançamentos...
           </TableCell>
-         </TableRow>:
-         filtered.map(item=>
-          <TableRow key={item.id} className="hover:bg-[hsl(var(--neon-lanhouse)/.04)]">
-           <TableCell>{new Date(item.data).toLocaleDateString('pt-BR',{timeZone:'UTC'})}</TableCell>
-           <TableCell><span className="font-semibold">{item.tipo_movimento}</span></TableCell>
-           <TableCell className="text-right font-semibold" style={{color:C}}>{moeda(item.valor)}</TableCell>
-           <TableCell className="text-right">
-            <div className="flex justify-end gap-1">
-             <Button variant="ghost" size="icon" onClick={()=>openForm(item)} style={{color:C}}><Edit className="h-4 w-4"/></Button>
+         </TableRow>
+        ):paginated.length===0?(
+         <TableRow>
+          <TableCell
+           colSpan={4}
+           className="py-12 text-center"
+          >
+           <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <Heart className="h-8 w-8 opacity-40"/>
+            <span>
+             Nenhum lançamento encontrado.
+            </span>
+           </div>
+          </TableCell>
+         </TableRow>
+        ):(
+         paginated.map(item=>(
+          <TableRow
+           key={item.id}
+           className="transition-colors hover:bg-muted/40"
+          >
+           <TableCell className="p-4 font-medium">
+            {brDate(item.data)}
+           </TableCell>
+
+           <TableCell className="p-4">
+            <span className="font-medium">
+             {item.tipo_movimento}
+            </span>
+           </TableCell>
+
+           <TableCell
+            className="p-4 text-right font-bold tabular-nums"
+            style={{color:CYAN}}
+           >
+            {moneyShow(item.valor)}
+           </TableCell>
+
+           <TableCell className="p-4">
+            <div className="flex justify-center gap-1">
+
+             <Button
+              variant="ghost"
+              size="icon"
+              onClick={()=>openDialog(item)}
+              className="hover:bg-[hsl(var(--neon-lanhouse)/.10)]"
+              style={{color:CYAN}}
+             >
+              <Edit className="h-4 w-4"/>
+             </Button>
 
              <AlertDialog>
               <AlertDialogTrigger asChild>
-               <Button variant="ghost" size="icon" className="text-red-400"><Trash2 className="h-4 w-4"/></Button>
+               <Button
+                variant="ghost"
+                size="icon"
+                className="text-red-500 hover:bg-red-500/10"
+               >
+                <Trash2 className="h-4 w-4"/>
+               </Button>
               </AlertDialogTrigger>
 
-              <AlertDialogContent>
+              <AlertDialogContent className="dark-lm-impressoes">
                <AlertDialogHeader>
-                <AlertDialogTitle>Excluir lançamento?</AlertDialogTitle>
-                <AlertDialogDescription>Deseja realmente excluir este registro?</AlertDialogDescription>
+                <AlertDialogTitle>
+                 Confirmar Exclusão
+                </AlertDialogTitle>
+
+                <AlertDialogDescription>
+                 Deseja remover este lançamento?
+                </AlertDialogDescription>
                </AlertDialogHeader>
 
                <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={()=>remove(item.id)} className="bg-red-600">Excluir</AlertDialogAction>
+                <AlertDialogCancel>
+                 Cancelar
+                </AlertDialogCancel>
+
+                <AlertDialogAction
+                 onClick={()=>handleDelete(item.id)}
+                 className="bg-red-600 hover:bg-red-700"
+                >
+                 Deletar
+                </AlertDialogAction>
                </AlertDialogFooter>
               </AlertDialogContent>
              </AlertDialog>
+
             </div>
            </TableCell>
           </TableRow>
-         )
-        }
+         ))
+        )}
+
        </TableBody>
       </Table>
      </ScrollArea>
+
+     {!loading&&filtered.length>0&&(
+      <div className="flex flex-col gap-2 border-t border-border px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+
+       <span>
+        Mostrando{' '}
+        {((currentPage-1)*pageSize)+1}
+        –
+        {Math.min(
+         currentPage*pageSize,
+         filtered.length
+        )}{' '}
+        de {filtered.length}
+       </span>
+
+       <div className="flex items-center gap-1">
+
+        <Button
+         variant="outline"
+         size="sm"
+         disabled={currentPage===1}
+         onClick={()=>
+          setCurrentPage(
+           p=>Math.max(1,p-1)
+          )
+         }
+         className="h-8"
+        >
+         Anterior
+        </Button>
+
+        <span className="px-2 text-xs">
+         {currentPage} / {totalPages}
+        </span>
+
+        <Button
+         variant="outline"
+         size="sm"
+         disabled={currentPage===totalPages}
+         onClick={()=>
+          setCurrentPage(
+           p=>Math.min(totalPages,p+1)
+          )
+         }
+         className="h-8"
+        >
+         Próxima
+        </Button>
+
+       </div>
+      </div>
+     )}
+
     </CardContent>
    </Card>
 
-  </div>
+  </motion.div>
  );
 }
