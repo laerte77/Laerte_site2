@@ -15,25 +15,36 @@ export const AuthProvider=({children})=>{
  useEffect(()=>{profileRef.current=profile},[profile]);
 
  const fetchProfile=useCallback(async(currentUser,isUpdate=false)=>{
+  if(!currentUser)return null;
   try{
-   const validProfile=await ensureProfile(currentUser);
+   const validProfile=await Promise.race([
+    ensureProfile(currentUser),
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error('Timeout ao carregar perfil')),8000))
+   ]);
+
    if(isUpdate&&profileRef.current){
-    const oldModules=JSON.stringify(profileRef.current.allowed_modules),newModules=JSON.stringify(validProfile?.allowed_modules);
-    if(oldModules!==newModules)window.dispatchEvent(new CustomEvent('permissionsUpdated',{detail:{allowed_modules:validProfile?.allowed_modules}}));
+    const oldM=JSON.stringify(profileRef.current.allowed_modules),newM=JSON.stringify(validProfile?.allowed_modules);
+    if(oldM!==newM)window.dispatchEvent(new CustomEvent('permissionsUpdated',{detail:{allowed_modules:validProfile?.allowed_modules}}));
    }
+
    setProfile(validProfile||null);
+
    if(validProfile?.data_sharing_preferences)localStorage.setItem('data_sharing_preferences',JSON.stringify(validProfile.data_sharing_preferences));
    else localStorage.removeItem('data_sharing_preferences');
+
+   return validProfile;
   }catch(err){
-   console.error('Unexpected error fetching profile in context:',err);
+   console.error('Erro ao carregar perfil:',err);
    setProfile(null);
    localStorage.removeItem('data_sharing_preferences');
+   return null;
   }
  },[ensureProfile]);
 
  const handleSession=useCallback(async currentSession=>{
   setSession(currentSession);
   setUser(currentSession?.user??null);
+
   if(currentSession?.user){
    lastActivityRef.current=Date.now();
    loggingOutRef.current=false;
@@ -44,24 +55,36 @@ export const AuthProvider=({children})=>{
    lastActivityRef.current=Date.now();
    if(timerRef.current){clearTimeout(timerRef.current);timerRef.current=null}
   }
+
   setLoading(false);
  },[fetchProfile]);
 
- const refreshProfile=useCallback(async()=>{if(user)await fetchProfile(user,true)},[user,fetchProfile]);
+ const refreshProfile=useCallback(async()=>{
+  if(user)await fetchProfile(user,true);
+ },[user,fetchProfile]);
+
  usePermissionsRealtime(user?.id,refreshProfile);
 
  const signOut=useCallback(async(showToast=false)=>{
   if(loggingOutRef.current)return;
   loggingOutRef.current=true;
+
   try{
    clearAuthTokens();
    const{error}=await supabase.auth.signOut();
+
    if(error){
     loggingOutRef.current=false;
     if(showToast)toast({variant:'destructive',title:'Erro ao Sair',description:error.message});
     return{error};
    }
-   if(showToast)toast({title:'Sessão encerrada',description:'Sua sessão foi encerrada após 10 minutos de inatividade.',variant:'destructive'});
+
+   if(showToast)toast({
+    title:'Sessão encerrada',
+    description:'Sua sessão foi encerrada após 10 minutos de inatividade.',
+    variant:'destructive'
+   });
+
    return{error:null};
   }catch(err){
    loggingOutRef.current=false;
@@ -72,10 +95,14 @@ export const AuthProvider=({children})=>{
 
  const updateActivity=useCallback(()=>{
   if(!user||loggingOutRef.current)return;
+
   lastActivityRef.current=Date.now();
+
   if(timerRef.current)clearTimeout(timerRef.current);
+
   timerRef.current=setTimeout(async()=>{
    const inactive=Date.now()-lastActivityRef.current;
+
    if(inactive>=INACTIVITY_LIMIT)await signOut(true);
    else timerRef.current=setTimeout(()=>signOut(true),INACTIVITY_LIMIT-inactive);
   },INACTIVITY_LIMIT);
@@ -86,8 +113,12 @@ export const AuthProvider=({children})=>{
    if(timerRef.current){clearTimeout(timerRef.current);timerRef.current=null}
    return;
   }
-  const events=['mousemove','mousedown','keydown','touchstart','touchmove','scroll','pointerdown'],activity=()=>updateActivity();
+
+  const events=['mousemove','mousedown','keydown','touchstart','touchmove','scroll','pointerdown'];
+  const activity=()=>updateActivity();
+
   events.forEach(e=>window.addEventListener(e,activity,{passive:true}));
+
   const visibility=()=>{
    if(document.visibilityState==='visible'){
     const inactive=Date.now()-lastActivityRef.current;
@@ -95,8 +126,10 @@ export const AuthProvider=({children})=>{
     else updateActivity();
    }
   };
+
   document.addEventListener('visibilitychange',visibility);
   updateActivity();
+
   return()=>{
    events.forEach(e=>window.removeEventListener(e,activity));
    document.removeEventListener('visibilitychange',visibility);
@@ -111,18 +144,23 @@ export const AuthProvider=({children})=>{
      clearAuthTokens();
      await supabase.auth.signOut();
     }
-    const{data,error}=await supabase.auth.getSession();
-    if(error){
-     console.error('Session retrieval error:',error);
-     if(error.message.includes('Refresh Token Not Found')||error.message.includes('Invalid Refresh Token')){
-      clearAuthTokens();
-      await supabase.auth.signOut();
-     }
-    }
+
+    const result=await Promise.race([
+     supabase.auth.getSession(),
+     new Promise((_,reject)=>setTimeout(()=>reject(new Error('Timeout ao verificar sessão')),8000))
+    ]);
+
+    const{data,error}=result;
+
+    if(error)throw error;
+
     await handleSession(data?.session);
    }catch(err){
-    console.error('Error getting initial session:',err);
+    console.error('Erro ao verificar sessão:',err);
     clearAuthTokens();
+    setSession(null);
+    setUser(null);
+    setProfile(null);
     setLoading(false);
    }
   };
@@ -132,6 +170,7 @@ export const AuthProvider=({children})=>{
   const{data:{subscription}}=supabase.auth.onAuthStateChange(async(event,currentSession)=>{
    if(event==='TOKEN_REFRESHED')console.log('[Auth] Token successfully refreshed automatically');
    else if(event==='SIGNED_OUT')clearAuthTokens();
+
    await handleSession(currentSession);
   });
 
@@ -143,9 +182,16 @@ export const AuthProvider=({children})=>{
 
  const getAllowedModules=useCallback(()=>{
   if(isAdmin)return['pessoal','igreja','igreja:tesouraria','igreja:secretaria','lm-impressoes','lm_impressoes','barbearia','entretenimento'];
+
   if(!profile||!profile.allowed_modules)return[];
+
   let modules=profile.allowed_modules;
-  if(typeof modules==='string'){try{modules=JSON.parse(modules)}catch(e){modules=[]}}
+
+  if(typeof modules==='string'){
+   try{modules=JSON.parse(modules)}
+   catch(e){modules=[]}
+  }
+
   return Array.isArray(modules)?modules:[];
  },[isAdmin,profile]);
 
@@ -153,11 +199,19 @@ export const AuthProvider=({children})=>{
 
  const canAccessModule=useCallback(moduleName=>{
   if(isAdmin)return true;
-  const modules=getAllowedModules(),normalizedModule=moduleName.toLowerCase().replace('-','_');
-  if(normalizedModule==='igreja')return modules.some(m=>typeof m==='string'&&(m.toLowerCase()==='igreja'||m.toLowerCase().startsWith('igreja:')));
+
+  const modules=getAllowedModules();
+  const normalizedModule=moduleName.toLowerCase().replace('-','_');
+
+  if(normalizedModule==='igreja'){
+   return modules.some(m=>typeof m==='string'&&(m.toLowerCase()==='igreja'||m.toLowerCase().startsWith('igreja:')));
+  }
+
   if(modules.some(m=>typeof m==='string'&&m.toLowerCase().replace('-','_')===normalizedModule))return true;
+
   if(normalizedModule.startsWith('igreja:')){
    const sub=normalizedModule.split(':')[1];
+
    for(const m of modules){
     if(typeof m==='object'&&m!==null&&!Array.isArray(m)){
      for(const[key,subMods]of Object.entries(m)){
@@ -166,13 +220,20 @@ export const AuthProvider=({children})=>{
     }
    }
   }
+
   return false;
  },[isAdmin,getAllowedModules]);
 
  const signUp=useCallback(async(email,password,options)=>{
   try{
    const{error}=await supabase.auth.signUp({email,password,options});
-   if(error)toast({variant:'destructive',title:'Erro no Cadastro',description:error.message});
+
+   if(error)toast({
+    variant:'destructive',
+    title:'Erro no Cadastro',
+    description:error.message
+   });
+
    return{error};
   }catch(err){return{error:err}}
  },[toast]);
@@ -180,22 +241,64 @@ export const AuthProvider=({children})=>{
  const signIn=useCallback(async(email,password)=>{
   try{
    const{error,data}=await supabase.auth.signInWithPassword({email,password});
-   if(error)toast({variant:'destructive',title:'Erro no Login',description:'Credenciais inválidas ou erro de rede.'});
-   else lastActivityRef.current=Date.now();
+
+   if(error){
+    toast({
+     variant:'destructive',
+     title:'Erro no Login',
+     description:'Credenciais inválidas ou erro de rede.'
+    });
+   }else{
+    lastActivityRef.current=Date.now();
+   }
+
    return{error,data};
   }catch(err){return{error:err}}
  },[toast]);
 
  const value=useMemo(()=>({
-  user,session,profile,loading,isAdmin,userModules,dataSharingPreferences,
-  getAllowedModules,canAccessModule,signUp,signIn,signOut,refreshProfile
- }),[user,session,profile,loading,isAdmin,userModules,dataSharingPreferences,getAllowedModules,canAccessModule,signUp,signIn,signOut,refreshProfile]);
+  user,
+  session,
+  profile,
+  loading,
+  isAdmin,
+  userModules,
+  dataSharingPreferences,
+  getAllowedModules,
+  canAccessModule,
+  signUp,
+  signIn,
+  signOut,
+  refreshProfile
+ }),[
+  user,
+  session,
+  profile,
+  loading,
+  isAdmin,
+  userModules,
+  dataSharingPreferences,
+  getAllowedModules,
+  canAccessModule,
+  signUp,
+  signIn,
+  signOut,
+  refreshProfile
+ ]);
 
- return<AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+ return(
+  <AuthContext.Provider value={value}>
+   {children}
+  </AuthContext.Provider>
+ );
 };
 
 export const useAuth=()=>{
  const context=useContext(AuthContext);
- if(context===undefined)throw new Error('useAuth must be used within an AuthProvider');
+
+ if(context===undefined){
+  throw new Error('useAuth must be used within an AuthProvider');
+ }
+
  return context;
 };
