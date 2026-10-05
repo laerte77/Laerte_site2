@@ -1,6 +1,6 @@
 import React from'react';
-import{NavLink}from'react-router-dom';
-import{MonitorPlay,List,PlusCircle,PieChart,ChevronLeft,ChevronRight,DollarSign,ArrowLeftRight,LogOut,Building2,Calculator,ShoppingCart,PackageSearch,CheckSquare}from'lucide-react';
+import{NavLink,useLocation}from'react-router-dom';
+import{MonitorPlay,List,ClipboardList,Home,BarChart3,ChevronLeft,ChevronRight,DollarSign,ArrowLeftRight,LogOut,Building2,Calculator,ShoppingCart,PackageSearch,CheckSquare,PlusCircle}from'lucide-react';
 import{Accordion,AccordionContent,AccordionItem,AccordionTrigger}from'@/components/ui/accordion';
 import{Button}from'@/components/ui/button';
 import{cn}from'@/lib/utils';
@@ -9,8 +9,9 @@ import{useAuth}from'@/contexts/SupabaseAuthContext';
 const CYAN='hsl(var(--neon-lanhouse))';
 
 const Nav=({to,icon:Icon,children,end=false})=>{
- const active=end?location.pathname===to:location.pathname.startsWith(to);
- return <NavLink to={to} end={end} className={cn('flex min-h-10 w-full items-center gap-3 rounded-md border px-3 py-2 text-sm font-medium transition-colors',active?'border-[hsl(var(--neon-lanhouse)/.45)] bg-[hsl(var(--neon-lanhouse)/.10)] text-[hsl(var(--neon-lanhouse))]':'border-transparent text-muted-foreground hover:border-[hsl(var(--neon-lanhouse)/.20)] hover:bg-muted hover:text-foreground')}>{Icon&&<Icon className="h-4 w-4 shrink-0"/>}<span className="truncate">{children}</span></NavLink>
+ const{pathname}=useLocation();
+ const active=end?pathname===to:pathname.startsWith(to);
+ return <NavLink to={to} end={end} className={cn('flex min-h-10 w-full items-center gap-3 rounded-md border px-3 py-2 text-sm font-medium transition-colors',active?'border-[hsl(var(--neon-lanhouse)/.45)] bg-[hsl(var(--neon-lanhouse)/.10)]':'border-transparent text-muted-foreground hover:border-[hsl(var(--neon-lanhouse)/.20)] hover:bg-muted hover:text-foreground')} style={active?{color:CYAN}:undefined}>{Icon&&<Icon className="h-4 w-4 shrink-0"/>}<span className="truncate">{children}</span></NavLink>
 };
 
 export default function Sidebar({isOpen,setOpen,isMobile}){
@@ -32,19 +33,16 @@ export default function Sidebar({isOpen,setOpen,isMobile}){
     </div>
     {show&&<div className="leading-tight"><div className="text-sm font-bold uppercase text-white">LM</div><div className="text-[11px] font-bold uppercase tracking-widest text-[hsl(var(--neon-lanhouse))]">IMPRESSÕES</div></div>}
    </div>
-
-   {!isMobile&&<Button variant="ghost" size="icon" onClick={()=>setOpen(!isOpen)} className="ml-auto hover:bg-[hsl(var(--neon-lanhouse)/.08)]" style={{color:CYAN}}>
-    {isOpen?<ChevronLeft className="h-5 w-5"/>:<ChevronRight className="h-5 w-5"/>}
-   </Button>}
+   {!isMobile&&<Button variant="ghost" size="icon" onClick={()=>setOpen(!isOpen)} className="ml-auto hover:bg-[hsl(var(--neon-lanhouse)/.08)]" style={{color:CYAN}}>{isOpen?<ChevronLeft className="h-5 w-5"/>:<ChevronRight className="h-5 w-5"/>}</Button>}
   </div>
 
   <nav className="flex-1 overflow-auto px-2 py-4">
    <ul className="space-y-1">
-    <li><Nav to="/lm-impressoes/dashboard" icon={PieChart} end>{show&&'Dashboard'}</Nav></li>
+    <li><Nav to="/lm-impressoes/dashboard" icon={Home} end>{show&&'Dashboard'}</Nav></li>
 
     <Accordion type="single" collapsible className="w-full">
 
-     <Group value="cadastros" label="Cadastros" icon={PlusCircle}>
+     <Group value="cadastros" label="Cadastros" icon={ClipboardList}>
       <Nav to="/lm-impressoes/dashboard/cadastros/clientes" icon={List}>Clientes</Nav>
       <Nav to="/lm-impressoes/dashboard/cadastros/servicos" icon={List}>Serviços</Nav>
       <Nav to="/lm-impressoes/dashboard/cadastros/despesas" icon={List}>Despesas</Nav>
@@ -63,8 +61,8 @@ export default function Sidebar({isOpen,setOpen,isMobile}){
 
      <Group value="custos" label="Custos & Lucros" icon={Calculator}>
       <Nav to="/lm-impressoes/dashboard/custos/lancamentos" icon={List}>Lançar Custos</Nav>
-      <Nav to="/lm-impressoes/dashboard/custos/controle" icon={PieChart}>Controle de Custos</Nav>
-      <Nav to="/lm-impressoes/dashboard/custos/relatorio-custos" icon={PieChart}>Relatório Categorias</Nav>
+      <Nav to="/lm-impressoes/dashboard/custos/controle" icon={BarChart3}>Controle de Custos</Nav>
+      <Nav to="/lm-impressoes/dashboard/custos/relatorio-custos" icon={BarChart3}>Relatório Categorias</Nav>
       <Nav to="/lm-impressoes/dashboard/custos/relatorio-lucro" icon={DollarSign}>Lucro Mensal</Nav>
      </Group>
 
@@ -78,7 +76,7 @@ export default function Sidebar({isOpen,setOpen,isMobile}){
       <Nav to="/lm-impressoes/dashboard/estoques" icon={List}>Estoque Consolidado</Nav>
      </Group>
 
-     <Group value="relatorios" label="Relatórios" icon={PieChart}>
+     <Group value="relatorios" label="Relatórios" icon={BarChart3}>
       <Nav to="/lm-impressoes/dashboard/relatorios/servicos" icon={List}>Serviços</Nav>
       <Nav to="/lm-impressoes/dashboard/relatorios/despesas" icon={List}>Despesas</Nav>
       <Nav to="/lm-impressoes/dashboard/relatorios/despesas-previstas" icon={CheckSquare}>Despesas Previstas</Nav>
@@ -98,6 +96,5 @@ export default function Sidebar({isOpen,setOpen,isMobile}){
     <LogOut className="h-4 w-4 shrink-0"/>{show&&'Sair'}
    </button>
   </div>
-
  </aside>;
 }
