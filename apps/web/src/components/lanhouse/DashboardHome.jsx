@@ -2,7 +2,6 @@ import React,{useCallback,useEffect,useMemo,useState}from'react';
 import{Wallet,Users,ArrowUp,ArrowDown,ShoppingCart,CreditCard,CalendarClock,AlertTriangle,CheckCircle2,Printer,Activity,TrendingUp}from'lucide-react';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{getAccessibleDataQuery}from'@/lib/dataAccessUtils';
-import{supabase}from'@/lib/customSupabaseClient';
 import KPICard from'@/components/ui/KPICard';
 import NeonCard from'@/components/ui/NeonCard';
 import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
@@ -23,6 +22,7 @@ export default function DashboardHome(){
  const fetchData=useCallback(async()=>{
   if(!user)return;
   setLoading(true);setError(null);
+
   try{
    const{year,month}=filters;
    const start=month==='all'?new Date(Date.UTC(year,0,1)):new Date(Date.UTC(year,Number(month),1));
@@ -62,40 +62,29 @@ export default function DashboardHome(){
 
    const topClientes=Object.entries(cMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
    const topServicos=Object.entries(sMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
-
    const entradasChart=months.map(name=>({name,Entradas:0}));
    const despesasChart=months.map(name=>({name,Despesas:0}));
 
-   (entAnoRes.data||[]).forEach(i=>{const m=getMonth(i.data);if(m>=0)entradasChart[m].Entradas+=Number(i.valor||0)});
-   (despAnoRes.data||[]).forEach(i=>{const m=getMonth(i.data);if(m>=0)despesasChart[m].Despesas+=Number(i.valor||0)});
-
-   setData({
-    saldoGeral,entradas,despesas,saldo,
-    clientes:cliRes.data?.length||0,
-    pedidos:pedRes.data?.length||0,
-    debitos,
-    despesasPrevistas:soma(prev),
-    topClientes,topServicos,entradasChart,despesasChart
+   (entAnoRes.data||[]).forEach(i=>{
+    const m=getMonth(i.data);
+    if(m>=0&&m<12)entradasChart[m].Entradas+=Number(i.valor||0);
    });
+
+   (despAnoRes.data||[]).forEach(i=>{
+    const m=getMonth(i.data);
+    if(m>=0&&m<12)despesasChart[m].Despesas+=Number(i.valor||0);
+   });
+
+   setData({saldoGeral,entradas,despesas,saldo,clientes:cliRes.data?.length||0,pedidos:pedRes.data?.length||0,debitos,despesasPrevistas:soma(prev),topClientes,topServicos,entradasChart,despesasChart});
   }catch(e){
    console.error(e);
    setError(e?.message||'Não foi possível carregar o dashboard.');
-  }finally{setLoading(false)}
+  }finally{
+   setLoading(false);
+  }
  },[user,isAdmin,filters]);
 
- useEffect(()=>{
-  fetchData();
-  if(!user)return;
-  const ch=supabase.channel('lm_dashboard_changes')
-   .on('postgres_changes',{event:'*',schema:'public',table:'lm_lanc_servicos'},fetchData)
-   .on('postgres_changes',{event:'*',schema:'public',table:'lm_lanc_despesas'},fetchData)
-   .on('postgres_changes',{event:'*',schema:'public',table:'lm_clientes'},fetchData)
-   .on('postgres_changes',{event:'*',schema:'public',table:'lm_pedidos'},fetchData)
-   .on('postgres_changes',{event:'*',schema:'public',table:'lm_clientes_debito'},fetchData)
-   .on('postgres_changes',{event:'*',schema:'public',table:'lm_despesas_previstas'},fetchData)
-   .subscribe();
-  return()=>supabase.removeChannel(ch);
- },[user,fetchData]);
+ useEffect(()=>{fetchData()},[fetchData]);
 
  const percentualDespesas=data.entradas>0?Math.min(data.despesas/data.entradas*100,100):0;
 
@@ -118,9 +107,7 @@ export default function DashboardHome(){
 
   <div className="relative flex flex-col gap-5 rounded-2xl border border-[hsl(var(--neon-lanhouse)/.20)] bg-card/55 p-5 backdrop-blur-md lg:flex-row lg:items-center lg:justify-between">
    <div className="flex items-center gap-4">
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[hsl(var(--neon-lanhouse)/.30)] bg-[hsl(var(--neon-lanhouse)/.08)] shadow-[0_0_24px_hsl(var(--neon-lanhouse)/.12)]">
-     <Printer className="h-6 w-6 text-[hsl(var(--neon-lanhouse))]"/>
-    </div>
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[hsl(var(--neon-lanhouse)/.30)] bg-[hsl(var(--neon-lanhouse)/.08)] shadow-[0_0_24px_hsl(var(--neon-lanhouse)/.12)]"><Printer className="h-6 w-6 text-[hsl(var(--neon-lanhouse))]"/></div>
     <div>
      <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-[hsl(var(--neon-lanhouse))]">Gestão Inteligente</p>
      <h1 className="text-2xl font-black tracking-tight md:text-3xl">LM Impressões</h1>
