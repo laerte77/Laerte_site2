@@ -1,1013 +1,292 @@
-import React,{useState,useEffect,useCallback,useMemo,useRef}from'react';
-import{motion}from'framer-motion';
-import{Plus,Edit,Trash2,Heart,Search,Download,Receipt,DollarSign,TrendingDown,CalendarDays,RotateCcw}from'lucide-react';
-import{parseISO,getMonth,getYear}from'date-fns';
-import{Button}from'@/components/ui/button';
-import{Input}from'@/components/ui/input';
-import{Label}from'@/components/ui/label';
-import{useToast}from'@/components/ui/use-toast';
-import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
-import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
-import{ScrollArea}from'@/components/ui/scroll-area';
-import{Card,CardContent}from'@/components/ui/card';
-import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
-import{supabase}from'@/lib/customSupabaseClient';
-import{useAuth}from'@/contexts/SupabaseAuthContext';
-import SearchableModal from'@/components/SearchableModal';
-import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
-import{exportToExcel}from'@/lib/ExportUtils';
-
-const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const TZ='America/Sao_Paulo';
-const CYAN='hsl(188 100% 50%)';
-const BRL=new Intl.NumberFormat('pt-BR',{
- style:'currency',
- currency:'BRL',
- minimumFractionDigits:2,
- maximumFractionDigits:2
-});
-
-const toCents=v=>Math.round((Number(v)||0)*100);
-const fromCents=v=>(Number(v)||0)/100;
-const roundMoney=v=>fromCents(toCents(v));
-
-const getBRDate=()=>{
- const p=new Intl.DateTimeFormat('en-CA',{
-  timeZone:TZ,
-  year:'numeric',
-  month:'2-digit',
-  day:'2-digit'
- }).formatToParts(new Date());
-
- const v={};
-
- p.forEach(x=>{
-  if(x.type!=='literal')v[x.type]=x.value;
- });
-
- return`${v.year}-${v.month}-${v.day}`;
-};
-
-const moneyInput=v=>{
- const d=String(v??'').replace(/\D/g,'');
- return d?BRL.format(fromCents(Number(d))):'';
-};
-
-const moneyNum=v=>{
- const d=String(v??'').replace(/\D/g,'');
- return d?fromCents(Number(d)):0;
-};
-
-const moneyShow=v=>BRL.format(roundMoney(v));
-
-const brDate=d=>
- d
-  ?new Date(d).toLocaleDateString('pt-BR',{timeZone:'UTC'})
-  :'—';
-
-export default function LancamentoDizimosOfertas(){
- const{toast}=useToast();
- const{user}=useAuth();
- const mounted=useRef(true);
-
- const[lancamentos,setLancamentos]=useState([]);
- const[loading,setLoading]=useState(true);
- const[searchTerm,setSearchTerm]=useState('');
- const[selectedMonth,setSelectedMonth]=useState(String(new Date().getMonth()));
- const[selectedYear,setSelectedYear]=useState(String(new Date().getFullYear()));
- const[currentPage,setCurrentPage]=useState(1);
-
- const[isDialogOpen,setIsDialogOpen]=useState(false);
- const[isSearchModalOpen,setIsSearchModalOpen]=useState(false);
- const[isExportOpen,setIsExportOpen]=useState(false);
-
- const[currentLancamentoId,setCurrentLancamentoId]=useState(null);
-
- const[exportFilters,setExportFilters]=useState({
-  month:new Date().getMonth(),
-  year:new Date().getFullYear()
- });
-
- const initialForm=()=>({
-  data:getBRDate(),
-  valor:'',
-  tipo_movimento:'DÍZIMO'
- });
-
- const[formData,setFormData]=useState(initialForm);
-
- const pageSize=10;
-
- useEffect(()=>{
-  mounted.current=true;
-
-  return()=>{
-   mounted.current=false;
-  };
- },[]);
-
- const availableYears=useMemo(()=>{
-  const years=lancamentos.map(d=>getYear(parseISO(d.data)));
-
-  years.push(new Date().getFullYear());
-
-  return[...new Set(years)].sort((a,b)=>b-a);
- },[lancamentos]);
-
- const fetchData=useCallback(async()=>{
-  if(!user)return;
-
-  setLoading(true);
-
-  try{
-   const{data,error}=await supabase
-    .from('lm_dizimos_ofertas')
-    .select('*')
-    .eq('user_id',user.id)
-    .order('data',{ascending:false});
-
-   if(error)throw error;
-
-   if(!mounted.current)return;
-
-   setLancamentos(data||[]);
-  }catch(error){
-   if(mounted.current){
-    toast({
-     title:'Erro ao carregar lançamentos',
-     description:error.message||'Não foi possível carregar os registros.',
-     variant:'destructive'
-    });
-   }
-  }finally{
-   if(mounted.current){
-    setLoading(false);
-   }
-  }
- },[user,toast]);
-
- useEffect(()=>{
-  fetchData();
-
-  if(!user)return;
-
-  const channel=supabase
-   .channel('lm_dizimos_changes')
-   .on(
-    'postgres_changes',
-    {
-     event:'*',
-     schema:'public',
-     table:'lm_dizimos_ofertas'
-    },
-    ()=>fetchData()
-   )
-   .subscribe();
-
-  return()=>{
-   try{
-    supabase.removeChannel(channel);
-   }catch{}
-  };
- },[user,fetchData]);
-
- const filtered=useMemo(()=>{
-  let result=lancamentos;
-
-  if(selectedYear!=='all'){
-   result=result.filter(
-    x=>String(getYear(parseISO(x.data)))===selectedYear
-   );
-  }
-
-  if(selectedMonth!=='all'){
-   result=result.filter(
-    x=>String(getMonth(parseISO(x.data)))===selectedMonth
-   );
-  }
-
-  if(searchTerm.trim()){
-   const term=searchTerm.toLowerCase();
-
-   result=result.filter(
-    x=>(x.tipo_movimento||'').toLowerCase().includes(term)
-   );
-  }
-
-  return result;
- },[
-  lancamentos,
-  selectedYear,
-  selectedMonth,
-  searchTerm
- ]);
-
- useEffect(()=>{
-  setCurrentPage(1);
- },[
-  selectedYear,
-  selectedMonth,
-  searchTerm
- ]);
-
- const totalC=filtered.reduce(
-  (s,x)=>s+toCents(x.valor),
-  0
- );
-
- const averageC=
-  filtered.length
-   ?Math.round(totalC/filtered.length)
-   :0;
-
- const biggestC=filtered.reduce(
-  (m,x)=>Math.max(m,toCents(x.valor)),
-  0
- );
-
- const total=fromCents(totalC);
- const average=fromCents(averageC);
- const biggest=fromCents(biggestC);
-
- const totalDizimos=filtered
-  .filter(x=>x.tipo_movimento==='DÍZIMO')
-  .reduce((s,x)=>s+toCents(x.valor),0);
-
- const totalOfertas=filtered
-  .filter(x=>x.tipo_movimento==='OFERTA')
-  .reduce((s,x)=>s+toCents(x.valor),0);
-
- const totalVotos=filtered
-  .filter(x=>x.tipo_movimento==='VOTO')
-  .reduce((s,x)=>s+toCents(x.valor),0);
-
- const totalPages=Math.max(
-  1,
-  Math.ceil(filtered.length/pageSize)
- );
-
- const paginated=filtered.slice(
-  (currentPage-1)*pageSize,
-  currentPage*pageSize
- );
-
- const handleSave=async()=>{
-  if(
-   !formData.data||
-   !formData.valor||
-   !formData.tipo_movimento
-  ){
-   toast({
-    title:'Campos obrigatórios',
-    description:'Preencha todos os campos.',
-    variant:'destructive'
-   });
-
-   return;
-  }
-
-  const valor=roundMoney(
-   moneyNum(formData.valor)
-  );
-
-  if(valor<=0){
-   toast({
-    title:'Valor inválido',
-    description:'Informe um valor maior que zero.',
-    variant:'destructive'
-   });
-
-   return;
-  }
-
-  const dataToSave={
-   ...formData,
-   user_id:user.id,
-   valor
-  };
-
-  try{
-   const result=currentLancamentoId
-    ?await supabase
-      .from('lm_dizimos_ofertas')
-      .update(dataToSave)
-      .eq('id',currentLancamentoId)
-      .eq('user_id',user.id)
-    :await supabase
-      .from('lm_dizimos_ofertas')
-      .insert(dataToSave);
-
-   if(result.error)throw result.error;
-
-   toast({
-    title:'Sucesso',
-    description:currentLancamentoId
-     ?'Lançamento atualizado.'
-     :'Lançamento registrado.'
-   });
-
-   closeDialog();
-   fetchData();
-  }catch(error){
-   toast({
-    title:'Erro ao salvar',
-    description:error.message||'Não foi possível salvar o lançamento.',
-    variant:'destructive'
-   });
-  }
- };
-
- const openDialog=item=>{
-  if(item){
-   setCurrentLancamentoId(item.id);
-
-   setFormData({
-    data:item.data||getBRDate(),
-    valor:moneyInput(item.valor),
-    tipo_movimento:item.tipo_movimento||'DÍZIMO'
-   });
-  }else{
-   setCurrentLancamentoId(null);
-   setFormData(initialForm());
-  }
-
-  setIsDialogOpen(true);
- };
-
- const closeDialog=()=>{
-  setIsDialogOpen(false);
-  setCurrentLancamentoId(null);
-  setFormData(initialForm());
- };
-
- const handleDelete=async id=>{
-  try{
-   const{error}=await supabase
-    .from('lm_dizimos_ofertas')
-    .delete()
-    .eq('id',id)
-    .eq('user_id',user.id);
-
-   if(error)throw error;
-
-   toast({
-    title:'Removido',
-    description:'Lançamento removido.'
-   });
-
-   fetchData();
-  }catch(error){
-   toast({
-    title:'Erro ao remover',
-    description:error.message||'Não foi possível remover.',
-    variant:'destructive'
-   });
-  }
- };
-
- const handleExport=()=>{
-  const exportData=lancamentos.filter(item=>{
-   const d=parseISO(item.data);
-
-   return(
-    getMonth(d)===exportFilters.month&&
-    getYear(d)===exportFilters.year
-   );
-  });
-
-  if(!exportData.length){
-   toast({
-    title:'Sem dados',
-    description:'Não há registros para o período selecionado.',
-    variant:'destructive'
-   });
-
-   return;
-  }
-
-  exportToExcel(
-   exportData.map(item=>({
-    DATA:brDate(item.data),
-    TIPO:item.tipo_movimento,
-    VALOR:roundMoney(item.valor)
-   })),
-   `Dizimos_Ofertas_LM_${meses[exportFilters.month]}_${exportFilters.year}`,
-   'Dízimos e Ofertas'
-  );
-
-  setIsExportOpen(false);
- };
-
- const limparFiltros=()=>{
-  setSearchTerm('');
-  setSelectedMonth(
-   String(new Date().getMonth())
-  );
-  setSelectedYear(
-   String(new Date().getFullYear())
-  );
- };
-
- const stats=[
-  {
-   label:'Lançamentos',
-   value:filtered.length,
-   icon:Receipt
-  },
-  {
-   label:'Total no Período',
-   value:moneyShow(total),
-   icon:DollarSign
-  },
-  {
-   label:'Dízimos',
-   value:moneyShow(fromCents(totalDizimos)),
-   icon:Heart
-  },
-  {
-   label:'Ofertas',
-   value:moneyShow(fromCents(totalOfertas)),
-   icon:TrendingDown
-  }
- ];
-
- return(
-  <motion.div
-   initial={{opacity:0,y:20}}
-   animate={{opacity:1,y:0}}
-   className="dark-lm-impressoes space-y-5"
-  >
-
-   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-    <div>
-     <p
-      className="text-xs font-semibold uppercase tracking-[.2em]"
-      style={{color:CYAN}}
-     >
-      LM Impressões
-     </p>
-
-     <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">
-      Dízimos e Ofertas
-     </h1>
-
-     <p className="text-sm text-muted-foreground">
-      Registre e acompanhe suas contribuições.
-     </p>
-    </div>
-
-    <div className="flex flex-wrap gap-2">
-     <Button
-      variant="outline"
-      onClick={()=>setIsExportOpen(true)}
-      className="border-border"
-      style={{color:CYAN}}
-     >
-      <Download className="mr-2 h-4 w-4"/>
-      Exportar
-     </Button>
-
-     <Button
-      variant="outline"
-      onClick={()=>setIsSearchModalOpen(true)}
-      className="border-border"
-      style={{color:CYAN}}
-     >
-      <Search className="mr-2 h-4 w-4"/>
-      Selecionar
-     </Button>
-
-     <Button
-      onClick={()=>openDialog()}
-      className="text-slate-950 shadow-lg"
-      style={{
-       background:CYAN,
-       boxShadow:'0 0 18px hsl(188 100% 50% / .20)'
-      }}
-     >
-      <Plus className="mr-2 h-4 w-4"/>
-      Novo Lançamento
-     </Button>
-    </div>
-   </div>
-
-   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-    {stats.map(({label,value,icon:Icon})=>(
-     <Card
-      key={label}
-      className="border-border bg-card"
-     >
-      <CardContent className="flex items-center justify-between p-4">
-       <div>
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-         {label}
-        </p>
-
-        <p
-         className="mt-1 text-xl font-bold tabular-nums"
-         style={{color:CYAN}}
-        >
-         {value}
-        </p>
-       </div>
-
-       <div
-        className="rounded-xl bg-[hsl(var(--neon-lanhouse)/.10)] p-2.5"
-        style={{color:CYAN}}
-       >
-        <Icon className="h-5 w-5"/>
-       </div>
-      </CardContent>
-     </Card>
-    ))}
-   </div>
-
-   <Card className="border-border bg-card">
-    <CardContent className="p-4">
-     <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-
-      <div className="relative min-w-0 flex-1">
-       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-
-       <Input
-        placeholder="Buscar por tipo..."
-        value={searchTerm}
-        onChange={e=>setSearchTerm(e.target.value)}
-        className="h-10 bg-input pl-9"
-       />
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-
-       <Select
-        value={selectedMonth}
-        onValueChange={setSelectedMonth}
-       >
-        <SelectTrigger className="h-10 w-[140px] bg-input">
-         <SelectValue/>
-        </SelectTrigger>
-
-        <SelectContent className="dark-lm-impressoes">
-         <SelectItem value="all">
-          Todos os meses
-         </SelectItem>
-
-         {meses.map((mes,i)=>(
-          <SelectItem
-           key={i}
-           value={String(i)}
-          >
-           {mes}
-          </SelectItem>
-         ))}
-        </SelectContent>
-       </Select>
-
-       <Select
-        value={selectedYear}
-        onValueChange={setSelectedYear}
-       >
-        <SelectTrigger className="h-10 w-[110px] bg-input">
-         <SelectValue/>
-        </SelectTrigger>
-
-        <SelectContent className="dark-lm-impressoes">
-         <SelectItem value="all">
-          Todos os anos
-         </SelectItem>
-
-         {availableYears.map(y=>(
-          <SelectItem
-           key={y}
-           value={String(y)}
-          >
-           {y}
-          </SelectItem>
-         ))}
-        </SelectContent>
-       </Select>
-
-       <Button
-        variant="outline"
-        onClick={limparFiltros}
-        className="h-10 border-border"
-       >
-        <RotateCcw className="mr-2 h-4 w-4"/>
-        Limpar
-       </Button>
-      </div>
-     </div>
-    </CardContent>
-   </Card>
-
-   <SearchableModal
-    isOpen={isSearchModalOpen}
-    onClose={()=>setIsSearchModalOpen(false)}
-    onSelect={item=>{
-     openDialog(item);
-     setIsSearchModalOpen(false);
-    }}
-    tableName="lm_dizimos_ofertas"
-    searchField="tipo_movimento"
-    displayFields={[
-     {
-      key:'data',
-      label:'Data',
-      format:brDate
-     },
-     {
-      key:'tipo_movimento',
-      label:'Tipo'
-     },
-     {
-      key:'valor',
-      label:'Valor',
-      format:moneyShow
-     }
-    ]}
-    title="Buscar Lançamento"
-   />
-
-   <ModalLancamentoPadrao
-    open={isExportOpen}
-    onClose={()=>setIsExportOpen(false)}
-    title="Exportar Dízimos e Ofertas"
-    description="Selecione o mês e o ano para exportar."
-    icon={Download}
-    theme="cyan"
-    footer={
-     <>
-      <Button
-       variant="outline"
-       onClick={()=>setIsExportOpen(false)}
-       className="h-10 rounded-xl"
-      >
-       Cancelar
-      </Button>
-
-      <Button
-       onClick={handleExport}
-       className="h-10 rounded-xl px-6 font-semibold text-slate-950"
-       style={{background:CYAN}}
-      >
-       Exportar
-      </Button>
-     </>
-    }
-   >
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
-     <div className="space-y-2">
-      <Label>Mês</Label>
-
-      <Select
-       value={String(exportFilters.month)}
-       onValueChange={v=>
-        setExportFilters(p=>({
-         ...p,
-         month:Number(v)
-        }))
-       }
-      >
-       <SelectTrigger className="h-11 rounded-xl bg-input">
-        <SelectValue/>
-       </SelectTrigger>
-
-       <SelectContent className="dark-lm-impressoes">
-        {meses.map((mes,i)=>(
-         <SelectItem
-          key={i}
-          value={String(i)}
-         >
-          {mes}
-         </SelectItem>
-        ))}
-       </SelectContent>
-      </Select>
-     </div>
-
-     <div className="space-y-2">
-      <Label>Ano</Label>
-
-      <Select
-       value={String(exportFilters.year)}
-       onValueChange={v=>
-        setExportFilters(p=>({
-         ...p,
-         year:Number(v)
-        }))
-       }
-      >
-       <SelectTrigger className="h-11 rounded-xl bg-input">
-        <SelectValue/>
-       </SelectTrigger>
-
-       <SelectContent className="dark-lm-impressoes">
-        {availableYears.map(y=>(
-         <SelectItem
-          key={y}
-          value={String(y)}
-         >
-          {y}
-         </SelectItem>
-        ))}
-       </SelectContent>
-      </Select>
-     </div>
-
-    </div>
-   </ModalLancamentoPadrao>
-
-   <ModalLancamentoPadrao
-    open={isDialogOpen}
-    onClose={closeDialog}
-    title={
-     currentLancamentoId
-      ?'Editar Lançamento'
-      :'Novo Lançamento'
-    }
-    description="Preencha os dados da contribuição."
-    icon={Heart}
-    theme="cyan"
-    footer={
-     <>
-      <Button
-       type="button"
-       variant="outline"
-       onClick={closeDialog}
-       className="h-10 rounded-xl"
-      >
-       Cancelar
-      </Button>
-
-      <Button
-       type="button"
-       onClick={handleSave}
-       className="h-10 rounded-xl px-7 font-semibold text-slate-950"
-       style={{background:CYAN}}
-      >
-       {currentLancamentoId
-        ?'Salvar Alterações'
-        :'Salvar Lançamento'}
-      </Button>
-     </>
-    }
-   >
-    <div className="space-y-5">
-
-     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
-      <div className="space-y-2">
-       <Label>Data</Label>
-
-       <Input
-        type="date"
-        value={formData.data}
-        onChange={e=>
-         setFormData(p=>({
-          ...p,
-          data:e.target.value
-         }))
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { Plus, Edit, Trash2, Coins as HandCoins, Search, Download } from 'lucide-react';
+import { format, parse, getMonth, getYear } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/use-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { supabase } from '@/lib/customSupabaseClient';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
+import SearchableModal from '@/components/SearchableModal';
+import * as XLSX from 'xlsx';
+
+const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+const LancamentoDizimosOfertas = () => {
+    const { toast } = useToast();
+    const { user } = useAuth();
+    const isMountedRef = useRef(true);
+    
+    const [lancamentos, setLancamentos] = useState([]);
+    const [filteredLancamentos, setFilteredLancamentos] = useState([]);
+    const [loading, setLoading] = useState(true);
+    
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString());
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+    
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+    const [isExportOpen, setIsExportOpen] = useState(false);
+    const [exportFilters, setExportFilters] = useState({ month: new Date().getMonth(), year: new Date().getFullYear() });
+    
+    const [currentLancamentoId, setCurrentLancamentoId] = useState(null);
+    const initialFormState = { data: format(new Date(), 'yyyy-MM-dd'), valor: '', tipo_movimento: '' };
+    const [formData, setFormData] = useState(initialFormState);
+
+    const tiposMovimento = ['DÍZIMO', 'OFERTA', 'VOTO'];
+
+    const availableYears = useMemo(() => {
+      const years = lancamentos.map(d => new Date(d.data).getFullYear());
+      years.push(new Date().getFullYear());
+      return [...new Set(years)].sort((a, b) => b - a);
+    }, [lancamentos]);
+
+    const fetchData = useCallback(async () => {
+        if (!user) return;
+        setLoading(true);
+        try {
+            const { data, error } = await supabase.from('lm_dizimos_ofertas').select('*').eq('user_id', user.id).order('data', { ascending: false });
+            if (!isMountedRef.current) return;
+            if (error) throw error;
+            setLancamentos(data || []);
+        } catch (error) {
+            if (!isMountedRef.current) return;
+            toast({ title: 'Erro ao buscar lançamentos', variant: 'destructive', description: error.message });
+        } finally {
+            if (isMountedRef.current) setLoading(false);
         }
-        className="h-11 rounded-xl bg-input"
-        required
-       />
-      </div>
+    }, [user, toast]);
 
-      <div className="space-y-2">
-       <Label>Valor</Label>
+    useEffect(() => {
+        isMountedRef.current = true;
+        fetchData();
+        if (!user) return;
+        const channel = supabase.channel('lm_dizimos_ofertas_changes_v2')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'lm_dizimos_ofertas' }, () => { if(isMountedRef.current) fetchData(); })
+            .subscribe();
+        return () => { isMountedRef.current = false; supabase.removeChannel(channel); }
+    }, [user, fetchData]);
 
-       <Input
-        type="text"
-        inputMode="numeric"
-        value={formData.valor}
-        onChange={e=>
-         setFormData(p=>({
-          ...p,
-          valor:moneyInput(e.target.value)
-         }))
+    useEffect(() => {
+        let results = lancamentos;
+        if (selectedYear !== 'all') results = results.filter(item => getYear(new Date(item.data)).toString() === selectedYear);
+        if (selectedMonth !== 'all') results = results.filter(item => getMonth(new Date(item.data)).toString() === selectedMonth);
+        if (searchTerm) {
+            const search = searchTerm.toLowerCase();
+            results = results.filter(item => item.tipo_movimento?.toLowerCase().includes(search));
         }
-        placeholder="R$ 0,00"
-        className="h-11 rounded-xl bg-input font-semibold tabular-nums"
-        required
-       />
-      </div>
+        setFilteredLancamentos(results);
+    }, [searchTerm, selectedMonth, selectedYear, lancamentos]);
 
-     </div>
+    const handleSave = async (e) => {
+        e.preventDefault();
+        if (!formData.data || !formData.valor || !formData.tipo_movimento) {
+            toast({ title: 'Erro', description: 'Todos os campos são obrigatórios.', variant: 'destructive' });
+            return;
+        }
+        const dataToSave = { ...formData, user_id: user.id, valor: Number(formData.valor) };
 
-     <div className="space-y-2">
-      <Label>Tipo de Movimento</Label>
+        try {
+            if (currentLancamentoId) {
+                const { error } = await supabase.from('lm_dizimos_ofertas').update(dataToSave).eq('id', currentLancamentoId);
+                if (error) throw error;
+                toast({ title: 'Sucesso', description: `Lançamento atualizado.` });
+                setCurrentLancamentoId(null);
+                // Keep modal open, just clear id
+            } else {
+                const { error } = await supabase.from('lm_dizimos_ofertas').insert(dataToSave);
+                if (error) throw error;
+                toast({ title: 'Sucesso', description: `Lançamento registrado.` });
+            }
+            setFormData(prev => ({ ...initialFormState, data: prev.data }));
+            setCurrentLancamentoId(null);
+            fetchData();
+        } catch (error) {
+            toast({ title: 'Erro ao salvar', variant: 'destructive', description: error.message });
+        }
+    };
 
-      <Select
-       value={formData.tipo_movimento}
-       onValueChange={v=>
-        setFormData(p=>({
-         ...p,
-         tipo_movimento:v
-        }))
-       }
-      >
-       <SelectTrigger className="h-11 rounded-xl bg-input">
-        <SelectValue placeholder="Selecione"/>
-       </SelectTrigger>
+    const openDialog = (item = null) => {
+        if (item) {
+            setCurrentLancamentoId(item.id);
+            setFormData({
+                data: item.data || format(new Date(), 'yyyy-MM-dd'),
+                valor: item.valor || '',
+                tipo_movimento: item.tipo_movimento || '',
+            });
+        } else {
+            setCurrentLancamentoId(null);
+            setFormData(initialFormState);
+        }
+        setIsDialogOpen(true);
+    };
 
-       <SelectContent className="dark-lm-impressoes">
-        <SelectItem value="DÍZIMO">
-         Dízimo
-        </SelectItem>
+    const closeDialog = () => {
+        setIsDialogOpen(false);
+        setCurrentLancamentoId(null);
+        setFormData(initialFormState);
+    };
 
-        <SelectItem value="OFERTA">
-         Oferta
-        </SelectItem>
+    const handleDelete = async (id) => {
+        try {
+            const { error } = await supabase.from('lm_dizimos_ofertas').delete().eq('id', id);
+            if (error) throw error;
+            toast({ title: 'Removido', description: 'Lançamento removido.' });
+            fetchData();
+        } catch (error) {
+            toast({ title: 'Erro ao remover', variant: 'destructive', description: error.message });
+        }
+    };
 
-        <SelectItem value="VOTO">
-         Voto
-        </SelectItem>
-       </SelectContent>
-      </Select>
-     </div>
+    const handleExport = () => {
+        const filteredData = lancamentos.filter(item => {
+            const itemDate = new Date(item.data);
+            return itemDate.getMonth() === exportFilters.month && itemDate.getFullYear() === exportFilters.year;
+        });
 
-    </div>
-   </ModalLancamentoPadrao>
+        if (filteredData.length === 0) {
+            toast({ title: 'Nenhum dado para exportar', description: 'Não há registros para o período selecionado.', variant: 'destructive' });
+            return;
+        }
+        
+        const dataToExport = filteredData.map(item => ({
+            'DATA': new Date(item.data).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
+            'TIPO': item.tipo_movimento,
+            'VALOR': parseFloat(item.valor)
+        }));
 
-   <Card className="border-border bg-card">
-    <CardContent className="p-0">
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Dizimos e Ofertas");
+        XLSX.writeFile(workbook, `Dizimos_Ofertas_LM_${meses[exportFilters.month]}_${exportFilters.year}.xlsx`);
+        setIsExportOpen(false);
+    };
 
-     <ScrollArea className="h-[500px]">
-      <Table>
+    const totalPeriodo = useMemo(() => filteredLancamentos.reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0), [filteredLancamentos]);
 
-       <TableHeader className="sticky top-0 z-10 bg-secondary/50 backdrop-blur-sm">
-        <TableRow>
-         <TableHead>Data</TableHead>
-         <TableHead>Tipo</TableHead>
-         <TableHead className="text-right">Valor</TableHead>
-         <TableHead className="text-center">Ações</TableHead>
-        </TableRow>
-       </TableHeader>
-
-       <TableBody>
-
-        {loading?(
-         <TableRow>
-          <TableCell
-           colSpan={4}
-           className="py-12 text-center text-muted-foreground"
-          >
-           Carregando lançamentos...
-          </TableCell>
-         </TableRow>
-        ):paginated.length===0?(
-         <TableRow>
-          <TableCell
-           colSpan={4}
-           className="py-12 text-center"
-          >
-           <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <Heart className="h-8 w-8 opacity-40"/>
-            <span>
-             Nenhum lançamento encontrado.
-            </span>
-           </div>
-          </TableCell>
-         </TableRow>
-        ):(
-         paginated.map(item=>(
-          <TableRow
-           key={item.id}
-           className="transition-colors hover:bg-muted/40"
-          >
-           <TableCell className="p-4 font-medium">
-            {brDate(item.data)}
-           </TableCell>
-
-           <TableCell className="p-4">
-            <span className="font-medium">
-             {item.tipo_movimento}
-            </span>
-           </TableCell>
-
-           <TableCell
-            className="p-4 text-right font-bold tabular-nums"
-            style={{color:CYAN}}
-           >
-            {moneyShow(item.valor)}
-           </TableCell>
-
-           <TableCell className="p-4">
-            <div className="flex justify-center gap-1">
-
-             <Button
-              variant="ghost"
-              size="icon"
-              onClick={()=>openDialog(item)}
-              className="hover:bg-[hsl(var(--neon-lanhouse)/.10)]"
-              style={{color:CYAN}}
-             >
-              <Edit className="h-4 w-4"/>
-             </Button>
-
-             <AlertDialog>
-              <AlertDialogTrigger asChild>
-               <Button
-                variant="ghost"
-                size="icon"
-                className="text-red-500 hover:bg-red-500/10"
-               >
-                <Trash2 className="h-4 w-4"/>
-               </Button>
-              </AlertDialogTrigger>
-
-              <AlertDialogContent className="dark-lm-impressoes">
-               <AlertDialogHeader>
-                <AlertDialogTitle>
-                 Confirmar Exclusão
-                </AlertDialogTitle>
-
-                <AlertDialogDescription>
-                 Deseja remover este lançamento?
-                </AlertDialogDescription>
-               </AlertDialogHeader>
-
-               <AlertDialogFooter>
-                <AlertDialogCancel>
-                 Cancelar
-                </AlertDialogCancel>
-
-                <AlertDialogAction
-                 onClick={()=>handleDelete(item.id)}
-                 className="bg-red-600 hover:bg-red-700"
-                >
-                 Deletar
-                </AlertDialogAction>
-               </AlertDialogFooter>
-              </AlertDialogContent>
-             </AlertDialog>
-
+    return (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 py-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h1 className="text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">Dízimos e Ofertas</h1>
+                  <p className="text-muted-foreground mt-1 text-lg">Registre e gerencie as contribuições.</p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                    <Button onClick={() => setIsExportOpen(true)} variant="outline" className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 transition-colors"><Download className="w-4 h-4 mr-2" />Exportar</Button>
+                    <Button onClick={() => setIsSearchModalOpen(true)} variant="outline" className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 transition-colors"><Search className="w-4 h-4 mr-2" />Selecionar</Button>
+                    <Button onClick={() => openDialog()} className="bg-cyan-500 hover:bg-cyan-600 text-primary-foreground shadow-md transition-colors"><Plus className="w-4 h-4 mr-2" /> Nova Oferta</Button>
+                </div>
             </div>
-           </TableCell>
-          </TableRow>
-         ))
-        )}
 
-       </TableBody>
-      </Table>
-     </ScrollArea>
+            <Dialog open={isExportOpen} onOpenChange={(o) => { if(o) setIsExportOpen(true); }}>
+                <DialogContent onInteractOutside={(e) => e.preventDefault()} className="dark-lm-impressoes bg-card border-border text-foreground z-[100]">
+                    <DialogHeader><DialogTitle className="text-cyan-400">Exportar Dízimos e Ofertas</DialogTitle><DialogDescription>Selecione o mês e o ano para exportar.</DialogDescription></DialogHeader>
+                    <div className="py-4 grid grid-cols-2 gap-4">
+                        <div><Label>Mês</Label><Select value={String(exportFilters.month)} onValueChange={v => setExportFilters(prev => ({ ...prev, month: Number(v) }))}><SelectTrigger className="bg-background"><SelectValue /></SelectTrigger><SelectContent className="z-[200]"><ScrollArea className="h-48">{meses.map((m, i) => <SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
+                        <div><Label>Ano</Label><Select value={String(exportFilters.year)} onValueChange={v => setExportFilters(prev => ({ ...prev, year: Number(v) }))}><SelectTrigger className="bg-background"><SelectValue /></SelectTrigger><SelectContent className="z-[200]">{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select></div>
+                    </div>
+                    <DialogFooter><Button variant="outline" onClick={() => setIsExportOpen(false)}>Cancelar</Button><Button onClick={handleExport} className="bg-cyan-500 hover:bg-cyan-600 text-primary-foreground">Exportar</Button></DialogFooter>
+                </DialogContent>
+            </Dialog>
 
-     {!loading&&filtered.length>0&&(
-      <div className="flex flex-col gap-2 border-t border-border px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <SearchableModal isOpen={isSearchModalOpen} onClose={() => setIsSearchModalOpen(false)} onSelect={(item) => { openDialog(item); setIsSearchModalOpen(false); }} tableName="lm_dizimos_ofertas" searchField="tipo_movimento" displayFields={[{ key: 'data', label: 'Data', format: (d) => new Date(d).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) }, { key: 'tipo_movimento', label: 'Tipo' }, { key: 'valor', label: 'Valor', format: (v) => `R$ ${parseFloat(v).toFixed(2)}` }]} title="Buscar Lançamento" />
 
-       <span>
-        Mostrando{' '}
-        {((currentPage-1)*pageSize)+1}
-        –
-        {Math.min(
-         currentPage*pageSize,
-         filtered.length
-        )}{' '}
-        de {filtered.length}
-       </span>
+            <Dialog open={isDialogOpen} onOpenChange={(o) => { if(!o) closeDialog(); }}>
+                <DialogContent onInteractOutside={(e) => e.preventDefault()} className="dark-lm-impressoes bg-card border-cyan-500/20 text-foreground z-[100]">
+                    <DialogHeader><DialogTitle className="text-cyan-400">{currentLancamentoId ? 'Editar' : 'Novo'} Lançamento</DialogTitle><DialogDescription>Preencha os dados da contribuição.</DialogDescription></DialogHeader>
+                    <form onSubmit={handleSave} className="space-y-6 py-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2"><Label>Data</Label><Input type="date" value={formData.data} onChange={e => setFormData({ ...formData, data: e.target.value })} className="bg-background text-foreground" required /></div>
+                            <div className="space-y-2"><Label>Valor (R$)</Label><Input type="number" step="0.01" value={formData.valor} onChange={e => setFormData({ ...formData, valor: e.target.value })} className="bg-background text-foreground" placeholder="0,00" required /></div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Tipo de Movimento</Label>
+                            <Select value={formData.tipo_movimento} onValueChange={v => setFormData({ ...formData, tipo_movimento: v })} required>
+                                <SelectTrigger className="bg-background text-foreground"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                <SelectContent className="z-[200]">{tiposMovimento.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                        <DialogFooter><Button type="button" variant="outline" onClick={closeDialog}>Cancelar</Button><Button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-primary-foreground">Salvar</Button></DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
-       <div className="flex items-center gap-1">
+            <div className="grid gap-6 md:grid-cols-4">
+              <Card className="col-span-1 md:col-span-3 shadow-md border-cyan-500/20 rounded-2xl">
+                <CardContent className="p-5 flex flex-col md:flex-row gap-4 items-center">
+                  <div className="flex items-center gap-2 flex-1 w-full relative">
+                    <Search className="w-5 h-5 text-muted-foreground absolute left-3" />
+                    <Input placeholder="Buscar por tipo..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-1 pl-10 bg-background/50 h-12 text-base text-foreground"/>
+                  </div>
+                  <div className="flex gap-3 w-full md:w-auto">
+                    <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                      <SelectTrigger className="w-[150px] bg-background/50 h-12 text-foreground"><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="all">Todos os Meses</SelectItem>{Array.from({ length: 12 }, (_, i) => (<SelectItem key={i} value={i.toString()}>{format(new Date(2024, i, 1), 'MMMM', { locale: ptBR })}</SelectItem>))}</SelectContent>
+                    </Select>
+                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                      <SelectTrigger className="w-[110px] bg-background/50 h-12 text-foreground"><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="all">Todos os Anos</SelectItem>{availableYears.map(y => (<SelectItem key={y} value={y.toString()}>{y}</SelectItem>))}</SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-500/20 shadow-md rounded-2xl flex flex-col justify-center">
+                <CardHeader className="pb-1 pt-5"><CardTitle className="text-sm font-semibold text-cyan-400 uppercase tracking-wide">Total Filtrado</CardTitle></CardHeader>
+                <CardContent><div className="text-3xl font-black text-cyan-400 truncate">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalPeriodo)}</div></CardContent>
+              </Card>
+            </div>
 
-        <Button
-         variant="outline"
-         size="sm"
-         disabled={currentPage===1}
-         onClick={()=>
-          setCurrentPage(
-           p=>Math.max(1,p-1)
-          )
-         }
-         className="h-8"
-        >
-         Anterior
-        </Button>
+            <Card className="shadow-lg border-cyan-500/20 rounded-2xl overflow-hidden bg-card/80 backdrop-blur-sm">
+                <CardContent className="p-0">
+                    <ScrollArea className="h-[500px]">
+                        <Table>
+                            <TableHeader className="bg-card/50 sticky top-0 z-10 backdrop-blur-sm border-b border-cyan-500/20">
+                                <TableRow className="hover:bg-transparent">
+                                  <TableHead className="py-4 pl-6 font-semibold">Data</TableHead>
+                                  <TableHead className="py-4 font-semibold">Tipo</TableHead>
+                                  <TableHead className="text-right py-4 font-semibold">Valor</TableHead>
+                                  <TableHead className="text-center w-[120px] py-4 pr-6 font-semibold">Ações</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {loading ? (<tr><td colSpan="4" className="text-center py-16 text-muted-foreground">Carregando...</td></tr>) : filteredLancamentos.length === 0 ? (<tr><td colSpan="4" className="text-center py-16 text-muted-foreground"><HandCoins className="mx-auto w-10 h-10 mb-2" />Nenhum lançamento registrado neste período.</td></tr>) : (
+                                    filteredLancamentos.map((item) => (
+                                        <TableRow key={item.id} className="border-b border-cyan-500/10 hover:bg-blue-500/10 transition-colors duration-200">
+                                            <TableCell className="font-medium pl-6 py-4">{new Date(item.data).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</TableCell>
+                                            <TableCell className="py-4"><span className="font-semibold text-foreground">{item.tipo_movimento}</span></TableCell>
+                                            <TableCell className="text-right font-bold text-yellow-400 py-4">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor)}</TableCell>
+                                            <TableCell className="text-center pr-6 py-4">
+                                              <div className="flex items-center justify-center gap-2">
+                                                <Button variant="ghost" size="icon" className="h-9 w-9 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded-full" onClick={() => openDialog(item)}><Edit className="h-4 w-4" /></Button>
+                                                <AlertDialog>
+                                                  <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-9 w-9 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-full"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
+                                                  <AlertDialogContent className="dark-lm-impressoes z-[150]">
+                                                    <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Deseja remover este lançamento?</AlertDialogDescription></AlertDialogHeader>
+                                                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-red-600">Deletar</AlertDialogAction></AlertDialogFooter>
+                                                  </AlertDialogContent>
+                                                </AlertDialog>
+                                              </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </ScrollArea>
+                </CardContent>
+            </Card>
+        </motion.div>
+    );
+};
 
-        <span className="px-2 text-xs">
-         {currentPage} / {totalPages}
-        </span>
-
-        <Button
-         variant="outline"
-         size="sm"
-         disabled={currentPage===totalPages}
-         onClick={()=>
-          setCurrentPage(
-           p=>Math.min(totalPages,p+1)
-          )
-         }
-         className="h-8"
-        >
-         Próxima
-        </Button>
-
-       </div>
-      </div>
-     )}
-
-    </CardContent>
-   </Card>
-
-  </motion.div>
- );
-}
+export default LancamentoDizimosOfertas;
