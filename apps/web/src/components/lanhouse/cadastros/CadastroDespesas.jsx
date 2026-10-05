@@ -1,165 +1,33 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Edit, Trash, DollarSign } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
+import React,{useState,useEffect,useCallback}from'react';
+import{Plus,Edit,Trash,DollarSign}from'lucide-react';
+import{Button}from'@/components/ui/button';
+import{Input}from'@/components/ui/input';
+import{Label}from'@/components/ui/label';
+import{Card}from'@/components/ui/card';
+import{Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter,DialogTrigger}from'@/components/ui/dialog';
+import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
+import{useToast}from'@/components/ui/use-toast';
+import{supabase}from'@/lib/customSupabaseClient';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
 
-const CadastroDespesas = () => {
-  const { toast } = useToast();
-  const { user } = useAuth();
-  const [despesas, setDespesas] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [currentDespesa, setCurrentDespesa] = useState(null);
-  const [nomeDespesa, setNomeDespesa] = useState('');
+const CYAN='hsl(var(--neon-lanhouse))';
 
-  const fetchDespesas = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('lm_despesas')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('despesa', { ascending: true }); // Sorted
+export default function CadastroDespesas(){
+ const{toast}=useToast(),{user}=useAuth();
+ const[despesas,setDespesas]=useState([]),[loading,setLoading]=useState(true),[open,setOpen]=useState(false),[current,setCurrent]=useState(null),[nome,setNome]=useState('');
 
-    if (error) {
-      toast({ title: 'Erro ao buscar tipos de despesa', description: error.message, variant: 'destructive' });
-    } else {
-      setDespesas(data);
-    }
-    setLoading(false);
-  }, [user, toast]);
+ const load=useCallback(async()=>{if(!user)return;setLoading(true);const{data,error}=await supabase.from('lm_despesas').select('*').eq('user_id',user.id).order('despesa');if(error)toast({title:'Erro ao buscar despesas',description:error.message,variant:'destructive'});else setDespesas(data||[]);setLoading(false)},[user,toast]);
+ useEffect(()=>load(),[load]);
+ useEffect(()=>{if(!user)return;const c=supabase.channel('lm_despesas_changes').on('postgres_changes',{event:'*',schema:'public',table:'lm_despesas',filter:`user_id=eq.${user.id}`},load).subscribe();return()=>supabase.removeChannel(c)},[user,load]);
 
-  useEffect(() => {
-    fetchDespesas();
-  }, [fetchDespesas]);
+ const reset=()=>{setNome('');setCurrent(null)};
+ const abrir=x=>{setCurrent(x);setNome(x?.despesa||'');setOpen(true)};
+ const salvar=async()=>{if(!nome.trim())return toast({title:'Erro',description:'O nome da despesa não pode estar vazio.',variant:'destructive'});const d={despesa:nome.trim(),user_id:user.id};const q=current?await supabase.from('lm_despesas').update(d).eq('id',current.id):await supabase.from('lm_despesas').insert(d);if(q.error)return toast({title:'Erro ao salvar',description:q.error.message,variant:'destructive'});toast({title:'Sucesso',description:current?'Tipo de despesa atualizado.':'Novo tipo de despesa cadastrado.'});setOpen(false);reset();load()};
+ const excluir=async id=>{const{error}=await supabase.from('lm_despesas').delete().eq('id',id);if(error)toast({title:'Erro ao remover',description:error.message,variant:'destructive'});else{toast({title:'Despesa removida'});load()}};
 
-  useEffect(() => {
-    if (!user) return;
-    const channel = supabase.channel('lm_despesas_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lm_despesas', filter: `user_id=eq.${user.id}`}, () => fetchDespesas())
-      .subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [user, fetchDespesas]);
+ return <div className="space-y-5">
+  <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 md:flex-row md:items-center md:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em]" style={{color:CYAN}}>Cadastros • LM Impressões</p><h2 className="text-2xl font-bold md:text-3xl">Tipos de Despesa</h2><p className="text-sm text-muted-foreground">Gerencie os tipos de despesas do negócio.</p></div><Dialog open={open} onOpenChange={v=>{setOpen(v);if(!v)reset()}}><DialogTrigger asChild><Button onClick={()=>abrir()} style={{background:CYAN,color:'#071018'}}><Plus className="mr-2 h-4 w-4"/>Nova Despesa</Button></DialogTrigger><DialogContent className="dark-lm-impressoes max-w-lg"><DialogHeader><DialogTitle style={{color:CYAN}}>{current?'Editar Tipo de Despesa':'Adicionar Tipo de Despesa'}</DialogTitle><DialogDescription>Preencha as informações abaixo.</DialogDescription></DialogHeader><div className="py-4"><Label>Nome *</Label><Input value={nome} onChange={e=>setNome(e.target.value)} className="mt-1"/></div><DialogFooter><Button variant="outline" onClick={()=>{setOpen(false);reset()}}>Cancelar</Button><Button onClick={salvar} style={{background:CYAN,color:'#071018'}}>Salvar</Button></DialogFooter></DialogContent></Dialog></div>
 
-  const resetForm = () => {
-    setNomeDespesa('');
-    setCurrentDespesa(null);
-  };
-
-  const handleSave = async () => {
-    if (!nomeDespesa.trim()) {
-      toast({ title: 'Erro', description: 'O nome da despesa não pode estar vazio.', variant: 'destructive' });
-      return;
-    }
-
-    const dataToSave = { despesa: nomeDespesa, user_id: user.id };
-
-    if (currentDespesa) {
-      const { error } = await supabase.from('lm_despesas').update(dataToSave).eq('id', currentDespesa.id);
-      if (error) toast({ title: 'Erro ao atualizar', variant: 'destructive' });
-      else toast({ title: 'Sucesso!', description: 'Tipo de despesa atualizado.', className: 'bg-green-500 text-white' });
-    } else {
-      const { error } = await supabase.from('lm_despesas').insert(dataToSave);
-      if (error) toast({ title: 'Erro ao cadastrar', variant: 'destructive' });
-      else toast({ title: 'Sucesso!', description: 'Novo tipo de despesa cadastrado.', className: 'bg-green-500 text-white' });
-    }
-    resetForm();
-    setIsDialogOpen(false);
-  };
-
-  const openDialog = (despesa = null) => {
-    setCurrentDespesa(despesa);
-    setNomeDespesa(despesa ? despesa.despesa : '');
-    setIsDialogOpen(true);
-  };
-
-  const closeDialog = () => {
-    setIsDialogOpen(false);
-    resetForm();
-  };
-
-  const handleDelete = async (id) => {
-    const { error } = await supabase.from('lm_despesas').delete().eq('id', id);
-    if (error) toast({ title: 'Erro ao remover', variant: 'destructive' });
-    else toast({ title: 'Removido', description: 'Tipo de despesa removido.', className: 'bg-red-500 text-white' });
-  };
-
-  return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">Cadastro de Tipos de Despesa</h2>
-          <p className="text-muted-foreground">Gerencie os tipos de despesas do seu negócio.</p>
-        </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild><Button onClick={() => openDialog()} className="bg-cyan-500 hover:bg-cyan-600 text-primary-foreground"><Plus className="w-4 h-4 mr-2" /> Nova Despesa</Button></DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] dark-lm-impressoes bg-card border-border text-foreground z-[100]">
-            <DialogHeader>
-              <DialogTitle className="text-cyan-400">{currentDespesa ? 'Editar' : 'Adicionar'} Tipo de Despesa</DialogTitle>
-              <DialogDescription>Preencha as informações abaixo.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="nome" className="text-right text-muted-foreground">Nome</Label><Input id="nome" value={nomeDespesa} onChange={(e) => setNomeDespesa(e.target.value)} className="col-span-3 bg-background/70 border-border focus:border-cyan-400" /></div>
-            </div>
-            <DialogFooter><Button variant="outline" onClick={closeDialog}>Cancelar</Button><Button onClick={handleSave} className="bg-cyan-500 hover:bg-cyan-600 text-primary-foreground">Salvar</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="bg-card/80 backdrop-blur-sm border border-border rounded-xl shadow-lg shadow-cyan-500/5 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-border"><th className="p-4 text-left font-semibold text-muted-foreground">Nome da Despesa</th><th className="p-4 text-right font-semibold text-muted-foreground">Ações</th></tr></thead>
-            <tbody>
-              {loading ? (<tr><td colSpan="2" className="p-8 text-center text-muted-foreground">Carregando...</td></tr>) : despesas.length === 0 ? (
-                <tr><td colSpan="2" className="p-8 text-center text-muted-foreground"><DollarSign className="mx-auto w-10 h-10 mb-2" />Nenhum tipo de despesa cadastrado.</td></tr>
-              ) : (
-                despesas.map((despesa) => (
-                  <tr key={despesa.id} className="border-b border-border last:border-b-0 hover:bg-blue-500/10 transition-colors duration-200">
-                    <td className="p-4 text-foreground">{despesa.despesa}</td>
-                    <td className="p-4 flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => openDialog(despesa)}><Edit className="w-4 h-4 text-cyan-400" /></Button>
-                      <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon"><Trash className="w-4 h-4 text-red-500" /></Button></AlertDialogTrigger>
-                        <AlertDialogContent className="dark-lm-impressoes bg-card border-border z-[150]">
-                          <AlertDialogHeader><AlertDialogTitle className="text-cyan-400">Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Essa ação não pode ser desfeita. Isso irá deletar permanentemente o tipo de despesa.</AlertDialogDescription></AlertDialogHeader>
-                          <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(despesa.id)} className="bg-red-500 hover:bg-red-600">Deletar</AlertDialogAction></AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
-export default CadastroDespesas;
+  <Card className="overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-border bg-muted/20"><th className="p-4 text-left">Nome da Despesa</th><th className="p-4 text-right">Ações</th></tr></thead><tbody>{loading?<tr><td colSpan="2" className="p-10 text-center text-muted-foreground">Carregando...</td></tr>:!despesas.length?<tr><td colSpan="2" className="p-12 text-center text-muted-foreground"><DollarSign className="mx-auto mb-2 h-10 w-10"/>Nenhum tipo de despesa cadastrado.</td></tr>:despesas.map(d=><tr key={d.id} className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-lanhouse)/.05)]"><td className="p-4 font-medium">{d.despesa}</td><td className="p-4"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" onClick={()=>abrir(d)} style={{color:CYAN}}><Edit className="h-4 w-4"/></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-400"><Trash className="h-4 w-4"/></Button></AlertDialogTrigger><AlertDialogContent className="dark-lm-impressoes"><AlertDialogHeader><AlertDialogTitle>Excluir tipo de despesa?</AlertDialogTitle><AlertDialogDescription>Deseja excluir <strong>{d.despesa}</strong>?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>excluir(d.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></td></tr>)}</tbody></table></div></Card>
+ </div>
+}
