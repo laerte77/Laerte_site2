@@ -67,7 +67,7 @@ export default function LmImpressoesDashboard(){
    <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
 
    <main className="relative flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5">
-    <Routes>
+    <Routes location={location} key={location.pathname}>
      <Route path="/" element={<DashboardHome/>}/>
      <Route path="despesas-previstas-mes" element={<ContasMesLM/>}/>
 
