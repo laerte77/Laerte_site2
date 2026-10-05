@@ -28,7 +28,7 @@ import RelatorioDespesasPrevistas from'@/components/lanhouse/relatorios/Relatori
 import ControleFolhas from'@/components/lanhouse/relatorios/ControleFolhas';
 import RelatorioCustosPorTipo from'@/components/lanhouse/relatorios/RelatorioCustosPorTipo';
 import RelatorioLucroMensal from'@/components/lanhouse/relatorios/RelatorioLucroMensal';
-import EstoqueInicial from'@components/lanhouse/estoques/EstoqueInicial';
+import EstoqueInicial from'@/components/lanhouse/estoques/EstoqueInicial';
 import Estoques from'@/components/lanhouse/estoques/Estoques';
 import ControleEstoque from'@/components/lanhouse/estoques/ControleEstoque';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
@@ -68,26 +68,14 @@ export default function LmImpressoesDashboard(){
  }
 
  return(
-  <div
-   className="flex min-h-screen w-full bg-gradient-professional"
-   style={{'--primary':'var(--neon-lanhouse)','--ring':'var(--neon-lanhouse)'}}
-  >
+  <div className="flex min-h-screen w-full bg-gradient-professional" style={{'--primary':'var(--neon-lanhouse)','--ring':'var(--neon-lanhouse)'}}>
    <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
 
-   <div
-    className={cn(
-     'flex flex-1 flex-col transition-[margin] duration-300',
-     !isMobile&&(isSidebarOpen?'ml-60':'ml-20')
-    )}
-   >
-    <Header
-     toggleSidebar={()=>setSidebarOpen(v=>!v)}
-     isSidebarOpen={isSidebarOpen}
-    />
+   <div className={cn('flex flex-1 flex-col transition-[margin] duration-300',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
+    <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
 
     <main className="relative flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5">
      <Routes>
-
       <Route path="/" element={<DashboardHome/>}/>
       <Route path="despesas-previstas-mes" element={<ContasMesLM/>}/>
 
@@ -122,17 +110,12 @@ export default function LmImpressoesDashboard(){
       <Route path="estoques" element={<Estoques/>}/>
 
       <Route path="*" element={<Navigate to="/lm-impressoes/dashboard" replace/>}/>
-
      </Routes>
     </main>
    </div>
 
    {isMobile&&isSidebarOpen&&(
-    <div
-     onClick={()=>setSidebarOpen(false)}
-     className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-     aria-hidden="true"
-    />
+    <div onClick={()=>setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" aria-hidden="true"/>
    )}
 
    <Toaster/>
