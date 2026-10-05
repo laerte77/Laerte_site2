@@ -37,7 +37,7 @@ import{DeviceContext}from'@/App';
 import{cn}from'@/lib/utils';
 import{Loader2}from'lucide-react';
 
-const LmImpressoesDashboard=()=>{
+export default function LmImpressoesDashboard(){
  const navigate=useNavigate(),location=useLocation(),{toast}=useToast(),{session,loading,canAccessModule}=useAuth(),{isMobile}=useContext(DeviceContext);
  const[isSidebarOpen,setSidebarOpen]=useState(!isMobile);
 
@@ -47,7 +47,7 @@ const LmImpressoesDashboard=()=>{
   if(!loading){
    if(!session)navigate('/login');
    else if(!canAccessModule('lm-impressoes')&&!canAccessModule('lm_impressoes')){
-    toast({title:'Acesso Restrito',description:'Permissão negada ao módulo LanHouse.',variant:'destructive'});
+    toast({title:'Acesso Restrito',description:'Permissão negada ao módulo LM Impressões.',variant:'destructive'});
     navigate('/modules');
    }
   }
@@ -56,52 +56,58 @@ const LmImpressoesDashboard=()=>{
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
  useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
 
- if(loading||(!session&&!loading))return <div className="flex h-screen flex-col items-center justify-center text-foreground" role="status" aria-live="polite"><Loader2 className="mb-4 h-10 w-10 animate-spin text-[hsl(var(--neon-cyan))] motion-reduce:animate-none"/><p className="font-medium uppercase tracking-widest text-muted-foreground">Carregando LM Impressões...</p></div>;
+ if(loading||(!session&&!loading))return <div className="flex min-h-screen flex-col items-center justify-center text-foreground"><Loader2 className="mb-4 h-10 w-10 animate-spin text-[hsl(var(--neon-lanhouse))]"/><p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">Carregando LM Impressões...</p></div>;
 
- return <div className="flex min-h-screen w-full bg-gradient-professional font-sans text-foreground" style={{'--primary':'var(--neon-cyan)','--ring':'var(--neon-cyan)'}}>
-  <Helmet><title>LM Impressões | Sistema de Gestão</title><meta name="description" content="Dashboard de Gestão LM Impressões"/></Helmet>
+ return <div className="flex min-h-screen w-full bg-gradient-professional font-sans text-foreground" style={{'--primary':'var(--neon-lanhouse)','--ring':'var(--neon-lanhouse)'}}>
+  <Helmet><title>LM Impressões | Sistema Empresarial</title><meta name="description" content="Dashboard de Gestão LM Impressões"/></Helmet>
+
   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
 
-  <div className={cn('flex flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
+  <div className={cn('flex min-w-0 flex-1 flex-col transition-[margin] duration-300',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
    <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
-   <main className="flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5 [&_.neon-card]:neon-border-cyan [&_.neon-card]:neon-hover-cyan">
-    <div className="w-full">
-     <Routes>
-      <Route path="/" element={<DashboardHome/>}/>
-      <Route path="/despesas-previstas-mes" element={<ContasMesLM/>}/>
-      <Route path="cadastros/clientes" element={<CadastroClientes/>}/>
-      <Route path="cadastros/servicos" element={<CadastroServicos/>}/>
-      <Route path="cadastros/despesas" element={<CadastroDespesas/>}/>
-      <Route path="cadastros/tipos-folha" element={<CadastroTiposFolhas/>}/>
-      <Route path="lancamentos/servicos" element={<LancamentoServicos/>}/>
-      <Route path="lancamentos/despesas" element={<LancamentoDespesas/>}/>
-      <Route path="lancamentos/folhas" element={<LancamentoFolhas/>}/>
-      <Route path="lancamentos/despesas-previstas" element={<LancamentoDespesaPrevista/>}/>
-      <Route path="lancamentos/clientes-debito" element={<LancamentoClientesDebito/>}/>
-      <Route path="lancamentos/dizimos-ofertas" element={<LancamentoDizimosOfertas/>}/>
-      <Route path="lancamentos/metas" element={<LancamentoMetas/>}/>
-      <Route path="custos/lancamentos" element={<LancamentoCustos/>}/>
-      <Route path="custos/controle" element={<ControleFolhas/>}/>
-      <Route path="custos/relatorio-custos" element={<RelatorioCustosPorTipo/>}/>
-      <Route path="custos/relatorio-lucro" element={<RelatorioLucroMensal/>}/>
-      <Route path="pedidos/cadastro" element={<CadastroPedidos/>}/>
-      <Route path="pedidos/consulta" element={<ConsultaPedidos/>}/>
-      <Route path="relatorios/servicos" element={<RelatorioServicos/>}/>
-      <Route path="relatorios/despesas" element={<RelatorioDespesas/>}/>
-      <Route path="relatorios/despesas-previstas" element={<RelatorioDespesasPrevistas/>}/>
-      <Route path="relatorios/clientes-debito" element={<RelatorioClientesDebito/>}/>
-      <Route path="estoques/inicial" element={<EstoqueInicial/>}/>
-      <Route path="estoques/controle" element={<ControleEstoque/>}/>
-      <Route path="estoques" element={<Estoques/>}/>
-      <Route path="*" element={<Navigate to="/lm-impressoes/dashboard" replace/>}/>
-     </Routes>
-    </div>
+
+   <main className="relative flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5">
+    <Routes>
+     <Route path="/" element={<DashboardHome/>}/>
+     <Route path="despesas-previstas-mes" element={<ContasMesLM/>}/>
+
+     <Route path="cadastros/clientes" element={<CadastroClientes/>}/>
+     <Route path="cadastros/servicos" element={<CadastroServicos/>}/>
+     <Route path="cadastros/despesas" element={<CadastroDespesas/>}/>
+     <Route path="cadastros/tipos-folha" element={<CadastroTiposFolhas/>}/>
+
+     <Route path="lancamentos/servicos" element={<LancamentoServicos/>}/>
+     <Route path="lancamentos/despesas" element={<LancamentoDespesas/>}/>
+     <Route path="lancamentos/folhas" element={<LancamentoFolhas/>}/>
+     <Route path="lancamentos/despesas-previstas" element={<LancamentoDespesaPrevista/>}/>
+     <Route path="lancamentos/clientes-debito" element={<LancamentoClientesDebito/>}/>
+     <Route path="lancamentos/dizimos-ofertas" element={<LancamentoDizimosOfertas/>}/>
+     <Route path="lancamentos/metas" element={<LancamentoMetas/>}/>
+
+     <Route path="custos/lancamentos" element={<LancamentoCustos/>}/>
+     <Route path="custos/controle" element={<ControleFolhas/>}/>
+     <Route path="custos/relatorio-custos" element={<RelatorioCustosPorTipo/>}/>
+     <Route path="custos/relatorio-lucro" element={<RelatorioLucroMensal/>}/>
+
+     <Route path="pedidos/cadastro" element={<CadastroPedidos/>}/>
+     <Route path="pedidos/consulta" element={<ConsultaPedidos/>}/>
+
+     <Route path="relatorios/servicos" element={<RelatorioServicos/>}/>
+     <Route path="relatorios/despesas" element={<RelatorioDespesas/>}/>
+     <Route path="relatorios/despesas-previstas" element={<RelatorioDespesasPrevistas/>}/>
+     <Route path="relatorios/clientes-debito" element={<RelatorioClientesDebito/>}/>
+
+     <Route path="estoques/inicial" element={<EstoqueInicial/>}/>
+     <Route path="estoques/controle" element={<ControleEstoque/>}/>
+     <Route path="estoques" element={<Estoques/>}/>
+
+     <Route path="*" element={<Navigate to="/lm-impressoes/dashboard" replace/>}/>
+    </Routes>
    </main>
   </div>
 
   {isMobile&&isSidebarOpen&&<div className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm" onClick={()=>setSidebarOpen(false)} aria-hidden="true"/>}
+
   <Toaster/>
  </div>;
-};
-
-export default LmImpressoesDashboard;
+}
