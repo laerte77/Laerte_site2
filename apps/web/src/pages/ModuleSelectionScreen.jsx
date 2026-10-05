@@ -1,78 +1,82 @@
 import React from'react';
 import{motion}from'framer-motion';
-import{User,Printer,Church,Gamepad2,Scissors,LogOut,Zap}from'lucide-react';
+import{User,Printer,Church,Gamepad2,Scissors,LogOut,Zap,ShieldCheck}from'lucide-react';
 import{Link,useNavigate}from'react-router-dom';
 import{Helmet}from'react-helmet';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{Button}from'@/components/ui/button';
 
 const modules=[
- {title:'Finanças Pessoais',description:'Gestão completa das suas finanças, metas e investimentos.',icon:User,path:'/pessoal/dashboard',requiredModule:'pessoal',colorClass:'blue',hex:'hsl(var(--neon-blue))'},
- {title:'LM Impressões',description:'Controle de serviços, estoque e clientes da lan house.',icon:Printer,path:'/lm-impressoes/dashboard',requiredModule:'lm-impressoes',colorClass:'cyan',hex:'hsl(var(--neon-cyan))'},
- {title:'Igreja',description:'Tesouraria, secretaria e gestão integrada de membros.',icon:Church,path:'/igreja',requiredModule:'igreja',colorClass:'gold',hex:'hsl(var(--neon-gold))'},
- {title:'Entretenimento',description:'Gestão de partidas, jogadores e estatísticas esportivas.',icon:Gamepad2,path:'/entretenimento/dashboard',requiredModule:'entretenimento',colorClass:'orange',hex:'hsl(var(--neon-orange))'},
- {title:'Barbearia Brothers',description:'Agenda, controle de clientes, serviços e finanças.',icon:Scissors,path:'/barbearia/dashboard',requiredModule:'barbearia',colorClass:'gold',hex:'hsl(var(--neon-gold))'}
+ {title:'Finanças Pessoais',description:'Gestão completa das suas finanças, metas e investimentos.',icon:User,path:'/pessoal/dashboard',requiredModule:'pessoal',hex:'hsl(var(--neon-blue))'},
+ {title:'LM Impressões',description:'Controle de serviços, estoque e clientes da lan house.',icon:Printer,path:'/lm-impressoes/dashboard',requiredModule:'lm-impressoes',hex:'hsl(var(--neon-cyan))'},
+ {title:'Igreja',description:'Tesouraria, secretaria e gestão integrada de membros.',icon:Church,path:'/igreja',requiredModule:'igreja',hex:'hsl(var(--neon-gold))'},
+ {title:'Entretenimento',description:'Gestão de partidas, jogadores e estatísticas esportivas.',icon:Gamepad2,path:'/entretenimento/dashboard',requiredModule:'entretenimento',hex:'hsl(var(--neon-orange))'},
+ {title:'Barbearia Brothers',description:'Agenda, controle de clientes, serviços e finanças.',icon:Scissors,path:'/barbearia/dashboard',requiredModule:'barbearia',hex:'hsl(var(--neon-gold))'}
 ];
 
-export default function ModuleSelectionScreen(){
- const{signOut,canAccessModule}=useAuth();
- const navigate=useNavigate();
-
- const handleLogout=async()=>{await signOut();navigate('/login')};
-
- const containerVariants={
-  hidden:{opacity:0},
-  visible:{opacity:1,transition:{staggerChildren:0.1}}
- };
-
- const itemVariants={
-  hidden:{opacity:0,y:20},
-  visible:{opacity:1,y:0,transition:{duration:0.5}}
- };
-
- return <>
-  <Helmet><title>Seleção de Módulos - SistemaPro</title></Helmet>
-
-  <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{duration:0.6,ease:'easeInOut'}} className="relative flex min-h-screen flex-col justify-center overflow-hidden bg-gradient-to-br from-[#0F172A] via-[#0F172A] to-[#0F172A] px-6 py-20 md:px-10">
-   <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-transparent via-[#00D9FF]/5 to-[#FFD700]/5"/>
-   <div className="pointer-events-none absolute left-1/2 top-0 h-96 w-full max-w-4xl -translate-x-1/2 rounded-full bg-white/5 blur-[150px]"/>
-
-   <div className="absolute right-4 top-4 z-50 md:right-6 md:top-6">
-    <Button variant="outline" onClick={handleLogout} className="border-[#00D9FF]/50 bg-[#0F172A]/50 text-[#00D9FF] backdrop-blur transition-[background-color,border-color,color,box-shadow,transform] duration-300 hover:bg-[#00D9FF]/10 hover:text-[#00D9FF] hover:shadow-[0_0_15px_rgba(0,217,255,0.8)] hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none">
-     <LogOut className="mr-2 h-4 w-4" aria-hidden="true"/>LOG-OFF
-    </Button>
+const CardModulo=({mod})=>{
+ const Icon=mod.icon;
+ return <motion.div initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} whileHover={{y:-5}} transition={{duration:.3}} className="h-full">
+  <Link to={mod.path} className="group block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60" aria-label={`Acessar módulo ${mod.title}`}>
+   <div className="flex h-full min-h-[275px] flex-col rounded-2xl border bg-[hsl(var(--card-bg))]/80 p-6 backdrop-blur-2xl transition-all duration-300 hover:bg-white/[.04]" style={{borderColor:`color-mix(in srgb,${mod.hex} 55%,transparent)`,boxShadow:`0 18px 55px rgba(0,0,0,.25)`}}>
+    <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl border bg-black/20 transition-all duration-300 group-hover:scale-105" style={{color:mod.hex,borderColor:`color-mix(in srgb,${mod.hex} 30%,transparent)`,backgroundColor:`color-mix(in srgb,${mod.hex} 8%,transparent)`}}>
+     <Icon className="h-8 w-8"/>
+    </div>
+    <p className="mb-2 text-[10px] font-semibold uppercase tracking-[.25em]" style={{color:mod.hex}}>MÓDULO</p>
+    <h2 className="text-2xl font-bold tracking-tight text-white">{mod.title}</h2>
+    <p className="mt-2 flex-1 text-sm leading-6 text-white/55">{mod.description}</p>
+    <div className="mt-6 flex items-center gap-2 text-sm font-bold transition-all duration-300 group-hover:gap-3" style={{color:mod.hex}}>Acessar <span>→</span></div>
    </div>
+  </Link>
+ </motion.div>;
+};
 
-   <motion.div initial={{opacity:0,y:-20}} animate={{opacity:1,y:0}} transition={{delay:0.2,duration:0.6}} className="mb-20 pt-10 text-center">
-    <motion.div animate={{filter:['drop-shadow(0 0 10px rgba(0,217,255,0.5))','drop-shadow(0 0 25px rgba(0,217,255,1))','drop-shadow(0 0 10px rgba(0,217,255,0.5))'],scale:[1,1.05,1]}} transition={{repeat:Infinity,duration:2,ease:'easeInOut'}} className="mb-6 inline-flex items-center justify-center text-[#00D9FF]">
-     <Zap size={64} className="fill-[#00D9FF]/20" strokeWidth={1.5} aria-hidden="true"/>
+export default function ModuleSelectionScreen(){
+ const{signOut,canAccessModule}=useAuth(),navigate=useNavigate();
+ const handleLogout=async()=>{await signOut();navigate('/login')};
+ const allowed=modules.filter(m=>canAccessModule(m.requiredModule));
+
+ return <><Helmet><title>Seleção de Módulos - Sistema Empresarial</title></Helmet>
+  <div className="relative min-h-screen overflow-hidden bg-[#070B12] px-5 py-8 text-white sm:px-8">
+   <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--neon-cyan)/.07),transparent_30%),radial-gradient(circle_at_80%_75%,hsl(var(--neon-gold)/.06),transparent_30%)]"/>
+   <div className="pointer-events-none absolute inset-0 opacity-[.025] bg-[linear-gradient(hsl(var(--neon-cyan))_1px,transparent_1px),linear-gradient(90deg,hsl(var(--neon-cyan))_1px,transparent_1px)] bg-[size:45px_45px]"/>
+
+   <div className="relative z-10 mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-7xl flex-col">
+    <div className="flex items-center justify-end">
+     <Button variant="outline" onClick={handleLogout} className="border-[hsl(var(--neon-cyan)/.35)] bg-white/[.02] text-[hsl(var(--neon-cyan))] backdrop-blur hover:bg-[hsl(var(--neon-cyan)/.08)] hover:text-[hsl(var(--neon-cyan))]">
+      <LogOut className="mr-2 h-4 w-4"/>Sair
+     </Button>
+    </div>
+
+    <motion.div initial={{opacity:0,y:-15}} animate={{opacity:1,y:0}} transition={{duration:.5}} className="flex flex-1 flex-col items-center justify-center py-10">
+     <motion.div animate={{filter:['drop-shadow(0 0 8px rgba(0,217,255,.35))','drop-shadow(0 0 20px rgba(0,217,255,.75))','drop-shadow(0 0 8px rgba(0,217,255,.35))'],scale:[1,1.03,1]}} transition={{repeat:Infinity,duration:2.5,ease:'easeInOut'}} className="mb-6">
+      <Zap className="h-16 w-16 fill-[hsl(var(--neon-cyan)/.12)] text-[hsl(var(--neon-cyan))]" strokeWidth={1.4}/>
+     </motion.div>
+
+     <p className="text-xs font-semibold uppercase tracking-[.35em] text-[hsl(var(--neon-cyan))]">SISTEMA EMPRESARIAL</p>
+     <h1 className="mt-2 text-center text-4xl font-black tracking-tight text-white sm:text-5xl">Selecione um Módulo</h1>
+     <p className="mt-3 text-center text-base text-white/55 sm:text-lg">Escolha o sistema que deseja gerenciar</p>
+     <div className="mt-6 h-px w-20 bg-[hsl(var(--neon-cyan))] shadow-[0_0_12px_hsl(var(--neon-cyan)/.6)]"/>
+
+     {allowed.length===0?
+      <div className="mt-10 rounded-2xl border border-red-500/25 bg-red-500/10 p-8 text-center backdrop-blur-xl">
+       <h2 className="text-xl font-bold">Acesso Restrito</h2>
+       <p className="mt-2 text-sm text-white/60">Você não possui permissão para acessar nenhum módulo.</p>
+      </div>
+      :
+      <motion.div initial="hidden" animate="visible" className="mt-10 grid w-full max-w-6xl grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+       {allowed.map((mod,i)=><motion.div key={mod.path} initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} transition={{delay:i*.08}}><CardModulo mod={mod}/></motion.div>)}
+      </motion.div>
+     }
+
+     <div className="mt-10 flex flex-wrap justify-center gap-6 text-xs text-white/35">
+      <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[hsl(var(--neon-cyan))]"/>Acesso seguro</span>
+      <span className="flex items-center gap-2"><Zap className="h-4 w-4 text-[hsl(var(--neon-cyan))]"/>Sistema integrado</span>
+     </div>
     </motion.div>
 
-    <h1 className="mb-6 text-4xl font-bold text-[hsl(var(--text-primary))] drop-shadow-lg md:text-6xl">Selecione um Módulo</h1>
-    <p className="text-xl text-[hsl(var(--text-secondary))] drop-shadow-md md:text-2xl">Escolha o sistema que deseja gerenciar</p>
-   </motion.div>
-
-   <motion.div variants={containerVariants} initial="hidden" animate="visible" className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-8 md:grid-cols-2 md:gap-10 lg:grid-cols-3">
-    {modules.filter(mod=>canAccessModule(mod.requiredModule)).map(mod=>
-     <motion.div key={mod.path} variants={itemVariants} whileHover={{scale:1.02,y:-4}} whileTap={{scale:0.99}} transition={{duration:0.25,ease:'easeOut'}} className="h-full">
-      <Link to={mod.path} className="group block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0F172A]" aria-label={`Acessar módulo ${mod.title}`}>
-       <div className="flex h-full flex-col items-start rounded-2xl border-2 bg-[hsl(var(--card-bg))]/60 p-8 text-left backdrop-blur-xl transition-[background-color,box-shadow,transform] duration-300 hover:bg-card/80 lg:p-10" style={{borderColor:mod.hex,boxShadow:`0 0 15px ${mod.hex}`}}>
-        <motion.div className="mb-8 rounded-2xl bg-background/60 p-5 transition-[box-shadow,transform] duration-300 group-hover:shadow-[0_0_25px_currentColor]" style={{color:mod.hex}} whileHover={{rotate:[0,-3,3,0]}} transition={{duration:0.4,ease:'easeInOut'}}>
-         <mod.icon className="h-[64px] w-[64px] sm:h-[80px] sm:w-[80px]" aria-hidden="true"/>
-        </motion.div>
-
-        <h2 className="mb-4 text-3xl font-bold text-[hsl(var(--text-primary))]">{mod.title}</h2>
-        <p className="mb-10 flex-1 text-lg text-[hsl(var(--text-secondary))]">{mod.description}</p>
-
-        <div className="flex items-center gap-3 text-xl font-semibold transition-[gap] duration-300 group-hover:gap-4" style={{color:mod.hex}}>
-         Acessar
-         <span className="transition-transform duration-300 group-hover:translate-x-1">&rarr;</span>
-        </div>
-       </div>
-      </Link>
-     </motion.div>
-    )}
-   </motion.div>
-  </motion.div>
+    <p className="pb-2 text-center text-xs text-white/25">Sistema Empresarial • Gestão Integrada</p>
+   </div>
+  </div>
  </>;
 }
