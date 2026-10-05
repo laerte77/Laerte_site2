@@ -15,11 +15,11 @@ import LancamentoServicos from'@/components/lanhouse/lancamentos/LancamentoServi
 import LancamentoDespesas from'@/components/lanhouse/lancamentos/LancamentoDespesas';
 import LancamentoFolhas from'@/components/lanhouse/lancamentos/LancamentoFolhas';
 import LancamentoDespesaPrevista from'@/components/lanhouse/lancamentos/LancamentoDespesaPrevista';
-import ContasMesLM from'@/components/lanhouse/relatorios/ContasMesLM';
 import LancamentoClientesDebito from'@/components/lanhouse/lancamentos/LancamentoClientesDebito';
 import LancamentoDizimosOfertas from'@/components/lanhouse/lancamentos/LancamentoDizimosOfertas';
 import LancamentoMetas from'@/components/lanhouse/lancamentos/LancamentoMetas';
 import LancamentoCustos from'@/components/lanhouse/lancamentos/LancamentoCustos';
+import ContasMesLM from'@/components/lanhouse/relatorios/ContasMesLM';
 import ConsultaPedidos from'@/components/lanhouse/consultas/ConsultaPedidos';
 import RelatorioServicos from'@/components/lanhouse/relatorios/RelatorioServicos';
 import RelatorioDespesas from'@/components/lanhouse/relatorios/RelatorioDespesas';
@@ -28,7 +28,7 @@ import RelatorioDespesasPrevistas from'@/components/lanhouse/relatorios/Relatori
 import ControleFolhas from'@/components/lanhouse/relatorios/ControleFolhas';
 import RelatorioCustosPorTipo from'@/components/lanhouse/relatorios/RelatorioCustosPorTipo';
 import RelatorioLucroMensal from'@/components/lanhouse/relatorios/RelatorioLucroMensal';
-import EstoqueInicial from'@/components/lanhouse/estoques/EstoqueInicial';
+import EstoqueInicial from'@components/lanhouse/estoques/EstoqueInicial';
 import Estoques from'@/components/lanhouse/estoques/Estoques';
 import ControleEstoque from'@/components/lanhouse/estoques/ControleEstoque';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
@@ -36,7 +36,7 @@ import{useModuleAccessGuard}from'@/hooks/useModuleAccessGuard';
 import{DeviceContext}from'@/App';
 import{cn}from'@/lib/utils';
 
-const LmImpressoesDashboard=()=>{
+export default function LmImpressoesDashboard(){
  const navigate=useNavigate(),location=useLocation(),{toast}=useToast();
  const{session,loading,canAccessModule}=useAuth();
  const{isMobile}=useContext(DeviceContext);
@@ -46,28 +46,17 @@ const LmImpressoesDashboard=()=>{
 
  useEffect(()=>{
   if(loading)return;
-
   if(!session){
-   toast({
-    title:'Acesso Negado',
-    description:'Por favor, faça login.',
-    variant:'destructive'
-   });
+   toast({title:'Acesso Negado',description:'Por favor, faça login.',variant:'destructive'});
    navigate('/login');
-  }else if(!canAccessModule('lm-impressoes')&&!canAccessModule('lm_impressoes')){
-   toast({
-    title:'Acesso Restrito',
-    description:'Você não tem permissão para o módulo LM Impressões.',
-    variant:'destructive'
-   });
+  }else if(!canAccessModule('lm-impressoes')){
+   toast({title:'Acesso Restrito',description:'Você não tem permissão para o módulo LM Impressões.',variant:'destructive'});
    navigate('/modules');
   }
  },[session,loading,navigate,toast,canAccessModule]);
 
  useEffect(()=>setSidebarOpen(!isMobile),[isMobile]);
- useEffect(()=>{
-  if(isMobile)setSidebarOpen(false);
- },[location.pathname,isMobile]);
+ useEffect(()=>{if(isMobile)setSidebarOpen(false)},[location.pathname,isMobile]);
 
  if(loading||!session){
   return(
@@ -81,17 +70,9 @@ const LmImpressoesDashboard=()=>{
  return(
   <div
    className="flex min-h-screen w-full bg-gradient-professional"
-   style={{
-    '--primary':'var(--neon-lanhouse)',
-    '--ring':'var(--neon-lanhouse)'
-   }}
+   style={{'--primary':'var(--neon-lanhouse)','--ring':'var(--neon-lanhouse)'}}
   >
-
-   <Sidebar
-    isOpen={isSidebarOpen}
-    setOpen={setSidebarOpen}
-    isMobile={isMobile}
-   />
+   <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
 
    <div
     className={cn(
@@ -99,7 +80,6 @@ const LmImpressoesDashboard=()=>{
      !isMobile&&(isSidebarOpen?'ml-60':'ml-20')
     )}
    >
-
     <Header
      toggleSidebar={()=>setSidebarOpen(v=>!v)}
      isSidebarOpen={isSidebarOpen}
@@ -109,7 +89,6 @@ const LmImpressoesDashboard=()=>{
      <Routes>
 
       <Route path="/" element={<DashboardHome/>}/>
-
       <Route path="despesas-previstas-mes" element={<ContasMesLM/>}/>
 
       <Route path="cadastros/clientes" element={<CadastroClientes/>}/>
@@ -142,10 +121,7 @@ const LmImpressoesDashboard=()=>{
       <Route path="estoques/controle" element={<ControleEstoque/>}/>
       <Route path="estoques" element={<Estoques/>}/>
 
-      <Route
-       path="*"
-       element={<Navigate to="/lm-impressoes/dashboard" replace/>}
-      />
+      <Route path="*" element={<Navigate to="/lm-impressoes/dashboard" replace/>}/>
 
      </Routes>
     </main>
@@ -162,6 +138,4 @@ const LmImpressoesDashboard=()=>{
    <Toaster/>
   </div>
  );
-};
-
-export default LmImpressoesDashboard;
+}
