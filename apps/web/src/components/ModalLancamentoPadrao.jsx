@@ -13,50 +13,31 @@ export default function ModalLancamentoPadrao({open,onClose,title,description,ic
  const t=THEMES[theme]||THEMES.blue;
 
  return(
-  <Dialog open={open} onOpenChange={value=>{if(!value)onClose?.()}}>
+  <Dialog open={open} onOpenChange={v=>{if(!v)onClose?.()}}>
    <DialogContent
     onInteractOutside={e=>e.preventDefault()}
     onPointerDownOutside={e=>e.preventDefault()}
     onEscapeKeyDown={e=>e.preventDefault()}
-    className="w-[calc(100%-2rem)] max-w-[620px] overflow-hidden rounded-[24px] border-0 bg-[hsl(var(--card-bg))] p-0 text-foreground shadow-[0_30px_100px_rgba(0,0,0,.65)]"
+    className="flex max-h-[90vh] w-[calc(100%-2rem)] max-w-[620px] flex-col overflow-hidden rounded-[24px] border-0 bg-[hsl(var(--card-bg))] p-0 text-foreground shadow-[0_30px_100px_rgba(0,0,0,.65)]"
     style={{border:`1px solid ${t.border}`,boxShadow:`0 30px 100px rgba(0,0,0,.65),0 0 35px ${t.glow}`}}
    >
-    <div className="h-[3px] w-full" style={{background:t.color}}/>
+    <div className="h-[3px] w-full shrink-0" style={{background:t.color}}/>
 
-    <DialogHeader
-     className="px-7 pb-6 pt-6"
-     style={{background:`linear-gradient(180deg,${t.soft},transparent)`}}
-    >
+    <DialogHeader className="shrink-0 px-7 pb-6 pt-6" style={{background:`linear-gradient(180deg,${t.soft},transparent)`}}>
      <div className="flex items-start gap-4">
-      {Icon&&(
-       <div
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
-        style={{background:t.soft,border:`1px solid ${t.border}`,boxShadow:`0 0 20px ${t.glow}`}}
-       >
-        <Icon className="h-5 w-5" style={{color:t.color}}/>
-       </div>
-      )}
-
+      {Icon&&<div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl" style={{background:t.soft,border:`1px solid ${t.border}`,boxShadow:`0 0 20px ${t.glow}`}}><Icon className="h-5 w-5" style={{color:t.color}}/></div>}
       <div className="min-w-0 flex-1 pr-8">
        <DialogTitle className="text-[22px] font-bold tracking-tight">{title}</DialogTitle>
-
-       {description&&(
-        <DialogDescription className="mt-1.5 text-sm leading-6 text-muted-foreground">
-         {description}
-        </DialogDescription>
-       )}
+       {description&&<DialogDescription className="mt-1.5 text-sm leading-6 text-muted-foreground">{description}</DialogDescription>}
       </div>
      </div>
     </DialogHeader>
 
-    <div className="px-7 py-6">
-     <div className="space-y-5">{children}</div>
+    <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
+     <div className="space-y-5 pb-2">{children}</div>
     </div>
 
-    <DialogFooter
-     className="flex flex-col-reverse gap-3 border-t px-7 py-5 sm:flex-row sm:justify-end"
-     style={{borderColor:'hsl(var(--border) / .75)',background:'hsl(var(--background) / .18)'}}
-    >
+    <DialogFooter className="shrink-0 flex flex-col-reverse gap-3 border-t px-7 py-5 sm:flex-row sm:justify-end" style={{borderColor:'hsl(var(--border) / .75)',background:'hsl(var(--background) / .18)'}}>
      {footer}
     </DialogFooter>
    </DialogContent>
