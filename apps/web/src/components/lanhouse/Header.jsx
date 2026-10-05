@@ -1,14 +1,6 @@
 import React,{useState}from'react';
 import{Link,useNavigate}from'react-router-dom';
-import{
- Menu,
- Home,
- Bell,
- ChevronLeft,
- Search,
- X,
- LogOut
-}from'lucide-react';
+import{Menu,Home,Bell,ChevronLeft,Search,X,LogOut}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{cn}from'@/lib/utils';
@@ -45,10 +37,7 @@ const Header=({toggleSidebar,isSidebarOpen})=>{
      aria-label={isSidebarOpen?'Fechar menu lateral':'Abrir menu lateral'}
      aria-expanded={isSidebarOpen}
     >
-     {isSidebarOpen
-      ?<X className="h-5 w-5"/>
-      :<Menu className="h-5 w-5"/>
-     }
+     {isSidebarOpen?<X className="h-5 w-5"/>:<Menu className="h-5 w-5"/>}
     </Button>
 
     <Button
@@ -72,10 +61,7 @@ const Header=({toggleSidebar,isSidebarOpen})=>{
      title="Módulos"
      aria-label="Ir para os módulos"
     >
-     <Home
-      className="h-5 w-5"
-      style={{color:CYAN}}
-     />
+     <Home className="h-5 w-5" style={{color:CYAN}}/>
     </Button>
 
     <DividerLine
@@ -135,7 +121,6 @@ const Header=({toggleSidebar,isSidebarOpen})=>{
 
    <div className="mx-3 hidden max-w-lg flex-1 md:flex">
     <div className="relative w-full">
-
      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
 
      <Input
@@ -144,7 +129,6 @@ const Header=({toggleSidebar,isSidebarOpen})=>{
       className="h-10 w-full border-border bg-input/50 pl-9 focus-visible:ring-[hsl(var(--neon-lanhouse))]"
       aria-label="Pesquisar no módulo LM Impressões"
      />
-
     </div>
    </div>
 
@@ -206,7 +190,6 @@ const Header=({toggleSidebar,isSidebarOpen})=>{
     </Button>
 
    </div>
-
   </header>
  );
 };
