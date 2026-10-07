@@ -1,195 +1,150 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Trash2, Search, Edit } from 'lucide-react';
-import { format, parse, getMonth, getYear } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useToast } from '@/components/ui/use-toast';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import OfflineIndicator from '@/components/OfflineIndicator';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import { saveOfflineData } from '@/lib/offlineStorage';
+import React,{useState,useEffect,useCallback,useMemo,useRef}from'react';
+import{motion}from'framer-motion';
+import{Plus,Edit,Trash2,Search,RotateCcw,Receipt}from'lucide-react';
+import{format,parse,getMonth,getYear}from'date-fns';
+import{ptBR}from'date-fns/locale';
+import{supabase}from'@/lib/customSupabaseClient';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
+import{Button}from'@/components/ui/button';
+import{Input}from'@/components/ui/input';
+import{Label}from'@/components/ui/label';
+import{Card,CardContent}from'@/components/ui/card';
+import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
+import{RadioGroup,RadioGroupItem}from'@/components/ui/radio-group';
+import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
+import{Badge}from'@/components/ui/badge';
+import{ScrollArea}from'@/components/ui/scroll-area';
+import{Dialog,DialogContent,DialogHeader,DialogTitle,DialogFooter}from'@/components/ui/dialog';
+import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
+import{useToast}from'@/components/ui/use-toast';
+import OfflineIndicator from'@/components/OfflineIndicator';
+import{useOnlineStatus}from'@/hooks/useOnlineStatus';
+import{saveOfflineData}from'@/lib/offlineStorage';
 
-const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const RED='hsl(0 84% 60%)';
+const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2});
 
-const LancamentoDespesas = () => {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const { isOnline, checkPending } = useOnlineStatus();
-  const isMountedRef = useRef(true);
-  const [loading, setLoading] = useState(true);
-  const [despesas, setDespesas] = useState([]);
-  const [filteredDespesas, setFilteredDespesas] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth().toString());
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [tiposDespesa, setTiposDespesa] = useState([]);
-  const [tiposFolha, setTiposFolha] = useState([]);
-  const [editingId, setEditingId] = useState(null);
+export default function LancamentoDespesas(){
+ const{user}=useAuth(),{toast}=useToast(),{isOnline,checkPending}=useOnlineStatus(),mounted=useRef(true);
+ const[despesas,setDespesas]=useState([]),[tiposDespesa,setTiposDespesa]=useState([]),[tiposFolha,setTiposFolha]=useState([]),[loading,setLoading]=useState(true);
+ const[searchTerm,setSearchTerm]=useState(''),[selectedMonth,setSelectedMonth]=useState(String(new Date().getMonth())),[selectedYear,setSelectedYear]=useState(String(new Date().getFullYear()));
+ const[dialogOpen,setDialogOpen]=useState(false),[editingId,setEditingId]=useState(null);
+ const initialForm={data:format(new Date(),'yyyy-MM-dd'),despesa_id:'',valor:'',forma_pagamento:'',parcelas:1,tipo_custo:'Fixo',categoria:'',recorrencia:'',tipo_lancamento:'',quantidade:'',tipo_folha:''};
+ const[formData,setFormData]=useState(initialForm);
 
-  const availableYears = useMemo(() => {
-    const years = despesas.map(d => new Date(d.data).getFullYear());
-    years.push(new Date().getFullYear());
-    return [...new Set(years)].sort((a, b) => b - a);
-  }, [despesas]);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
 
-  const initialFormData = { data: format(new Date(), 'yyyy-MM-dd'), despesa_id: '', valor: '', forma_pagamento: '', parcelas: 1, tipo_custo: 'Fixo', categoria: '', recorrencia: '', tipo_lancamento: '', quantidade: '', tipo_folha: '' };
-  const [formData, setFormData] = useState(initialFormData);
+ const fetchData=useCallback(async()=>{
+  if(!user)return;setLoading(true);
+  try{
+   const[a,b,c]=await Promise.all([
+    supabase.from('lm_lanc_despesas').select('*,lm_despesas(despesa,categoria)').eq('user_id',user.id).order('data',{ascending:false}),
+    supabase.from('lm_despesas').select('id,despesa,categoria').eq('user_id',user.id).order('despesa',{ascending:true}),
+    supabase.from('lm_tipos_folha').select('id,tipo_folha').eq('user_id',user.id).order('tipo_folha',{ascending:true})
+   ]);
+   if(a.error)throw a.error;if(b.error)throw b.error;if(c.error)throw c.error;
+   setDespesas(a.data||[]);setTiposDespesa(b.data||[]);setTiposFolha(c.data||[]);
+  }catch(e){if(mounted.current)toast({title:'Erro',description:e.message||'Não foi possível carregar.',variant:'destructive'})}
+  finally{if(mounted.current)setLoading(false)}
+ },[user,toast]);
 
-  useEffect(() => { isMountedRef.current = true; return () => { isMountedRef.current = false; }; }, []);
+ useEffect(()=>{fetchData()},[fetchData]);
 
-  const fetchTiposDespesa = useCallback(async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase.from('lm_despesas').select('id, despesa, categoria').eq('user_id', user.id).order('despesa', { ascending: true });
-      if (!isMountedRef.current) return;
-      if (error) throw error;
-      setTiposDespesa(data || []);
-    } catch (error) {}
-  }, [user]);
+ const years=useMemo(()=>{
+  const y=despesas.map(x=>new Date(x.data).getFullYear());y.push(new Date().getFullYear());
+  return[...new Set(y)].sort((a,b)=>b-a);
+ },[despesas]);
 
-  const fetchTiposFolha = useCallback(async () => {
-    if (!user) return;
-    try {
-      const { data, error } = await supabase.from('lm_tipos_folha').select('id, tipo_folha').eq('user_id', user.id).order('tipo_folha', { ascending: true });
-      if (!isMountedRef.current) return;
-      if (error) throw error;
-      setTiposFolha(data || []);
-    } catch (error) {}
-  }, [user]);
+ const filtered=useMemo(()=>{
+  let r=despesas;
+  if(selectedYear!=='all')r=r.filter(x=>String(getYear(new Date(x.data)))===selectedYear);
+  if(selectedMonth!=='all')r=r.filter(x=>String(getMonth(new Date(x.data)))===selectedMonth);
+  if(searchTerm.trim()){const s=searchTerm.toLowerCase();r=r.filter(x=>(x.lm_despesas?.despesa||'').toLowerCase().includes(s)||(x.lm_despesas?.categoria||'').toLowerCase().includes(s)||(x.tipo_folha||'').toLowerCase().includes(s))}
+  return r;
+ },[despesas,selectedYear,selectedMonth,searchTerm]);
 
-  const fetchDespesas = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.from('lm_lanc_despesas').select('*, lm_despesas(despesa, categoria)').eq('user_id', user.id).order('data', { ascending: false });
-      if (!isMountedRef.current) return;
-      if (error) throw error;
-      setDespesas(data || []);
-    } catch (error) { toast({ title: 'Erro', description: 'Não foi possível carregar.', variant: 'destructive' }); } finally { if (isMountedRef.current) setLoading(false); }
-  }, [user, toast]);
+ const total=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
+ const isEstoque=formData.tipo_lancamento==='Estoque';
+ const showParcelas=formData.forma_pagamento==='Cartão de Crédito';
 
-  useEffect(() => { fetchDespesas(); fetchTiposDespesa(); fetchTiposFolha(); }, [fetchDespesas, fetchTiposDespesa, fetchTiposFolha]);
+ useEffect(()=>{
+  if(isEstoque&&!editingId){
+   const x=tiposDespesa.find(d=>(d.despesa||'').toLowerCase().includes('reposição de folha'));
+   if(x)setFormData(p=>({...p,despesa_id:x.id}))
+  }
+ },[isEstoque,tiposDespesa,editingId]);
 
-  useEffect(() => {
-    let results = despesas;
-    if (selectedYear !== 'all') results = results.filter(item => getYear(new Date(item.data)).toString() === selectedYear);
-    if (selectedMonth !== 'all') results = results.filter(item => getMonth(new Date(item.data)).toString() === selectedMonth);
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      results = results.filter(item => (item.lm_despesas?.despesa?.toLowerCase() || '').includes(search) || (item.lm_despesas?.categoria?.toLowerCase() || '').includes(search) || (item.tipo_folha?.toLowerCase() || '').includes(search));
-    }
-    setFilteredDespesas(results);
-  }, [searchTerm, selectedMonth, selectedYear, despesas]);
+ const openDialog=item=>{
+  if(item){setEditingId(item.id);setFormData({data:item.data,despesa_id:item.despesa_id,valor:item.valor||'',forma_pagamento:item.forma_pagamento||'',parcelas:item.parcelas||1,tipo_custo:item.tipo_custo||'Fixo',categoria:item.categoria||'',recorrencia:item.recorrencia||'',tipo_lancamento:item.tipo_lancamento||'',quantidade:item.quantidade||'',tipo_folha:item.tipo_folha||''})}
+  else{setEditingId(null);setFormData(initialForm)}
+  setDialogOpen(true);
+ };
 
-  const handleInputChange = (e) => { const { name, value } = e.target; setFormData(prev => ({ ...prev, [name]: value })); };
+ const closeDialog=()=>{setDialogOpen(false);setEditingId(null);setFormData(initialForm)};
 
-  useEffect(() => {
-    if (formData.tipo_lancamento === 'Estoque') {
-      const reposicaoFolha = tiposDespesa.find(d => d.despesa.toLowerCase().includes('reposição de folha'));
-      if (reposicaoFolha && !editingId) setFormData(prev => ({ ...prev, despesa_id: reposicaoFolha.id }));
-    }
-  }, [formData.tipo_lancamento, tiposDespesa, editingId]);
+ const save=async e=>{
+  e.preventDefault();
+  if(!formData.despesa_id||!formData.valor||!formData.data||!formData.forma_pagamento||!formData.tipo_custo||!formData.categoria||!formData.recorrencia||!formData.tipo_lancamento||!formData.quantidade){
+   toast({title:'Atenção',description:'Preencha os campos obrigatórios.',variant:'destructive'});return;
+  }
+  if(isEstoque&&!formData.tipo_folha){toast({title:'Atenção',description:'Tipo Folha é obrigatório para Estoque.',variant:'destructive'});return}
+  if(Number(formData.quantidade)<=0){toast({title:'Atenção',description:'Quantidade inválida.',variant:'destructive'});return}
+  const payload={user_id:user.id,data:formData.data,despesa_id:formData.despesa_id,valor:Number(formData.valor),forma_pagamento:formData.forma_pagamento,parcelas:showParcelas?Number(formData.parcelas)||1:null,tipo_custo:formData.tipo_custo,categoria:formData.categoria,recorrencia:formData.recorrencia,tipo_lancamento:formData.tipo_lancamento,quantidade:Number(formData.quantidade),tipo_folha:isEstoque?formData.tipo_folha:null};
+  try{
+   if(!isOnline&&!editingId){await saveOfflineData('lm_despesas',payload);toast({title:'Offline',description:'Despesa salva localmente.'});checkPending()}
+   else{
+    if(!isOnline){toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});return}
+    const q=editingId?supabase.from('lm_lanc_despesas').update(payload).eq('id',editingId).eq('user_id',user.id):supabase.from('lm_lanc_despesas').insert(payload);
+    const{error}=await q;if(error)throw error;
+    toast({title:'Sucesso',description:editingId?'Despesa atualizada.':'Despesa registrada.'});
+   }
+   closeDialog();if(isOnline)fetchData();
+  }catch(e){toast({title:'Erro',description:e.message||'Falha ao salvar.',variant:'destructive'})}
+ };
 
-  const handleOpenDialog = (expense = null) => {
-    if (expense) {
-      setEditingId(expense.id);
-      setFormData({ data: expense.data, despesa_id: expense.despesa_id, valor: expense.valor, forma_pagamento: expense.forma_pagamento || '', parcelas: expense.parcelas || 1, tipo_custo: expense.tipo_custo || 'Fixo', categoria: expense.categoria || '', recorrencia: expense.recorrencia || '', tipo_lancamento: expense.tipo_lancamento || '', quantidade: expense.quantidade || '', tipo_folha: expense.tipo_folha || '' });
-    } else {
-      setEditingId(null);
-      setFormData(initialFormData);
-    }
-    setIsAddModalOpen(true);
-  };
+ const remove=async id=>{
+  if(!isOnline){toast({title:'Offline',description:'Exclusão offline não permitida.',variant:'destructive'});return}
+  try{const{error}=await supabase.from('lm_lanc_despesas').delete().eq('id',id).eq('user_id',user.id);if(error)throw error;toast({title:'Removido',description:'Despesa excluída.'});fetchData()}
+  catch(e){toast({title:'Erro',description:e.message||'Falha ao excluir.',variant:'destructive'})}
+ };
 
-  const handleCloseModal = useCallback(() => { 
-    setIsAddModalOpen(false); 
-    setEditingId(null); 
-    setFormData(initialFormData); 
-  }, [initialFormData]);
+ return(
+  <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="space-y-5">
+   <OfflineIndicator/>
+   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div><p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:RED}}>LM Impressões</p><h1 className="mt-1 text-2xl font-bold text-foreground">Lançamento de Despesas</h1><p className="text-sm text-muted-foreground">Gerencie gastos, estoque e custos.</p></div>
+    <Button onClick={()=>openDialog()} className="text-white" style={{background:RED}}><Plus className="mr-2 h-4 w-4"/>Nova Despesa</Button>
+   </div>
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.despesa_id || !formData.valor || !formData.data || !formData.forma_pagamento || !formData.tipo_custo || !formData.categoria || !formData.recorrencia || !formData.tipo_lancamento || !formData.quantidade) { toast({ title: 'Atenção', description: 'Preencha os campos.', variant: 'destructive' }); return; }
-    if (formData.tipo_lancamento === 'Estoque' && !formData.tipo_folha) { toast({ title: 'Atenção', description: 'Tipo Folha é obrigatório para Estoque.', variant: 'destructive' }); return; }
-    const quantidadeNum = parseInt(formData.quantidade);
-    if (isNaN(quantidadeNum) || quantidadeNum <= 0) { toast({ title: 'Atenção', description: 'Quantidade inválida.', variant: 'destructive' }); return; }
-    
-    try {
-      const payload = { user_id: user.id, data: formData.data, despesa_id: formData.despesa_id, valor: parseFloat(formData.valor), forma_pagamento: formData.forma_pagamento, parcelas: formData.forma_pagamento === 'Cartão de Crédito' ? parseInt(formData.parcelas) || 1 : null, tipo_custo: formData.tipo_custo, categoria: formData.categoria, recorrencia: formData.recorrencia, tipo_lancamento: formData.tipo_lancamento, quantidade: quantidadeNum, tipo_folha: formData.tipo_lancamento === 'Estoque' ? formData.tipo_folha : null };
-      
-      if (!isOnline && !editingId) {
-        await saveOfflineData('lm_despesas', payload);
-        toast({ title: 'Offline', description: 'Despesa salva localmente.' });
-        checkPending();
-      } else if (editingId) {
-        if (!isOnline) { toast({ title: 'Offline', description: 'Edição offline não permitida.', variant: 'destructive' }); return; }
-        await supabase.from('lm_lanc_despesas').update(payload).eq('id', editingId); toast({ title: 'Sucesso', description: 'Atualizado.' }); 
-      } else { 
-        await supabase.from('lm_lanc_despesas').insert([payload]); toast({ title: 'Sucesso', description: 'Registrado.' }); 
-      }
-      if(isOnline) fetchDespesas();
-      setFormData(prev => ({ ...initialFormData, data: prev.data }));
-      setEditingId(null);
-    } catch (error) { toast({ title: 'Erro', description: 'Falha.', variant: 'destructive' }); }
-  };
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    {[
+     {l:'Registros',v:filtered.length,i:Receipt},
+     {l:'Total Filtrado',v:BRL.format(total),i:Receipt},
+     {l:'Estoque',v:filtered.filter(x=>x.tipo_lancamento==='Estoque').length,i:Receipt},
+     {l:'Consumo/Perda',v:filtered.filter(x=>['Consumo','Perda'].includes(x.tipo_lancamento)).length,i:Receipt}
+    ].map(({l,v,i:Icon})=><Card key={l} className="border-border bg-card"><CardContent className="flex items-center justify-between p-4"><div><p className="text-xs uppercase tracking-wider text-muted-foreground">{l}</p><p className="mt-1 text-xl font-bold tabular-nums" style={{color:RED}}>{v}</p></div><Icon className="h-5 w-5" style={{color:RED}}/></CardContent></Card>)}
+   </div>
 
-  const handleDelete = async (id) => {
-    if (!isOnline) { toast({ title: 'Offline', description: 'Exclusão offline não permitida.', variant: 'destructive' }); return; }
-    try { await supabase.from('lm_lanc_despesas').delete().eq('id', id); toast({ title: 'Sucesso', description: 'Removido.' }); fetchDespesas(); } catch (error) { toast({ title: 'Erro', description: 'Falha ao remover.', variant: 'destructive' }); }
-  };
+   <Card className="border-border bg-card"><CardContent className="p-4"><div className="flex flex-col gap-3 xl:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Buscar despesa, categoria ou folha..." className="h-10 pl-9"/></div><div className="flex flex-wrap gap-2"><Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[140px]"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Todos os meses</SelectItem>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select><Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[110px]"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Todos os anos</SelectItem>{years.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select><Button variant="outline" onClick={()=>{setSearchTerm('');setSelectedMonth(String(new Date().getMonth()));setSelectedYear(String(new Date().getFullYear()))}}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button></div></div></CardContent></Card>
 
-  const totalDespesas = filteredDespesas.reduce((acc, curr) => acc + parseFloat(curr.valor || 0), 0);
-  const formatDateDisplay = (dateString) => { if (!dateString) return '-'; try { return format(parse(dateString, 'yyyy-MM-dd', new Date()), 'dd/MM/yyyy', { locale: ptBR }); } catch (e) { return dateString; } };
-  const showParcelasField = formData.forma_pagamento === 'Cartão de Crédito';
-  const isEstoque = formData.tipo_lancamento === 'Estoque';
+   <Dialog open={dialogOpen} onOpenChange={o=>o?setDialogOpen(true):closeDialog()}><DialogContent className="max-h-[90vh] overflow-y-auto bg-card border-border sm:max-w-[650px]"><DialogHeader><DialogTitle style={{color:RED}}>{editingId?'Editar Despesa':'Nova Despesa'}</DialogTitle></DialogHeader>
+    <form onSubmit={save} className="space-y-4 py-3">
+     <div className="grid grid-cols-2 gap-4"><div><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))}/></div><div><Label>Valor *</Label><Input type="number" step="0.01" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:e.target.value}))}/></div></div>
+     <div><Label>Descrição *</Label><Select value={formData.despesa_id} onValueChange={v=>setFormData(p=>({...p,despesa_id:v}))} disabled={isEstoque}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{tiposDespesa.map(t=><SelectItem key={t.id} value={t.id}>{t.despesa}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
+     <div><Label>Tipo de Lançamento *</Label><Select value={formData.tipo_lancamento} onValueChange={v=>setFormData(p=>({...p,tipo_lancamento:v,tipo_folha:v==='Estoque'?p.tipo_folha:''}))}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent><SelectItem value="Estoque">Estoque</SelectItem><SelectItem value="Consumo">Consumo</SelectItem><SelectItem value="Perda">Perda</SelectItem></SelectContent></Select></div>
+     {isEstoque&&<div><Label>Tipo Folha *</Label><Select value={formData.tipo_folha} onValueChange={v=>setFormData(p=>({...p,tipo_folha:v}))}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{tiposFolha.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}</SelectItem>)}</SelectContent></Select></div>}
+     <div><Label>Quantidade *</Label><Input type="number" min="1" value={formData.quantidade} onChange={e=>setFormData(p=>({...p,quantidade:e.target.value}))}/></div>
+     <div><Label>Tipo de Custo *</Label><RadioGroup value={formData.tipo_custo} onValueChange={v=>setFormData(p=>({...p,tipo_custo:v}))} className="flex gap-5"><div className="flex items-center gap-2"><RadioGroupItem value="Fixo" id="fixo"/><Label htmlFor="fixo">Fixo</Label></div><div className="flex items-center gap-2"><RadioGroupItem value="Variável" id="variavel"/><Label htmlFor="variavel">Variável</Label></div></RadioGroup></div>
+     <div className="grid grid-cols-2 gap-4"><div><Label>Categoria *</Label><Select value={formData.categoria} onValueChange={v=>setFormData(p=>({...p,categoria:v}))}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{['Impressão','Digital','Infraestrutura','Manutenção','Outros'].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div><div><Label>Recorrência *</Label><Select value={formData.recorrencia} onValueChange={v=>setFormData(p=>({...p,recorrencia:v}))}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{['Único','Mensal','Anual'].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div></div>
+     <div className={`grid ${showParcelas?'grid-cols-2':'grid-cols-1'} gap-4`}><div><Label>Pagamento *</Label><Select value={formData.forma_pagamento} onValueChange={v=>setFormData(p=>({...p,forma_pagamento:v}))}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{['Dinheiro','Débito','Cartão de Crédito','Pix','Boleto'].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div>{showParcelas&&<div><Label>Parcelas</Label><Input type="number" min="1" value={formData.parcelas} onChange={e=>setFormData(p=>({...p,parcelas:e.target.value}))}/></div>}</div>
+     <DialogFooter><Button type="button" variant="outline" onClick={closeDialog}>Cancelar</Button><Button type="submit" className="text-white" style={{background:RED}}>{editingId?'Atualizar':'Salvar'}</Button></DialogFooter>
+    </form>
+   </DialogContent></Dialog>
 
-  return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 py-6">
-      <OfflineIndicator />
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div><h1 className="text-3xl font-bold text-red-500">Despesas</h1><p className="text-muted-foreground mt-1">Gerencie seus gastos.</p></div>
-        <Button className="bg-red-500 hover:bg-red-600 text-white" onClick={() => handleOpenDialog(null)}><Plus className="mr-2 h-4 w-4" /> Nova Despesa</Button>
-      </div>
-
-      <Dialog open={isAddModalOpen} onOpenChange={(open) => { if(!open) handleCloseModal(); else setIsAddModalOpen(true); }}>
-        <DialogContent onInteractOutside={(e) => e.preventDefault()} className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="text-red-500">{editingId ? 'Editar Despesa' : 'Adicionar Nova Despesa'}</DialogTitle></DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Data *</Label><Input type="date" name="data" value={formData.data} onChange={handleInputChange} required /></div><div className="space-y-2"><Label>Valor (R$) *</Label><Input type="number" name="valor" step="0.01" value={formData.valor} onChange={handleInputChange} required /></div></div>
-            <div className="space-y-2"><Label>Descrição *</Label><Select value={formData.despesa_id} onValueChange={(val) => setFormData(prev => ({...prev, despesa_id: val}))} disabled={isEstoque}><SelectTrigger className={isEstoque ? 'bg-muted' : ''}><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><ScrollArea className="h-48">{tiposDespesa.map((t) => (<SelectItem key={t.id} value={t.id}>{t.despesa}</SelectItem>))}</ScrollArea></SelectContent></Select></div>
-            <div className="space-y-2"><Label>Tipo Lançamento *</Label><Select value={formData.tipo_lancamento} onValueChange={(val) => setFormData(prev => ({...prev, tipo_lancamento: val, tipo_folha: val === 'Estoque' ? prev.tipo_folha : ''}))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="Estoque">Estoque</SelectItem><SelectItem value="Consumo">Consumo</SelectItem><SelectItem value="Perda">Perda</SelectItem></SelectContent></Select></div>
-            {isEstoque && (<div className="space-y-2"><Label>Tipo Folha *</Label><Select value={formData.tipo_folha} onValueChange={(val) => setFormData(prev => ({...prev, tipo_folha: val}))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><ScrollArea className="h-48">{tiposFolha.map((t) => (<SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}</SelectItem>))}</ScrollArea></SelectContent></Select></div>)}
-            <div className="space-y-2"><Label>Quantidade *</Label><Input type="number" name="quantidade" min="1" step="1" value={formData.quantidade} onChange={handleInputChange} required /></div>
-            <div className="space-y-2"><Label>Tipo de Custo *</Label><RadioGroup value={formData.tipo_custo} onValueChange={(val) => setFormData(prev => ({...prev, tipo_custo: val}))} className="flex gap-4"><div className="flex items-center space-x-2"><RadioGroupItem value="Fixo" id="fixo" /><Label htmlFor="fixo">Fixo</Label></div><div className="flex items-center space-x-2"><RadioGroupItem value="Variável" id="variavel" /><Label htmlFor="variavel">Variável</Label></div></RadioGroup></div>
-            <div className="space-y-2"><Label>Categoria *</Label><Select value={formData.categoria} onValueChange={(val) => setFormData(prev => ({...prev, categoria: val}))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="Impressão">Impressão</SelectItem><SelectItem value="Digital">Digital</SelectItem><SelectItem value="Infraestrutura">Infraestrutura</SelectItem><SelectItem value="Manutenção">Manutenção</SelectItem><SelectItem value="Outros">Outros</SelectItem></SelectContent></Select></div>
-            <div className="space-y-2"><Label>Recorrência *</Label><Select value={formData.recorrencia} onValueChange={(val) => setFormData(prev => ({...prev, recorrencia: val}))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="Único">Único</SelectItem><SelectItem value="Mensal">Mensal</SelectItem><SelectItem value="Anual">Anual</SelectItem></SelectContent></Select></div>
-            <div className={`grid ${showParcelasField ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}><div className="space-y-2"><Label>Pagamento *</Label><Select value={formData.forma_pagamento} onValueChange={(val) => setFormData(prev => ({...prev, forma_pagamento: val}))}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent><SelectItem value="Dinheiro">Dinheiro</SelectItem><SelectItem value="Débito">Débito</SelectItem><SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem><SelectItem value="Pix">Pix</SelectItem><SelectItem value="Boleto">Boleto</SelectItem></SelectContent></Select></div>{showParcelasField && (<div className="space-y-2"><Label>Parcelas</Label><Input type="number" name="parcelas" min="1" value={formData.parcelas} onChange={handleInputChange} /></div>)}</div>
-            <DialogFooter className="gap-2 mt-6"><Button type="button" variant="outline" onClick={handleCloseModal}>Cancelar</Button><Button type="submit" className="bg-red-500 text-white">{editingId ? 'Atualizar' : 'Salvar'}</Button></DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card className="col-span-1 md:col-span-3 shadow-sm border-border/50"><CardContent className="p-4 flex flex-col md:flex-row gap-4 items-center"><div className="flex items-center gap-2 flex-1 w-full relative"><Search className="w-4 h-4 text-muted-foreground absolute left-3" /><Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-1 pl-9"/></div><div className="flex gap-2 w-full md:w-auto"><Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos os Meses</SelectItem>{meses.map((m, i) => (<SelectItem key={i} value={i.toString()}>{m}</SelectItem>))}</SelectContent></Select><Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Todos os Anos</SelectItem>{availableYears.map(y => (<SelectItem key={y} value={y.toString()}>{y}</SelectItem>))}</SelectContent></Select></div></CardContent></Card>
-        <Card className="bg-red-500/10 border-red-200/20"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-red-600">Total Filtrado</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-red-600">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalDespesas)}</div></CardContent></Card>
-      </div>
-
-      <Card className="shadow-sm border-border/50 overflow-hidden"><CardContent className="p-0"><ScrollArea className="h-[500px]"><Table><TableHeader className="bg-muted/50"><TableRow><TableHead className="w-[120px]">Data</TableHead><TableHead>Descrição</TableHead><TableHead>Tipo Lanç.</TableHead><TableHead>Tipo Folha</TableHead><TableHead className="text-center">Qtd</TableHead><TableHead>Categoria</TableHead><TableHead>Tipo Custo</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-center w-[100px]">Ações</TableHead></TableRow></TableHeader><TableBody>{loading ? <TableRow><TableCell colSpan={9} className="text-center py-8">Carregando...</TableCell></TableRow> : filteredDespesas.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhuma despesa.</TableCell></TableRow> : filteredDespesas.map((item) => (<TableRow key={item.id} className="hover:bg-accent/30"><TableCell>{formatDateDisplay(item.data)}</TableCell><TableCell className="font-semibold">{item.lm_despesas?.despesa || 'N/A'}</TableCell><TableCell><Badge variant="outline">{item.tipo_lancamento || '-'}</Badge></TableCell><TableCell>{item.tipo_lancamento === 'Estoque' && item.tipo_folha ? <Badge variant="outline" className="text-green-500">{item.tipo_folha}</Badge> : '-'}</TableCell><TableCell className="text-center">{item.quantidade || '-'}</TableCell><TableCell><Badge variant="outline">{item.categoria || 'N/A'}</Badge></TableCell><TableCell className="text-muted-foreground text-sm">{item.tipo_custo || '-'}</TableCell><TableCell className="text-right font-bold text-red-500">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor)}</TableCell><TableCell className="text-center"><div className="flex items-center justify-center gap-1"><Button variant="ghost" size="icon" onClick={() => handleOpenDialog(item)} className="text-blue-500"><Edit className="h-4 w-4" /></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir?</AlertDialogTitle></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-red-500">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></TableCell></TableRow>))}</TableBody></Table></ScrollArea></CardContent></Card>
-    </motion.div>
-  );
-};
-
-export default LancamentoDespesas;
+   <Card className="border-border bg-card"><CardContent className="p-0"><ScrollArea className="h-[520px]"><Table><TableHeader className="sticky top-0 z-10 bg-secondary/70"><TableRow><TableHead>Data</TableHead><TableHead>Descrição</TableHead><TableHead>Tipo</TableHead><TableHead>Folha</TableHead><TableHead className="text-center">Qtd</TableHead><TableHead>Categoria</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-center">Ações</TableHead></TableRow></TableHeader><TableBody>
+    {loading?<TableRow><TableCell colSpan={8} className="py-12 text-center">Carregando...</TableCell></TableRow>:!filtered.length?<TableRow><TableCell colSpan={8} className="py-12 text-center text-muted-foreground">Nenhuma despesa encontrada.</TableCell></TableRow>:filtered.map(x=><TableRow key={x.id} className="hover:bg-muted/40"><TableCell>{format(parse(x.data,'yyyy-MM-dd',new Date()),'dd/MM/yyyy',{locale:ptBR})}</TableCell><TableCell className="font-semibold">{x.lm_despesas?.despesa||'N/A'}</TableCell><TableCell><Badge variant="outline">{x.tipo_lancamento||'-'}</Badge></TableCell><TableCell>{x.tipo_folha||'-'}</TableCell><TableCell className="text-center">{x.quantidade||'-'}</TableCell><TableCell><Badge variant="outline">{x.categoria||'N/A'}</Badge></TableCell><TableCell className="text-right font-bold" style={{color:RED}}>{BRL.format(Number(x.valor)||0)}</TableCell><TableCell><div className="flex justify-center"><Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:RED}}><Edit className="h-4 w-4"/></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir despesa?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></TableCell></TableRow>)}
+   </TableBody></Table></ScrollArea></CardContent></Card>
+  </motion.div>
+ )
+}
