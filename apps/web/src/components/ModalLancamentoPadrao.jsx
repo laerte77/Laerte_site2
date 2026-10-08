@@ -13,11 +13,9 @@ export default function ModalLancamentoPadrao({open,onClose,title,description,ic
  const t=THEMES[theme]||THEMES.blue;
 
  return(
-  <Dialog
-   open={open}
-   onOpenChange={()=>{}}
-  >
+  <Dialog open={open} onOpenChange={()=>{}}>
    <DialogContent
+    onClose={onClose}
     onInteractOutside={e=>e.preventDefault()}
     onPointerDownOutside={e=>e.preventDefault()}
     onEscapeKeyDown={e=>e.preventDefault()}
@@ -55,9 +53,7 @@ export default function ModalLancamentoPadrao({open,onClose,title,description,ic
     </DialogHeader>
 
     <div className="px-7 py-6">
-     <div className="space-y-5">
-      {children}
-     </div>
+     <div className="space-y-5">{children}</div>
     </div>
 
     <DialogFooter
