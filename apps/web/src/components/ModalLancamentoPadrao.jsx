@@ -15,7 +15,6 @@ export default function ModalLancamentoPadrao({open,onClose,title,description,ic
  return(
   <Dialog open={open} onOpenChange={()=>{}}>
    <DialogContent
-    onClose={onClose}
     onInteractOutside={e=>e.preventDefault()}
     onPointerDownOutside={e=>e.preventDefault()}
     onEscapeKeyDown={e=>e.preventDefault()}
