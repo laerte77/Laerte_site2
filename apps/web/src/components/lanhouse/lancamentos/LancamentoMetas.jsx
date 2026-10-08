@@ -1,7 +1,6 @@
 import React,{useState,useEffect,useCallback,useMemo,useRef}from'react';
 import{motion}from'framer-motion';
-import{Plus,Edit,Trash2,Search,RotateCcw,CheckCircle,XCircle}from'lucide-react';
-import{format}from'date-fns';
+import{Plus,Edit,Trash2,Search,RotateCcw,CheckCircle,XCircle,Target,Loader2}from'lucide-react';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{Button}from'@/components/ui/button';
@@ -13,13 +12,13 @@ import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/component
 import{ScrollArea}from'@/components/ui/scroll-area';
 import{Badge}from'@/components/ui/badge';
 import{Dialog,DialogContent,DialogHeader,DialogTitle,DialogFooter}from'@/components/ui/dialog';
-import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
+import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle}from'@/components/ui/alert-dialog';
 import{useToast}from'@/components/ui/use-toast';
 
+const C='hsl(var(--neon-lanhouse))';
+const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const CYAN='hsl(190 90% 50%)';
-const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2});
-const hoje=()=>new Date().toISOString().split('T')[0];
+const hoje=()=>new Date().toISOString().slice(0,10);
 const fmt=d=>d?new Date(`${d}T00:00:00`).toLocaleDateString('pt-BR'):'—';
 
 export default function LancamentoMetas(){
@@ -62,7 +61,10 @@ export default function LancamentoMetas(){
   const channel=user&&supabase.channel('lm_metas_changes')
    .on('postgres_changes',{event:'*',schema:'public',table:'lm_lancamentos_metas'},fetchData)
    .subscribe();
-  return()=>{mounted.current=false;if(channel)supabase.removeChannel(channel)};
+  return()=>{
+   mounted.current=false;
+   if(channel)supabase.removeChannel(channel);
+  };
  },[user,fetchData]);
 
  const years=useMemo(()=>[...new Set([
@@ -150,8 +152,14 @@ export default function LancamentoMetas(){
  const remove=async()=>{
   if(!deleteId)return;
   try{
-   const{error}=await supabase.from('lm_lancamentos_metas').delete().eq('id',deleteId).eq('user_id',user.id);
+   const{error}=await supabase
+    .from('lm_lancamentos_metas')
+    .delete()
+    .eq('id',deleteId)
+    .eq('user_id',user.id);
+
    if(error)throw error;
+
    toast({title:'Removida',description:'Meta excluída com sucesso.'});
    setDeleteId(null);
    fetchData();
@@ -160,47 +168,48 @@ export default function LancamentoMetas(){
   }
  };
 
+ const clearFilters=()=>{
+  setSearch('');
+  setMonth(String(new Date().getMonth()));
+  setYear(String(new Date().getFullYear()));
+ };
+
  return(
   <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="space-y-5">
 
    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
     <div>
-     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:CYAN}}>LM Impressões</p>
-     <h1 className="mt-1 text-2xl font-bold">Acompanhamento de Metas</h1>
-     <p className="text-sm text-muted-foreground">Defina e acompanhe suas metas financeiras.</p>
+     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:C}}>LM Impressões</p>
+     <div className="mt-1 flex items-center gap-2">
+      <Target className="h-6 w-6" style={{color:C}}/>
+      <h1 className="text-2xl font-bold">Metas</h1>
+     </div>
+     <p className="mt-1 text-sm text-muted-foreground">Cadastre e acompanhe suas metas financeiras.</p>
     </div>
-    <Button onClick={()=>openDialog()} className="text-white" style={{background:CYAN}}>
+
+    <Button onClick={()=>openDialog()} className="text-slate-950" style={{background:C}}>
      <Plus className="mr-2 h-4 w-4"/>Nova Meta
     </Button>
    </div>
 
    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-    {[
-     {l:'Registros',v:filtered.length},
-     {l:'Valor Meta',v:BRL.format(totalMeta)},
-     {l:'Atingido',v:BRL.format(totalAtingido)},
-     {l:'Atingidas',v:atingidas}
-    ].map(x=>
-     <Card key={x.l} className="border-border bg-card">
-      <CardContent className="p-4">
-       <p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p>
-       <p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{x.v}</p>
-      </CardContent>
-     </Card>
-    )}
+    <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">Registros</p><p className="mt-1 text-xl font-bold" style={{color:C}}>{filtered.length}</p></CardContent></Card>
+    <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">Valor Meta</p><p className="mt-1 text-xl font-bold" style={{color:C}}>{BRL.format(totalMeta)}</p></CardContent></Card>
+    <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">Valor Atingido</p><p className="mt-1 text-xl font-bold text-green-400">{BRL.format(totalAtingido)}</p></CardContent></Card>
+    <Card><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">Atingidas</p><p className="mt-1 text-xl font-bold text-green-400">{atingidas}</p></CardContent></Card>
    </div>
 
-   <Card className="border-border bg-card">
+   <Card>
     <CardContent className="p-4">
      <div className="flex flex-col gap-3 xl:flex-row">
       <div className="relative flex-1">
        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-       <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar meta ou status..." className="h-10 pl-9"/>
+       <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar meta ou status..." className="h-11 pl-9"/>
       </div>
 
       <div className="flex flex-wrap gap-2">
        <Select value={month} onValueChange={setMonth}>
-        <SelectTrigger className="w-[140px]"><SelectValue/></SelectTrigger>
+        <SelectTrigger className="w-[145px]"><SelectValue/></SelectTrigger>
         <SelectContent>
          <SelectItem value="all">Todos os meses</SelectItem>
          {meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
@@ -214,11 +223,7 @@ export default function LancamentoMetas(){
         </SelectContent>
        </Select>
 
-       <Button variant="outline" onClick={()=>{
-        setSearch('');
-        setMonth(String(new Date().getMonth()));
-        setYear(String(new Date().getFullYear()));
-       }}>
+       <Button variant="outline" onClick={clearFilters}>
         <RotateCcw className="mr-2 h-4 w-4"/>Limpar
        </Button>
       </div>
@@ -226,64 +231,11 @@ export default function LancamentoMetas(){
     </CardContent>
    </Card>
 
-   <Dialog open={dialogOpen} onOpenChange={o=>o?setDialogOpen(true):closeDialog()}>
-    <DialogContent className="bg-card border-border sm:max-w-[550px]">
-     <DialogHeader>
-      <DialogTitle style={{color:CYAN}}>{current?'Editar Meta':'Nova Meta'}</DialogTitle>
-     </DialogHeader>
-
-     <form onSubmit={save} className="space-y-4 py-3">
-      <div className="grid grid-cols-2 gap-4">
-       <div>
-        <Label>Data Inicial *</Label>
-        <Input type="date" value={form.data_inicio} onChange={e=>setForm(p=>({...p,data_inicio:e.target.value}))}/>
-       </div>
-       <div>
-        <Label>Data Final *</Label>
-        <Input type="date" value={form.data_fim} onChange={e=>setForm(p=>({...p,data_fim:e.target.value}))}/>
-       </div>
-      </div>
-
-      <div>
-       <Label>Descrição da Meta *</Label>
-       <Input value={form.descricao} onChange={e=>setForm(p=>({...p,descricao:e.target.value}))} placeholder="Ex: Faturamento mensal"/>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-       <div>
-        <Label>Valor da Meta *</Label>
-        <Input type="number" step="0.01" min="0" value={form.valor_meta} onChange={e=>setForm(p=>({...p,valor_meta:e.target.value}))}/>
-       </div>
-       <div>
-        <Label>Valor Atingido</Label>
-        <Input type="number" step="0.01" min="0" value={form.valor_atingido} onChange={e=>setForm(p=>({...p,valor_atingido:e.target.value}))}/>
-       </div>
-      </div>
-
-      <div>
-       <Label>Status</Label>
-       <Select value={form.status} onValueChange={v=>setForm(p=>({...p,status:v}))}>
-        <SelectTrigger><SelectValue/></SelectTrigger>
-        <SelectContent>
-         <SelectItem value="atingida">Atingida</SelectItem>
-         <SelectItem value="nao_atingida">Não Atingida</SelectItem>
-        </SelectContent>
-       </Select>
-      </div>
-
-      <DialogFooter>
-       <Button type="button" variant="outline" onClick={closeDialog}>Cancelar</Button>
-       <Button type="submit" className="text-white" style={{background:CYAN}}>Salvar</Button>
-      </DialogFooter>
-     </form>
-    </DialogContent>
-   </Dialog>
-
-   <Card className="border-border bg-card">
+   <Card className="overflow-hidden">
     <CardContent className="p-0">
-     <ScrollArea className="h-[520px]">
+     <div className="overflow-x-auto">
       <Table>
-       <TableHeader className="sticky top-0 z-10 bg-secondary/70">
+       <TableHeader className="bg-secondary/70">
         <TableRow>
          <TableHead>Período</TableHead>
          <TableHead>Meta</TableHead>
@@ -291,25 +243,32 @@ export default function LancamentoMetas(){
          <TableHead className="text-right">Atingido</TableHead>
          <TableHead className="text-center">Progresso</TableHead>
          <TableHead className="text-center">Status</TableHead>
-         <TableHead className="text-center">Ações</TableHead>
+         <TableHead className="text-right">Ações</TableHead>
         </TableRow>
        </TableHeader>
 
        <TableBody>
-        {loading?(
-         <TableRow><TableCell colSpan={7} className="py-12 text-center">Carregando...</TableCell></TableRow>
-        ):!filtered.length?(
+        {loading?
+         <TableRow>
+          <TableCell colSpan={7} className="py-12 text-center">
+           <Loader2 className="mx-auto h-6 w-6 animate-spin" style={{color:C}}/>
+          </TableCell>
+         </TableRow>
+        :
+        !filtered.length?
          <TableRow>
           <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
            Nenhuma meta encontrada.
           </TableCell>
          </TableRow>
-        ):filtered.map(x=>{
-         const percentual=x.valor_meta>0?Math.round((Number(x.valor_atingido||0)/Number(x.valor_meta))*100):0;
+        :
+        filtered.map(x=>{
+         const percentual=x.valor_meta>0?Math.round(Number(x.valor_atingido||0)/Number(x.valor_meta)*100):0;
          const atingida=x.status==='atingida';
 
          return(
           <TableRow key={x.id} className="hover:bg-muted/40">
+
            <TableCell className="font-medium">
             <div>{fmt(x.data_inicio)}</div>
             <div className="text-xs text-muted-foreground">até {fmt(x.data_fim)}</div>
@@ -324,64 +283,113 @@ export default function LancamentoMetas(){
            <TableCell>
             <div className="flex items-center justify-center gap-2">
              <div className="h-2 w-20 overflow-hidden rounded-full bg-secondary">
-              <div className="h-full" style={{width:`${Math.min(percentual,100)}%`,background:CYAN}}/>
+              <div className="h-full" style={{width:`${Math.min(percentual,100)}%`,background:C}}/>
              </div>
              <span className="text-xs">{percentual}%</span>
             </div>
            </TableCell>
 
            <TableCell className="text-center">
-            <Badge variant="outline" className={atingida?'text-green-500':'text-orange-500'}>
+            <Badge variant="outline" className={atingida?'border-green-500/30 bg-green-500/10 text-green-400':'border-orange-500/30 bg-orange-500/10 text-orange-400'}>
              {atingida?<CheckCircle className="mr-1 h-3 w-3"/>:<XCircle className="mr-1 h-3 w-3"/>}
-             {atingida?'Atingida':'Pendente'}
+             {atingida?'Atingida':'Não Atingida'}
             </Badge>
            </TableCell>
 
            <TableCell>
-            <div className="flex justify-center">
-             <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}}>
+            <div className="flex justify-end gap-1">
+             <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:C}}>
               <Edit className="h-4 w-4"/>
              </Button>
 
-             <AlertDialog>
-              <AlertDialogTrigger asChild>
-               <Button variant="ghost" size="icon" className="text-red-500">
-                <Trash2 className="h-4 w-4"/>
-               </Button>
-              </AlertDialogTrigger>
-
-              <AlertDialogContent>
-               <AlertDialogHeader>
-                <AlertDialogTitle>Excluir meta?</AlertDialogTitle>
-                <AlertDialogDescription>Essa ação não poderá ser desfeita.</AlertDialogDescription>
-               </AlertDialogHeader>
-
-               <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={()=>setDeleteId(x.id)} className="bg-red-600">Excluir</AlertDialogAction>
-               </AlertDialogFooter>
-              </AlertDialogContent>
-             </AlertDialog>
+             <Button variant="ghost" size="icon" onClick={()=>setDeleteId(x.id)} className="text-red-400">
+              <Trash2 className="h-4 w-4"/>
+             </Button>
             </div>
            </TableCell>
+
           </TableRow>
-         )
+         );
         })}
        </TableBody>
       </Table>
-     </ScrollArea>
+     </div>
     </CardContent>
    </Card>
 
-   <AlertDialog open={!!deleteId} onOpenChange={()=>setDeleteId(null)}>
-    <AlertDialogContent>
+   <Dialog open={dialogOpen} onOpenChange={o=>o?setDialogOpen(true):closeDialog()}>
+    <DialogContent className="bg-card border-border sm:max-w-[560px]">
+     <DialogHeader>
+      <DialogTitle style={{color:C}}>{current?'Editar Meta':'Nova Meta'}</DialogTitle>
+     </DialogHeader>
+
+     <form onSubmit={save} className="space-y-5 py-3">
+
+      <div className="grid gap-4 sm:grid-cols-2">
+       <div className="space-y-2">
+        <Label>Data Inicial *</Label>
+        <Input type="date" value={form.data_inicio} onChange={e=>setForm(p=>({...p,data_inicio:e.target.value}))}/>
+       </div>
+
+       <div className="space-y-2">
+        <Label>Data Final *</Label>
+        <Input type="date" value={form.data_fim} onChange={e=>setForm(p=>({...p,data_fim:e.target.value}))}/>
+       </div>
+      </div>
+
+      <div className="space-y-2">
+       <Label>Descrição da Meta *</Label>
+       <Input value={form.descricao} onChange={e=>setForm(p=>({...p,descricao:e.target.value}))} placeholder="Ex.: Faturamento mensal"/>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+       <div className="space-y-2">
+        <Label>Valor da Meta *</Label>
+        <Input type="number" step="0.01" min="0" value={form.valor_meta} onChange={e=>setForm(p=>({...p,valor_meta:e.target.value}))}/>
+       </div>
+
+       <div className="space-y-2">
+        <Label>Valor Atingido</Label>
+        <Input type="number" step="0.01" min="0" value={form.valor_atingido} onChange={e=>setForm(p=>({...p,valor_atingido:e.target.value}))}/>
+       </div>
+      </div>
+
+      <div className="space-y-2">
+       <Label>Status</Label>
+       <Select value={form.status} onValueChange={v=>setForm(p=>({...p,status:v}))}>
+        <SelectTrigger><SelectValue/></SelectTrigger>
+        <SelectContent>
+         <SelectItem value="atingida">Atingida</SelectItem>
+         <SelectItem value="nao_atingida">Não Atingida</SelectItem>
+        </SelectContent>
+       </Select>
+      </div>
+
+      <DialogFooter>
+       <Button type="button" variant="outline" onClick={closeDialog}>Cancelar</Button>
+       <Button type="submit" className="text-slate-950" style={{background:C}}>
+        {current?'Salvar Alterações':'Salvar Meta'}
+       </Button>
+      </DialogFooter>
+
+     </form>
+    </DialogContent>
+   </Dialog>
+
+   <AlertDialog open={!!deleteId} onOpenChange={v=>{if(!v)setDeleteId(null)}}>
+    <AlertDialogContent className="bg-card border-border">
      <AlertDialogHeader>
-      <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-      <AlertDialogDescription>Deseja realmente excluir esta meta?</AlertDialogDescription>
+      <AlertDialogTitle>Excluir meta?</AlertDialogTitle>
+      <AlertDialogDescription>
+       Essa ação não poderá ser desfeita.
+      </AlertDialogDescription>
      </AlertDialogHeader>
+
      <AlertDialogFooter>
       <AlertDialogCancel>Cancelar</AlertDialogCancel>
-      <AlertDialogAction onClick={remove} className="bg-red-600">Excluir</AlertDialogAction>
+      <AlertDialogAction onClick={remove} className="bg-red-600 text-white hover:bg-red-700">
+       Excluir
+      </AlertDialogAction>
      </AlertDialogFooter>
     </AlertDialogContent>
    </AlertDialog>
