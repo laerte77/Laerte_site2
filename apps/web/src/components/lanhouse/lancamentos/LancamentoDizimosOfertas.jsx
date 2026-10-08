@@ -14,10 +14,10 @@ import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertD
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{useToast}from'@/components/ui/use-toast';
-import * as XLSX from'xlsx';
+import*as XLSX from'xlsx';
 
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const CYAN='hsl(190 90% 50%)';
+const C='hsl(var(--neon-lanhouse))';
 const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2});
 const tipos=['DÍZIMO','OFERTA','VOTO'];
 
@@ -38,7 +38,7 @@ export default function LancamentoDizimosOfertas(){
    if(error)throw error;
    if(mounted.current)setLancamentos(data||[]);
   }catch(e){
-   if(mounted.current)toast({title:'Erro',description:e.message,variant:'destructive'});
+   if(mounted.current)toast({title:'Erro',description:e.message||'Não foi possível carregar os lançamentos.',variant:'destructive'});
   }finally{
    if(mounted.current)setLoading(false);
   }
@@ -48,13 +48,11 @@ export default function LancamentoDizimosOfertas(){
   mounted.current=true;
   fetchData();
   if(!user)return;
-  const ch=supabase.channel('lm_dizimos_ofertas_changes')
-   .on('postgres_changes',{event:'*',schema:'public',table:'lm_dizimos_ofertas'},fetchData)
-   .subscribe();
+  const ch=supabase.channel('lm_dizimos_ofertas_changes').on('postgres_changes',{event:'*',schema:'public',table:'lm_dizimos_ofertas'},fetchData).subscribe();
   return()=>{mounted.current=false;supabase.removeChannel(ch)};
  },[user,fetchData]);
 
- const years=[...new Set([...lancamentos.map(x=>new Date(x.data).getFullYear()),new Date().getFullYear()])].sort((a,b)=>b-a);
+ const years=useMemo(()=>[...new Set([...lancamentos.map(x=>new Date(x.data).getFullYear()),new Date().getFullYear()])].sort((a,b)=>b-a),[lancamentos]);
 
  const filtered=useMemo(()=>lancamentos.filter(x=>
   (year==='all'||String(getYear(new Date(x.data)))===year)&&
@@ -98,7 +96,7 @@ export default function LancamentoDizimosOfertas(){
    closeDialog();
    fetchData();
   }catch(e){
-   toast({title:'Erro',description:e.message,variant:'destructive'});
+   toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar.',variant:'destructive'});
   }
  };
 
@@ -106,10 +104,10 @@ export default function LancamentoDizimosOfertas(){
   try{
    const{error}=await supabase.from('lm_dizimos_ofertas').delete().eq('id',id).eq('user_id',user.id);
    if(error)throw error;
-   toast({title:'Removido',description:'Lançamento excluído.'});
+   toast({title:'Removido',description:'Lançamento excluído com sucesso.'});
    fetchData();
   }catch(e){
-   toast({title:'Erro',description:e.message,variant:'destructive'});
+   toast({title:'Erro',description:e.message||'Não foi possível excluir.',variant:'destructive'});
   }
  };
 
@@ -118,20 +116,16 @@ export default function LancamentoDizimosOfertas(){
    const d=new Date(x.data);
    return d.getMonth()===exportFilters.month&&d.getFullYear()===exportFilters.year;
   });
-
   if(!dados.length){
    toast({title:'Sem dados',description:'Não há registros para o período.',variant:'destructive'});
    return;
   }
-
   const data=dados.map(x=>({
    DATA:new Date(x.data).toLocaleDateString('pt-BR',{timeZone:'UTC'}),
    TIPO:x.tipo_movimento,
    VALOR:Number(x.valor||0)
   }));
-
-  const ws=XLSX.utils.json_to_sheet(data);
-  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.json_to_sheet(data),wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Dízimos e Ofertas');
   XLSX.writeFile(wb,`Dizimos_Ofertas_LM_${meses[exportFilters.month]}_${exportFilters.year}.xlsx`);
   setExportOpen(false);
@@ -141,17 +135,13 @@ export default function LancamentoDizimosOfertas(){
   <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="space-y-5">
    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
     <div>
-     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:CYAN}}>LM Impressões</p>
+     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:C}}>LM Impressões</p>
      <h1 className="mt-1 text-2xl font-bold">Dízimos e Ofertas</h1>
      <p className="text-sm text-muted-foreground">Registre e acompanhe as contribuições.</p>
     </div>
     <div className="flex flex-wrap gap-2">
-     <Button variant="outline" onClick={()=>setExportOpen(true)}>
-      <Download className="mr-2 h-4 w-4"/>Exportar
-     </Button>
-     <Button onClick={()=>openDialog()} className="text-white" style={{background:CYAN}}>
-      <Plus className="mr-2 h-4 w-4"/>Novo Lançamento
-     </Button>
+     <Button variant="outline" onClick={()=>setExportOpen(true)}><Download className="mr-2 h-4 w-4"/>Exportar</Button>
+     <Button onClick={()=>openDialog()} className="text-white" style={{background:C}}><Plus className="mr-2 h-4 w-4"/>Novo Lançamento</Button>
     </div>
    </div>
 
@@ -165,9 +155,9 @@ export default function LancamentoDizimosOfertas(){
       <CardContent className="flex items-center justify-between p-4">
        <div>
         <p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p>
-        <p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{x.v}</p>
+        <p className="mt-1 text-xl font-bold" style={{color:C}}>{x.v}</p>
        </div>
-       <DollarSign className="h-5 w-5" style={{color:CYAN}}/>
+       <DollarSign className="h-5 w-5" style={{color:C}}/>
       </CardContent>
      </Card>
     )}
@@ -191,25 +181,21 @@ export default function LancamentoDizimosOfertas(){
 
        <Select value={year} onValueChange={setYear}>
         <SelectTrigger className="w-[110px]"><SelectValue/></SelectTrigger>
-        <SelectContent>
-         {years.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-        </SelectContent>
+        <SelectContent>{years.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
        </Select>
 
        <Button variant="outline" onClick={()=>{
         setSearch('');
         setMonth(String(new Date().getMonth()));
         setYear(String(new Date().getFullYear()));
-       }}>
-        <RotateCcw className="mr-2 h-4 w-4"/>Limpar
-       </Button>
+       }}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button>
       </div>
      </div>
     </CardContent>
    </Card>
 
    <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-    <DialogContent className="bg-card border-border sm:max-w-[430px]">
+    <DialogContent className="border-border bg-card sm:max-w-[430px]">
      <DialogHeader>
       <DialogTitle>Exportar Dízimos e Ofertas</DialogTitle>
       <DialogDescription>Selecione o período.</DialogDescription>
@@ -223,7 +209,6 @@ export default function LancamentoDizimosOfertas(){
         <SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent>
        </Select>
       </div>
-
       <div>
        <Label>Ano</Label>
        <Select value={String(exportFilters.year)} onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}>
@@ -235,15 +220,15 @@ export default function LancamentoDizimosOfertas(){
 
      <DialogFooter>
       <Button variant="outline" onClick={()=>setExportOpen(false)}>Cancelar</Button>
-      <Button onClick={exportar} className="text-white" style={{background:CYAN}}>Exportar</Button>
+      <Button onClick={exportar} className="text-white" style={{background:C}}>Exportar</Button>
      </DialogFooter>
     </DialogContent>
    </Dialog>
 
    <Dialog open={dialogOpen} onOpenChange={o=>o?setDialogOpen(true):closeDialog()}>
-    <DialogContent className="bg-card border-border sm:max-w-[500px]">
+    <DialogContent className="border-border bg-card sm:max-w-[500px]">
      <DialogHeader>
-      <DialogTitle style={{color:CYAN}}>{current?'Editar':'Novo'} Lançamento</DialogTitle>
+      <DialogTitle style={{color:C}}>{current?'Editar':'Novo'} Lançamento</DialogTitle>
      </DialogHeader>
 
      <form onSubmit={save} className="space-y-5 py-3">
@@ -268,7 +253,7 @@ export default function LancamentoDizimosOfertas(){
 
       <DialogFooter>
        <Button type="button" variant="outline" onClick={closeDialog}>Cancelar</Button>
-       <Button type="submit" className="text-white" style={{background:CYAN}}>Salvar</Button>
+       <Button type="submit" className="text-white" style={{background:C}}>Salvar</Button>
       </DialogFooter>
      </form>
     </DialogContent>
@@ -301,18 +286,13 @@ export default function LancamentoDizimosOfertas(){
           <TableRow key={x.id} className="hover:bg-muted/40">
            <TableCell>{new Date(`${x.data}T00:00:00`).toLocaleDateString('pt-BR')}</TableCell>
            <TableCell className="font-medium">{x.tipo_movimento}</TableCell>
-           <TableCell className="text-right font-bold" style={{color:CYAN}}>{BRL.format(Number(x.valor)||0)}</TableCell>
+           <TableCell className="text-right font-bold" style={{color:C}}>{BRL.format(Number(x.valor)||0)}</TableCell>
            <TableCell>
             <div className="flex justify-center">
-             <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}}>
-              <Edit className="h-4 w-4"/>
-             </Button>
-
+             <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:C}}><Edit className="h-4 w-4"/></Button>
              <AlertDialog>
               <AlertDialogTrigger asChild>
-               <Button variant="ghost" size="icon" className="text-red-500">
-                <Trash2 className="h-4 w-4"/>
-               </Button>
+               <Button variant="ghost" size="icon" className="text-red-500"><Trash2 className="h-4 w-4"/></Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                <AlertDialogHeader>
