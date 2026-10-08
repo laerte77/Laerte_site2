@@ -1,469 +1,538 @@
-import React,{useState,useEffect,useCallback}from'react';
-import{supabase}from'@/lib/customSupabaseClient.js';
-import{useAuth}from'@/contexts/SupabaseAuthContext.jsx';
-import{Button}from'@/components/ui/button.jsx';
-import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table.jsx';
-import{useToast}from'@/components/ui/use-toast.js';
-import{Badge}from'@/components/ui/badge.jsx';
-import{ChevronLeft,ChevronRight,TrendingDown,TrendingUp,Minus,CheckCircle2,Loader2,CalendarDays}from'lucide-react';
-import{Card,CardContent,CardDescription,CardHeader,CardTitle}from'@/components/ui/card.jsx';
-import{format,addMonths,subMonths,isBefore,startOfMonth,endOfMonth,parseISO,isSameMonth,isSameYear}from'date-fns';
-import{ptBR}from'date-fns/locale';
-import{calculateGastoReal}from'@/lib/gastoRealUtils.js';
-import{Tooltip,TooltipContent,TooltipProvider,TooltipTrigger}from'@/components/ui/tooltip.jsx';
+import React,{useState,useEffect,useCallback,useMemo}from'react';
+import{motion}from'framer-motion';
+import{Plus,Edit,Trash2,Search,RotateCcw,CalendarClock,FileText,DollarSign,WalletCards,Loader2}from'lucide-react';
+import{Button}from'@/components/ui/button';
+import{Input}from'@/components/ui/input';
+import{Label}from'@/components/ui/label';
+import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
+import{Card,CardContent}from'@/components/ui/card';
+import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
+import{Badge}from'@/components/ui/badge';
+import{Dialog,DialogContent,DialogHeader,DialogTitle,DialogFooter}from'@/components/ui/dialog';
+import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle}from'@/components/ui/alert-dialog';
+import{useToast}from'@/components/ui/use-toast';
+import{supabase}from'@/lib/customSupabaseClient';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
 
-const CYAN='#06b6d4';
-const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2});
+const C='hsl(var(--neon-lanhouse))';
+const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 
-const DespesasPrevisadasMes=()=>{
- const{user}=useAuth();
- const{toast}=useToast();
- const[loading,setLoading]=useState(true);
- const[updatingId,setUpdatingId]=useState(null);
- const[items,setItems]=useState([]);
- const[currentDate,setCurrentDate]=useState(new Date());
- const[stats,setStats]=useState({
-  previstoAnterior:0,
-  gastoRealAnterior:0,
-  previstoAtual:0,
-  gastoRealAtual:0,
-  diffGastoReal:0
- });
+const moneyInput=v=>{
+ const d=String(v??'').replace(/\D/g,'');
+ return d?(Number(d)/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}):'';
+};
 
- const formatCurrency=value=>BRL.format(value||0);
+const moneyValue=v=>{
+ const d=String(v??'').replace(/\D/g,'');
+ return d?Number(d)/100:0;
+};
 
- const processMonthData=(plannedData,actualData,targetDate)=>{
-  let totalPrevisto=0;
+const today=()=>new Date().toISOString().slice(0,10);
+const dateBR=v=>v?new Date(`${v}T00:00:00`).toLocaleDateString('pt-BR'):'—';
 
-  const processedItems=plannedData.map(item=>{
-   const today=new Date();
-   today.setHours(0,0,0,0);
+const initial=()=>({
+ descricao:'',
+ data_vencimento:'',
+ valor:'',
+ categoria:'OUTROS',
+ forma_pagamento:'PIX',
+ parcelas:1,
+ status:'PENDENTE'
+});
 
-   const vencimento=parseISO(item.data_vencimento);
+const Stat=({icon:Icon,label,value})=>(
+ <Card>
+  <CardContent className="flex items-center justify-between p-4">
+   <div>
+    <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
+    <p className="mt-1 text-xl font-bold" style={{color:C}}>{value}</p>
+   </div>
+   <Icon className="h-5 w-5" style={{color:C}}/>
+  </CardContent>
+ </Card>
+);
 
-   const match=actualData.find(actual=>{
-    const actualDate=parseISO(actual.data);
-    const isSameMonthYear=isSameMonth(actualDate,targetDate)&&isSameYear(actualDate,targetDate);
+export default function LancamentoDespesaPrevista(){
+ const{user}=useAuth(),{toast}=useToast();
+ const[data,setData]=useState([]),[tipos,setTipos]=useState([]),[loading,setLoading]=useState(true);
+ const[search,setSearch]=useState(''),[open,setOpen]=useState(false),[editing,setEditing]=useState(null),[deleteItem,setDeleteItem]=useState(null);
+ const[form,setForm]=useState(initial());
 
-    if(!isSameMonthYear)return false;
-
-    const descMatch=actual.despesa.trim().toLowerCase()===item.descricao.trim().toLowerCase();
-    const isEnergy=item.descricao.toLowerCase().includes('energia');
-    const valueMatch=Math.abs(parseFloat(actual.valor)-parseFloat(item.valor))<0.5;
-
-    return descMatch&&(isEnergy||valueMatch);
-   });
-
-   let displayStatus=item.status;
-
-   if(item.status!=='Paga'){
-    if(isBefore(vencimento,today))displayStatus='Atrasada';
-   }
-
-   let gastoReal=0;
-
-   if(match)gastoReal=parseFloat(match.valor);
-
-   totalPrevisto+=parseFloat(item.valor);
-
-   return{
-    ...item,
-    displayStatus,
-    gastoReal:match?gastoReal:null,
-    diferenca:parseFloat(item.valor)-(match?gastoReal:0)
-   };
-  });
-
-  return{processedItems,totalPrevisto};
- };
-
- const fetchItems=useCallback(async()=>{
+ const load=useCallback(async()=>{
   if(!user)return;
   setLoading(true);
-
-  const currentStart=format(startOfMonth(currentDate),'yyyy-MM-dd');
-  const currentEnd=format(endOfMonth(currentDate),'yyyy-MM-dd');
-
-  const prevMonthDate=subMonths(currentDate,1);
-  const prevStart=format(startOfMonth(prevMonthDate),'yyyy-MM-dd');
-  const prevEnd=format(endOfMonth(prevMonthDate),'yyyy-MM-dd');
-
   try{
-   const{data:plannedCurrent,error:pcError}=await supabase
-    .from('lm_despesas_previstas')
-    .select('*')
-    .eq('user_id',user.id)
-    .gte('data_vencimento',currentStart)
-    .lte('data_vencimento',currentEnd)
-    .order('data_vencimento',{ascending:false});
+   const[a,b]=await Promise.all([
+    supabase.from('lm_despesas_previstas').select('*').eq('user_id',user.id).order('data_vencimento',{ascending:true}),
+    supabase.from('lm_despesas').select('id,despesa,categoria').eq('user_id',user.id).order('despesa',{ascending:true})
+   ]);
+   if(a.error)throw a.error;
+   if(b.error)throw b.error;
+   setData(a.data||[]);
+   setTipos(b.data||[]);
+  }catch(e){
+   toast({title:'Erro ao carregar',description:e.message||'Não foi possível carregar as despesas previstas.',variant:'destructive'});
+  }finally{setLoading(false)}
+ },[user,toast]);
 
-   if(pcError)throw pcError;
-
-   const{data:plannedPrev,error:ppError}=await supabase
-    .from('lm_despesas_previstas')
-    .select('*')
-    .eq('user_id',user.id)
-    .gte('data_vencimento',prevStart)
-    .lte('data_vencimento',prevEnd);
-
-   if(ppError)throw ppError;
-
-   const fetchActual=async(start,end)=>{
-    const{data:raw,error}=await supabase
-     .from('lm_lanc_despesas')
-     .select(`
-      data,
-      valor,
-      lm_despesas (
-       despesa
-      )
-     `)
-     .eq('user_id',user.id)
-     .gte('data',start)
-     .lte('data',end);
-
-    if(error)throw error;
-
-    return raw.map(item=>({
-     data:item.data,
-     valor:item.valor,
-     despesa:item.lm_despesas?.despesa||'Desconhecido'
-    }));
-   };
-
-   const rawActualCurrent=await fetchActual(currentStart,currentEnd);
-   const rawActualPrev=await fetchActual(prevStart,prevEnd);
-
-   const filterExpenses=list=>list.filter(item=>{
-    const desc=item.despesa?.toLowerCase()||'';
-    return!desc.includes('dízimo')&&!desc.includes('dizimo')&&!desc.includes('oferta');
-   });
-
-   const actualCurrent=filterExpenses(rawActualCurrent);
-   const actualPrev=filterExpenses(rawActualPrev);
-
-   const currentData=processMonthData(plannedCurrent,actualCurrent,currentDate);
-   const prevData=processMonthData(plannedPrev,actualPrev,prevMonthDate);
-
-   const totalGastoRealAtual=await calculateGastoReal(user.id,currentDate,'lanhouse');
-   const totalGastoRealAnterior=await calculateGastoReal(user.id,prevMonthDate,'lanhouse');
-
-   setItems(currentData.processedItems);
-
-   setStats({
-    previstoAnterior:prevData.totalPrevisto,
-    gastoRealAnterior:totalGastoRealAnterior,
-    previstoAtual:currentData.totalPrevisto,
-    gastoRealAtual:totalGastoRealAtual,
-    diffGastoReal:totalGastoRealAtual-totalGastoRealAnterior
-   });
-
-  }catch(error){
-   console.error(error);
-   toast({
-    title:'Erro',
-    description:'Erro ao carregar dados.',
-    variant:'destructive'
-   });
-  }finally{
-   setLoading(false);
-  }
- },[user,currentDate,toast]);
+ useEffect(()=>{load()},[load]);
 
  useEffect(()=>{
-  fetchItems();
- },[fetchItems]);
+  if(!user)return;
+  const ch=supabase.channel('lm_despesas_previstas_changes')
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_despesas_previstas',filter:`user_id=eq.${user.id}`},load)
+   .subscribe();
+  return()=>supabase.removeChannel(ch);
+ },[user,load]);
 
- const handleMarkAsPaid=async(id,currentStatus)=>{
-  setUpdatingId(id);
+ const filtered=useMemo(()=>{
+  const q=search.trim().toLowerCase();
+  if(!q)return data;
+  return data.filter(x=>
+   String(x.descricao||'').toLowerCase().includes(q)||
+   String(x.categoria||'').toLowerCase().includes(q)||
+   String(x.forma_pagamento||'').toLowerCase().includes(q)||
+   String(x.status||'').toLowerCase().includes(q)
+  );
+ },[data,search]);
 
-  const newStatus=currentStatus==='Paga'?'Pendente':'Paga';
+ const total=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
+ const pendentes=filtered.filter(x=>String(x.status||'').toUpperCase()!=='PAGO').length;
+ const pagos=filtered.filter(x=>String(x.status||'').toUpperCase()==='PAGO').length;
+
+ const openForm=item=>{
+  if(item){
+   setEditing(item);
+   setForm({
+    descricao:item.descricao||'',
+    data_vencimento:String(item.data_vencimento||'').slice(0,10),
+    valor:moneyInput(item.valor),
+    categoria:item.categoria||'OUTROS',
+    forma_pagamento:item.forma_pagamento||'PIX',
+    parcelas:item.parcelas||1,
+    status:item.status||'PENDENTE'
+   });
+  }else{
+   setEditing(null);
+   setForm(initial());
+  }
+  setOpen(true);
+ };
+
+ const close=()=>{
+  setOpen(false);
+  setEditing(null);
+  setForm(initial());
+ };
+
+ const save=async()=>{
+  const valor=moneyValue(form.valor);
+
+  if(!form.descricao||!form.data_vencimento||valor<=0){
+   toast({title:'Campos obrigatórios',description:'Preencha descrição, vencimento e valor.',variant:'destructive'});
+   return;
+  }
+
+  const payload={
+   user_id:user.id,
+   descricao:form.descricao,
+   data_vencimento:form.data_vencimento,
+   valor,
+   categoria:form.categoria||'OUTROS',
+   forma_pagamento:form.forma_pagamento,
+   parcelas:form.forma_pagamento==='CARTÃO DE CRÉDITO'?Number(form.parcelas)||1:null,
+   status:form.status||'PENDENTE'
+  };
 
   try{
-   const{error}=await supabase
-    .from('lm_despesas_previstas')
-    .update({status:newStatus})
-    .eq('id',id);
+   const q=editing
+    ?supabase.from('lm_despesas_previstas').update(payload).eq('id',editing.id).eq('user_id',user.id)
+    :supabase.from('lm_despesas_previstas').insert(payload);
 
+   const{error}=await q;
    if(error)throw error;
 
    toast({
     title:'Sucesso',
-    description:`Despesa marcada como ${newStatus}.`
+    description:editing?'Despesa prevista atualizada.':'Despesa prevista cadastrada.'
    });
 
-   await fetchItems();
-  }catch(error){
-   toast({
-    title:'Erro',
-    description:'Não foi possível atualizar o status.',
-    variant:'destructive'
-   });
-  }finally{
-   setUpdatingId(null);
+   close();
+   load();
+  }catch(e){
+   toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar.',variant:'destructive'});
   }
  };
 
- const navigateMonth=direction=>{
-  setCurrentDate(prev=>direction==='next'?addMonths(prev,1):subMonths(prev,1));
- };
+ const remove=async()=>{
+  if(!deleteItem)return;
 
- const getStatusBadge=status=>{
-  switch(status){
-   case'Paga':
-    return <Badge className="bg-green-500 hover:bg-green-600">Paga</Badge>;
-   case'Atrasada':
-    return <Badge className="bg-red-500 hover:bg-red-600">Atrasada</Badge>;
-   default:
-    return <Badge className="bg-yellow-500 text-black hover:bg-yellow-600">Pendente</Badge>;
+  try{
+   const{error}=await supabase
+    .from('lm_despesas_previstas')
+    .delete()
+    .eq('id',deleteItem.id)
+    .eq('user_id',user.id);
+
+   if(error)throw error;
+
+   toast({title:'Removido',description:'Despesa prevista excluída.'});
+   setDeleteItem(null);
+   load();
+  }catch(e){
+   toast({title:'Erro ao excluir',description:e.message||'Não foi possível excluir.',variant:'destructive'});
   }
  };
+
+ const toggleStatus=async item=>{
+  const novo=String(item.status||'').toUpperCase()==='PAGO'?'PENDENTE':'PAGO';
+
+  try{
+   const{error}=await supabase
+    .from('lm_despesas_previstas')
+    .update({status:novo})
+    .eq('id',item.id)
+    .eq('user_id',user.id);
+
+   if(error)throw error;
+   load();
+  }catch(e){
+   toast({title:'Erro',description:e.message||'Não foi possível atualizar o status.',variant:'destructive'});
+  }
+ };
+
+ const clear=()=>setSearch('');
 
  return(
-  <div className="space-y-5">
+  <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="space-y-5">
 
+   {/* CABEÇALHO */}
    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
     <div>
-     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:CYAN}}>
-      LM Impressões
-     </p>
-
-     <div className="mt-1 flex items-center gap-2">
-      <CalendarDays className="h-6 w-6" style={{color:CYAN}}/>
-      <h1 className="text-2xl font-bold">Despesas do Mês</h1>
-     </div>
-
-     <p className="mt-1 text-sm text-muted-foreground">
-      Compare despesas previstas com os gastos realizados.
-     </p>
+     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:C}}>LM Impressões</p>
+     <h1 className="mt-1 text-2xl font-bold">Despesas Previstas</h1>
+     <p className="text-sm text-muted-foreground">Gerencie contas a pagar.</p>
     </div>
 
-    <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-1">
-     <Button
-      variant="ghost"
-      size="icon"
-      onClick={()=>navigateMonth('prev')}
-     >
-      <ChevronLeft className="h-5 w-5"/>
-     </Button>
-
-     <span className="w-40 text-center text-sm font-semibold capitalize">
-      {format(currentDate,'MMMM yyyy',{locale:ptBR})}
-     </span>
-
-     <Button
-      variant="ghost"
-      size="icon"
-      onClick={()=>navigateMonth('next')}
-     >
-      <ChevronRight className="h-5 w-5"/>
-     </Button>
-    </div>
+    <Button onClick={()=>openForm()} className="text-slate-950" style={{background:C}}>
+     <Plus className="mr-2 h-4 w-4"/>
+     Nova Despesa
+    </Button>
    </div>
 
-   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-
-    <Card>
-     <CardContent className="p-4">
-      <p className="text-xs uppercase tracking-wider text-muted-foreground">
-       Previsto — Mês Anterior
-      </p>
-      <p className="mt-1 text-xl font-bold">
-       {formatCurrency(stats.previstoAnterior)}
-      </p>
-     </CardContent>
-    </Card>
-
-    <Card>
-     <CardContent className="p-4">
-      <p className="text-xs uppercase tracking-wider text-muted-foreground">
-       Gasto Real — Mês Anterior
-      </p>
-      <p className="mt-1 text-xl font-bold">
-       {formatCurrency(stats.gastoRealAnterior)}
-      </p>
-     </CardContent>
-    </Card>
-
-    <Card>
-     <CardContent className="p-4">
-      <p className="text-xs uppercase tracking-wider text-muted-foreground">
-       Previsto — Mês Atual
-      </p>
-      <p className="mt-1 text-xl font-bold" style={{color:CYAN}}>
-       {formatCurrency(stats.previstoAtual)}
-      </p>
-     </CardContent>
-    </Card>
-
-    <Card>
-     <CardContent className="p-4">
-      <p className="text-xs uppercase tracking-wider text-muted-foreground">
-       Gasto Real — Mês Atual
-      </p>
-
-      <p className="mt-1 text-xl font-bold text-blue-400">
-       {formatCurrency(stats.gastoRealAtual)}
-      </p>
-
-      <div className="mt-1 text-xs">
-       {stats.diffGastoReal>0?
-        <span className="inline-flex items-center text-red-400">
-         <TrendingUp className="mr-1 h-3 w-3"/>
-         Gastou {formatCurrency(stats.diffGastoReal)} a mais
-        </span>
-       :
-       stats.diffGastoReal<0?
-        <span className="inline-flex items-center text-green-400">
-         <TrendingDown className="mr-1 h-3 w-3"/>
-         Economizou {formatCurrency(Math.abs(stats.diffGastoReal))}
-        </span>
-       :
-        <span className="inline-flex items-center text-muted-foreground">
-         <Minus className="mr-1 h-3 w-3"/>
-         Mesmo valor
-        </span>
-       }
-       <span className="ml-1 text-muted-foreground">vs mês anterior</span>
-      </div>
-     </CardContent>
-    </Card>
-
+   {/* INDICADORES */}
+   <div className="grid gap-3 sm:grid-cols-3">
+    <Stat icon={FileText} label="Registros" value={filtered.length}/>
+    <Stat icon={DollarSign} label="Total" value={BRL.format(total)}/>
+    <Stat icon={WalletCards} label="Pendentes" value={pendentes}/>
    </div>
 
+   {/* BUSCA */}
    <Card>
-    <CardHeader>
-     <CardTitle className="text-base">Despesas Previstas</CardTitle>
-     <CardDescription>
-      Acompanhe vencimentos, pagamentos e diferenças entre o previsto e o realizado.
-     </CardDescription>
-    </CardHeader>
+    <CardContent className="p-4">
+     <div className="flex gap-2">
+      <div className="relative flex-1">
+       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+       <Input
+        value={search}
+        onChange={e=>setSearch(e.target.value)}
+        placeholder="Buscar despesa ou categoria..."
+        className="h-11 pl-9"
+       />
+      </div>
 
+      <Button variant="outline" onClick={clear} className="h-11">
+       <RotateCcw className="mr-2 h-4 w-4"/>
+       Limpar
+      </Button>
+     </div>
+    </CardContent>
+   </Card>
+
+   {/* TABELA / BANCO DE DADOS */}
+   <Card className="overflow-hidden">
     <CardContent className="p-0">
      <div className="overflow-x-auto">
       <Table>
-
        <TableHeader className="bg-secondary/70">
         <TableRow>
          <TableHead>Descrição</TableHead>
          <TableHead>Vencimento</TableHead>
-         <TableHead>Valor Previsto</TableHead>
-         <TableHead>Gasto Real</TableHead>
-         <TableHead>Diferença</TableHead>
-         <TableHead className="text-center">Status</TableHead>
+         <TableHead>Categoria</TableHead>
+         <TableHead>Pagamento</TableHead>
+         <TableHead>Status</TableHead>
+         <TableHead className="text-right">Valor</TableHead>
          <TableHead className="text-right">Ações</TableHead>
         </TableRow>
        </TableHeader>
 
        <TableBody>
-
         {loading?
          <TableRow>
           <TableCell colSpan={7} className="py-12 text-center">
-           <Loader2 className="mx-auto h-6 w-6 animate-spin" style={{color:CYAN}}/>
+           <Loader2 className="mx-auto h-6 w-6 animate-spin" style={{color:C}}/>
           </TableCell>
          </TableRow>
         :
-        items.length===0?
+        !filtered.length?
          <TableRow>
           <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
-           Nenhuma despesa prevista para este mês.
+           Nenhuma despesa prevista encontrada.
           </TableCell>
          </TableRow>
         :
-        items.map(item=>
-         <TableRow key={item.id} className="hover:bg-muted/40">
+        filtered.map(x=>{
+         const pago=String(x.status||'').toUpperCase()==='PAGO';
 
-          <TableCell className="font-semibold">
-           {item.descricao}
-          </TableCell>
+         return(
+          <TableRow key={x.id} className="hover:bg-muted/40">
 
-          <TableCell>
-           {format(parseISO(item.data_vencimento),'dd/MM/yyyy')}
-          </TableCell>
+           <TableCell className="font-semibold">
+            {x.descricao||'—'}
+           </TableCell>
 
-          <TableCell>
-           {formatCurrency(parseFloat(item.valor))}
-          </TableCell>
+           <TableCell className="font-medium">
+            {dateBR(x.data_vencimento)}
+           </TableCell>
 
-          <TableCell>
-           {item.gastoReal?
-            <span className="font-medium text-blue-300">
-             {formatCurrency(item.gastoReal)}
-            </span>
-           :
-            <span className="text-muted-foreground">-</span>
-           }
-          </TableCell>
+           <TableCell>
+            <Badge variant="outline">
+             {x.categoria||'OUTROS'}
+            </Badge>
+           </TableCell>
 
-          <TableCell>
-           {item.gastoReal?
-            <span className={
-             item.diferenca>0
-              ?'font-medium text-green-400'
-              :item.diferenca<0
-              ?'font-medium text-red-400'
-              :''
-            }>
-             {item.diferenca>0?'+':''}
-             {formatCurrency(item.diferenca)}
-            </span>
-           :
-            <span className="text-xs italic text-muted-foreground">
-             Aguardando pagamento
-            </span>
-           }
-          </TableCell>
+           <TableCell>
+            {x.forma_pagamento||'—'}
+           </TableCell>
 
-          <TableCell className="text-center">
-           {getStatusBadge(item.displayStatus)}
-          </TableCell>
+           <TableCell>
+            <Badge
+             variant="outline"
+             className={pago
+              ?'border-green-500/30 bg-green-500/10 text-green-400'
+              :'border-border bg-transparent text-foreground'
+             }
+             onClick={()=>toggleStatus(x)}
+            >
+             {pago?'Pago':'Pendente'}
+            </Badge>
+           </TableCell>
 
-          <TableCell className="text-right">
-           <TooltipProvider>
-            <Tooltip>
-             <TooltipTrigger asChild>
-              <Button
-               variant="ghost"
-               size="icon"
-               disabled={updatingId===item.id}
-               onClick={()=>handleMarkAsPaid(item.id,item.status)}
-               className={
-                item.status==='Paga'
-                 ?'text-green-400 hover:bg-green-400/10 hover:text-green-300'
-                 :'text-muted-foreground hover:text-foreground'
-               }
-              >
-               {updatingId===item.id?
-                <Loader2 className="h-4 w-4 animate-spin"/>
-               :
-                <CheckCircle2 className="h-4 w-4"/>
-               }
-              </Button>
-             </TooltipTrigger>
+           <TableCell className="text-right font-bold" style={{color:C}}>
+            {BRL.format(Number(x.valor)||0)}
+           </TableCell>
 
-             <TooltipContent>
-              <p>
-               {item.status==='Paga'
-                ?'Marcar como Pendente'
-                :'Marcar como Paga'}
-              </p>
-             </TooltipContent>
-            </Tooltip>
-           </TooltipProvider>
-          </TableCell>
+           <TableCell>
+            <div className="flex justify-end gap-1">
 
-         </TableRow>
-        )}
+             <Button
+              variant="ghost"
+              size="icon"
+              onClick={()=>openForm(x)}
+              title="Editar"
+              style={{color:C}}
+             >
+              <Edit className="h-4 w-4"/>
+             </Button>
 
+             <Button
+              variant="ghost"
+              size="icon"
+              onClick={()=>setDeleteItem(x)}
+              title="Excluir"
+              className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
+             >
+              <Trash2 className="h-4 w-4"/>
+             </Button>
+
+            </div>
+           </TableCell>
+
+          </TableRow>
+         );
+        })}
        </TableBody>
       </Table>
      </div>
+
+     {!loading&&filtered.length>0&&(
+      <div className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
+       {filtered.length} registro(s) • {pagos} pago(s) • {pendentes} pendente(s)
+      </div>
+     )}
     </CardContent>
    </Card>
 
-  </div>
- );
-};
+   {/* MODAL DE LANÇAMENTO */}
+   <Dialog open={open} onOpenChange={v=>v?setOpen(true):close()}>
+    <DialogContent className="max-h-[90vh] overflow-y-auto bg-card border-border sm:max-w-[620px]">
 
-export default DespesasPrevisadasMes;
+     <DialogHeader>
+      <DialogTitle style={{color:C}}>
+       {editing?'Editar Despesa Prevista':'Nova Despesa Prevista'}
+      </DialogTitle>
+     </DialogHeader>
+
+     <div className="space-y-5 py-2">
+
+      <div className="space-y-2">
+       <Label>Descrição</Label>
+
+       <Select
+        value={form.descricao}
+        onValueChange={v=>{
+         const t=tipos.find(x=>x.despesa===v);
+         setForm(p=>({
+          ...p,
+          descricao:v,
+          categoria:t?.categoria||p.categoria||'OUTROS'
+         }));
+        }}
+       >
+        <SelectTrigger>
+         <SelectValue placeholder="Selecione a despesa"/>
+        </SelectTrigger>
+
+        <SelectContent>
+         {tipos.map(x=>
+          <SelectItem key={x.id} value={x.despesa}>
+           {x.despesa}
+          </SelectItem>
+         )}
+        </SelectContent>
+       </Select>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+
+       <div className="space-y-2">
+        <Label>Vencimento</Label>
+        <Input
+         type="date"
+         value={form.data_vencimento}
+         onChange={e=>setForm(p=>({...p,data_vencimento:e.target.value}))}
+        />
+       </div>
+
+       <div className="space-y-2">
+        <Label>Valor</Label>
+        <Input
+         type="text"
+         inputMode="numeric"
+         placeholder="R$ 0,00"
+         value={form.valor}
+         onChange={e=>setForm(p=>({...p,valor:moneyInput(e.target.value)}))}
+        />
+       </div>
+
+      </div>
+
+      <div className="space-y-2">
+       <Label>Categoria</Label>
+       <Input
+        value={form.categoria}
+        onChange={e=>setForm(p=>({...p,categoria:e.target.value.toUpperCase()}))}
+        placeholder="OUTROS"
+       />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+
+       <div className="space-y-2">
+        <Label>Pagamento</Label>
+
+        <Select
+         value={form.forma_pagamento}
+         onValueChange={v=>setForm(p=>({...p,forma_pagamento:v}))}
+        >
+         <SelectTrigger>
+          <SelectValue/>
+         </SelectTrigger>
+
+         <SelectContent>
+          <SelectItem value="PIX">PIX</SelectItem>
+          <SelectItem value="DINHEIRO">DINHEIRO</SelectItem>
+          <SelectItem value="CARTÃO DE CRÉDITO">CARTÃO DE CRÉDITO</SelectItem>
+          <SelectItem value="BOLETO">BOLETO</SelectItem>
+         </SelectContent>
+        </Select>
+       </div>
+
+       <div className="space-y-2">
+        <Label>Parcelas</Label>
+        <Input
+         type="number"
+         min="1"
+         value={form.parcelas}
+         disabled={form.forma_pagamento!=='CARTÃO DE CRÉDITO'}
+         onChange={e=>setForm(p=>({...p,parcelas:Number(e.target.value)||1}))}
+        />
+       </div>
+
+      </div>
+
+      <div className="space-y-2">
+       <Label>Status</Label>
+
+       <Select
+        value={form.status}
+        onValueChange={v=>setForm(p=>({...p,status:v}))}
+       >
+        <SelectTrigger>
+         <SelectValue/>
+        </SelectTrigger>
+
+        <SelectContent>
+         <SelectItem value="PENDENTE">PENDENTE</SelectItem>
+         <SelectItem value="PAGO">PAGO</SelectItem>
+        </SelectContent>
+       </Select>
+      </div>
+
+     </div>
+
+     <DialogFooter>
+      <Button variant="outline" onClick={close}>
+       Cancelar
+      </Button>
+
+      <Button
+       onClick={save}
+       className="text-slate-950"
+       style={{background:C}}
+      >
+       {editing?'Salvar Alterações':'Salvar Despesa'}
+      </Button>
+     </DialogFooter>
+
+    </DialogContent>
+   </Dialog>
+
+   {/* EXCLUSÃO */}
+   <AlertDialog
+    open={!!deleteItem}
+    onOpenChange={v=>{if(!v)setDeleteItem(null)}}
+   >
+    <AlertDialogContent className="bg-card border-border">
+     <AlertDialogHeader>
+      <AlertDialogTitle>Excluir despesa prevista?</AlertDialogTitle>
+      <AlertDialogDescription>
+       Esta ação removerá o registro do banco de dados. A consulta e o relatório deixarão de considerar este lançamento.
+      </AlertDialogDescription>
+     </AlertDialogHeader>
+
+     <AlertDialogFooter>
+      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+      <AlertDialogAction
+       onClick={remove}
+       className="bg-red-600 text-white hover:bg-red-700"
+      >
+       Excluir
+      </AlertDialogAction>
+     </AlertDialogFooter>
+    </AlertDialogContent>
+   </AlertDialog>
+
+  </motion.div>
+ );
+}
