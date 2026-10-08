@@ -1,17 +1,16 @@
 import React from'react';
 import{Link,useLocation}from'react-router-dom';
-import{MonitorPlay,List,ClipboardList,Home,BarChart3,ChevronLeft,ChevronRight,DollarSign,ArrowLeftRight,LogOut,LayoutGrid,Calculator,ShoppingCart,PackageSearch,CheckSquare,PlusCircle}from'lucide-react';
+import{MonitorPlay,Home,List,BarChart3,DollarSign,LogOut,LayoutGrid,CheckSquare,PlusCircle,PackageSearch,ClipboardList,CalendarDays}from'lucide-react';
 import{Accordion,AccordionContent,AccordionItem,AccordionTrigger}from'@/components/ui/accordion';
 import{Button}from'@/components/ui/button';
 import{cn}from'@/lib/utils';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 
-const CYAN='hsl(var(--neon-lanhouse))';
+const C='hsl(var(--neon-lanhouse))';
 
 const NavLink=({to,icon:Icon,children})=>{
  const{pathname}=useLocation();
  const active=to==='/lm-impressoes/dashboard'?pathname===to:pathname.startsWith(to);
-
  return(
   <Link
    to={to}
@@ -21,7 +20,7 @@ const NavLink=({to,icon:Icon,children})=>{
      ?'border-[hsl(var(--neon-lanhouse)/.45)] bg-[hsl(var(--neon-lanhouse)/.10)]'
      :'border-transparent text-muted-foreground hover:border-[hsl(var(--neon-lanhouse)/.20)] hover:bg-muted hover:text-foreground'
    )}
-   style={active?{color:CYAN}:undefined}
+   style={active?{color:C}:undefined}
   >
    {Icon&&<Icon className="h-4 w-4 shrink-0"/>}
    <span className="truncate">{children}</span>
@@ -32,25 +31,19 @@ const NavLink=({to,icon:Icon,children})=>{
 export default function Sidebar({isOpen,setOpen,isMobile}){
  const{signOut}=useAuth();
 
- const trigger=
-  'flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[hsl(var(--neon-lanhouse)/.08)] hover:text-foreground';
+ const trigger='flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[hsl(var(--neon-lanhouse)/.08)] hover:text-foreground';
 
  return(
-  <aside
-   className={cn(
-    'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-card transition-[width,transform] duration-300',
-    isMobile
-     ?isOpen?'w-60 translate-x-0':'w-60 -translate-x-full'
-     :isOpen?'w-60':'w-20'
-   )}
-  >
+  <aside className={cn(
+   'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-card transition-[width,transform] duration-300',
+   isMobile?isOpen?'w-60 translate-x-0':'w-60 -translate-x-full':isOpen?'w-60':'w-20'
+  )}>
 
    <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
     <div className="flex items-center gap-2 overflow-hidden">
-
      <div
       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md shadow-[0_0_12px_hsl(var(--neon-lanhouse)/.35)]"
-      style={{background:`linear-gradient(135deg,${CYAN},#0891b2)`}}
+      style={{background:`linear-gradient(135deg,${C},#0891b2)`}}
      >
       <MonitorPlay className="h-4 w-4 text-white"/>
      </div>
@@ -58,10 +51,7 @@ export default function Sidebar({isOpen,setOpen,isMobile}){
      {(isOpen||isMobile)&&(
       <div className="leading-tight">
        <div className="text-sm font-bold uppercase text-white">LM</div>
-       <div
-        className="text-[11px] font-bold uppercase tracking-widest"
-        style={{color:CYAN}}
-       >
+       <div className="text-[11px] font-bold uppercase tracking-widest" style={{color:C}}>
         IMPRESSÕES
        </div>
       </div>
@@ -75,9 +65,9 @@ export default function Sidebar({isOpen,setOpen,isMobile}){
       size="icon"
       onClick={()=>setOpen(!isOpen)}
       className="ml-auto shrink-0 hover:bg-[hsl(var(--neon-lanhouse)/.08)]"
-      style={{color:CYAN}}
+      style={{color:C}}
      >
-      {isOpen?<ChevronLeft className="h-5 w-5"/>:<ChevronRight className="h-5 w-5"/>}
+      {isOpen?<span className="text-lg">‹</span>:<span className="text-lg">›</span>}
      </Button>
     )}
    </div>
@@ -93,6 +83,7 @@ export default function Sidebar({isOpen,setOpen,isMobile}){
 
      <Accordion type="single" collapsible className="w-full">
 
+      {/* CADASTROS */}
       <AccordionItem value="cadastros">
        <AccordionTrigger className={trigger}>
         <span className="flex items-center gap-3">📋 {(isOpen||isMobile)&&'Cadastros'}</span>
@@ -105,62 +96,112 @@ export default function Sidebar({isOpen,setOpen,isMobile}){
        </AccordionContent>
       </AccordionItem>
 
+      {/* LANÇAMENTOS */}
       <AccordionItem value="lancamentos">
        <AccordionTrigger className={trigger}>
-        <span className="flex items-center gap-3">↔️ {(isOpen||isMobile)&&'Lançamentos'}</span>
+        <span className="flex items-center gap-3">📝 {(isOpen||isMobile)&&'Lançamentos'}</span>
        </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
+
         <NavLink to="/lm-impressoes/dashboard/lancamentos/servicos" icon={List}>Serviços</NavLink>
         <NavLink to="/lm-impressoes/dashboard/lancamentos/despesas" icon={List}>Despesas</NavLink>
         <NavLink to="/lm-impressoes/dashboard/lancamentos/folhas" icon={List}>Folhas</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/lancamentos/despesas-previstas" icon={CheckSquare}>Despesas Previstas</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/lancamentos/clientes-debito" icon={List}>Clientes Débito</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/lancamentos/dizimos-ofertas" icon={DollarSign}>Dízimos/Ofertas</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/lancamentos/metas" icon={CheckSquare}>Metas</NavLink>
+
+        <NavLink
+         to="/lm-impressoes/dashboard/lancamentos/despesas-previstas"
+         icon={CalendarDays}
+        >
+         Despesas Previstas
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/lancamentos/clientes-debito" icon={DollarSign}>
+         Clientes Débito
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/lancamentos/dizimos-ofertas" icon={DollarSign}>
+         Dízimos/Ofertas
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/lancamentos/metas" icon={CheckSquare}>
+         Metas
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/custos/lancamentos" icon={List}>
+         Lançar Custos
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/pedidos/cadastro" icon={PlusCircle}>
+         Realizar Pedido
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/estoques/inicial" icon={PackageSearch}>
+         Estoque Inicial
+        </NavLink>
+
        </AccordionContent>
       </AccordionItem>
 
-      <AccordionItem value="custos">
+      {/* CONSULTAS */}
+      <AccordionItem value="consultas">
        <AccordionTrigger className={trigger}>
-        <span className="flex items-center gap-3">📉 {(isOpen||isMobile)&&'Custos & Lucros'}</span>
+        <span className="flex items-center gap-3">🔎 {(isOpen||isMobile)&&'Consultas'}</span>
        </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-        <NavLink to="/lm-impressoes/dashboard/custos/lancamentos" icon={List}>Lançar Custos</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/custos/controle" icon={BarChart3}>Controle de Custos</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/custos/relatorio-custos" icon={BarChart3}>Relatório Categorias</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/custos/relatorio-lucro" icon={DollarSign}>Lucro Mensal</NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/despesas-previstas-mes" icon={CalendarDays}>
+         Contas do Mês
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/custos/controle" icon={BarChart3}>
+         Controle de Custos
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/pedidos/consulta" icon={ClipboardList}>
+         Consultar Pedidos
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/estoques" icon={PackageSearch}>
+         Estoque Consolidado
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/estoques/controle" icon={PackageSearch}>
+         Controle de Estoque
+        </NavLink>
+
        </AccordionContent>
       </AccordionItem>
 
-      <AccordionItem value="pedidos">
-       <AccordionTrigger className={trigger}>
-        <span className="flex items-center gap-3">🛒 {(isOpen||isMobile)&&'Pedidos'}</span>
-       </AccordionTrigger>
-       <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-        <NavLink to="/lm-impressoes/dashboard/pedidos/cadastro" icon={PlusCircle}>Realizar Pedido</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/pedidos/consulta" icon={List}>Consultar Pedidos</NavLink>
-       </AccordionContent>
-      </AccordionItem>
-
-      <AccordionItem value="estoques">
-       <AccordionTrigger className={trigger}>
-        <span className="flex items-center gap-3">📦 {(isOpen||isMobile)&&'Estoques'}</span>
-       </AccordionTrigger>
-       <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-        <NavLink to="/lm-impressoes/dashboard/estoques/inicial" icon={List}>Estoque Inicial</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/estoques" icon={List}>Estoque Consolidado</NavLink>
-       </AccordionContent>
-      </AccordionItem>
-
+      {/* RELATÓRIOS */}
       <AccordionItem value="relatorios">
        <AccordionTrigger className={trigger}>
         <span className="flex items-center gap-3">📊 {(isOpen||isMobile)&&'Relatórios'}</span>
        </AccordionTrigger>
        <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-border pl-3">
-        <NavLink to="/lm-impressoes/dashboard/relatorios/servicos" icon={List}>Serviços</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/relatorios/despesas" icon={List}>Despesas</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/relatorios/despesas-previstas" icon={CheckSquare}>Despesas Previstas</NavLink>
-        <NavLink to="/lm-impressoes/dashboard/relatorios/clientes-debito" icon={List}>Clientes Débito</NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/relatorios/servicos" icon={List}>
+         Serviços
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/relatorios/despesas" icon={List}>
+         Despesas
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/relatorios/despesas-previstas" icon={CalendarDays}>
+         Despesas Previstas
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/relatorios/clientes-debito" icon={DollarSign}>
+         Clientes Débito
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/custos/relatorio-custos" icon={BarChart3}>
+         Custos por Tipo
+        </NavLink>
+
+        <NavLink to="/lm-impressoes/dashboard/custos/relatorio-lucro" icon={DollarSign}>
+         Lucro Mensal
+        </NavLink>
+
        </AccordionContent>
       </AccordionItem>
 
