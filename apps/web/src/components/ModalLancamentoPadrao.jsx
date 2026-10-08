@@ -13,7 +13,10 @@ export default function ModalLancamentoPadrao({open,onClose,title,description,ic
  const t=THEMES[theme]||THEMES.blue;
 
  return(
-  <Dialog open={open} onOpenChange={value=>{if(!value)onClose?.()}}>
+  <Dialog
+   open={open}
+   onOpenChange={()=>{}}
+  >
    <DialogContent
     onInteractOutside={e=>e.preventDefault()}
     onPointerDownOutside={e=>e.preventDefault()}
@@ -38,7 +41,9 @@ export default function ModalLancamentoPadrao({open,onClose,title,description,ic
       )}
 
       <div className="min-w-0 flex-1 pr-8">
-       <DialogTitle className="text-[22px] font-bold tracking-tight">{title}</DialogTitle>
+       <DialogTitle className="text-[22px] font-bold tracking-tight">
+        {title}
+       </DialogTitle>
 
        {description&&(
         <DialogDescription className="mt-1.5 text-sm leading-6 text-muted-foreground">
@@ -50,12 +55,17 @@ export default function ModalLancamentoPadrao({open,onClose,title,description,ic
     </DialogHeader>
 
     <div className="px-7 py-6">
-     <div className="space-y-5">{children}</div>
+     <div className="space-y-5">
+      {children}
+     </div>
     </div>
 
     <DialogFooter
      className="flex flex-col-reverse gap-3 border-t px-7 py-5 sm:flex-row sm:justify-end"
-     style={{borderColor:'hsl(var(--border) / .75)',background:'hsl(var(--background) / .18)'}}
+     style={{
+      borderColor:'hsl(var(--border) / .75)',
+      background:'hsl(var(--background) / .18)'
+     }}
     >
      {footer}
     </DialogFooter>
