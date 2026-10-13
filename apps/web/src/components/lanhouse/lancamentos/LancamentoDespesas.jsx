@@ -1,6 +1,6 @@
 import React,{useState,useEffect,useCallback,useMemo,useRef}from'react';
 import{motion}from'framer-motion';
-import{Plus,Edit,Trash2,Search,RotateCcw,Receipt,Package}from'lucide-react';
+import{Plus,Edit,Trash2,Search,RotateCcw,Receipt}from'lucide-react';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import{Button}from'@/components/ui/button';
@@ -16,7 +16,6 @@ import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertD
 import{useToast}from'@/components/ui/use-toast';
 import OfflineIndicator from'@/components/OfflineIndicator';
 import{useOnlineStatus}from'@/hooks/useOnlineStatus';
-import{saveOfflineData}from'@/lib/offlineStorage';
 import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const TZ='America/Sao_Paulo';
@@ -146,10 +145,7 @@ export default function LancamentoDespesas(){
   };
 
   try{
-   if(!isOnline&&!editingId){
-    toast({title:'Sem conexão',description:'O lançamento de estoque precisa ser salvo online para atualizar o saldo.',variant:'destructive'});return;
-   }
-   if(!isOnline){toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});return}
+   if(!isOnline){toast({title:'Offline',description:'É necessário estar online para salvar, editar ou excluir lançamentos de estoque.',variant:'destructive'});return}
    const q=editingId
     ?supabase.from('lm_lanc_despesas').update(payload).eq('id',editingId).eq('user_id',user.id)
     :supabase.from('lm_lanc_despesas').insert(payload);
@@ -200,9 +196,9 @@ export default function LancamentoDespesas(){
 
      <div className="space-y-2"><Label>Tipo de Lançamento *</Label><Select value={formData.tipo_lancamento} onValueChange={changeTipoLancamento}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent><SelectItem value="Estoque">Estoque</SelectItem><SelectItem value="Consumo">Consumo</SelectItem><SelectItem value="Perda">Perda</SelectItem></SelectContent></Select></div>
 
-     {isEstoque&&isReposicaoFolha&&<div className="space-y-2 rounded-xl border border-red-500/20 bg-red-500/5 p-4"><Label>Tipo de folha a abastecer *</Label><Select value={formData.tipo_folha} onValueChange={v=>setFormData(p=>({...p,tipo_folha:v,insumo_id:tiposFolha.find(t=>String(t.tipo_folha)===String(v))?.insumo_id||''}))}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione a folha"/></SelectTrigger><SelectContent>{tiposFolha.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">O tipo de folha precisa estar vinculado a um insumo cadastrado.</p>{formData.tipo_folha&&!selectedFolha?.insumo_id&&<p className="text-sm text-red-400">Esta folha ainda não possui um insumo vinculado. Verifique o cadastro antes de salvar.</p>}</div>}
+     {isEstoque&&isReposicaoFolha&&<div className="space-y-2 rounded-xl border border-red-500/20 bg-red-500/5 p-4"><Label>Tipo de folha a abastecer *</Label><Select value={formData.tipo_folha} onValueChange={v=>setFormData(p=>({...p,tipo_folha:v,insumo_id:tiposFolha.find(t=>String(t.tipo_folha)===String(v))?.insumo_id||''}))}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione a folha"/></SelectTrigger><SelectContent className="max-h-60 overflow-y-auto">{tiposFolha.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">O tipo de folha precisa estar vinculado a um insumo cadastrado.</p>{formData.tipo_folha&&!selectedFolha?.insumo_id&&<p className="text-sm text-red-400">Esta folha ainda não possui um insumo vinculado. Verifique o cadastro antes de salvar.</p>}</div>}
 
-     {isEstoque&&!isReposicaoFolha&&<div className="space-y-2 rounded-xl border border-red-500/20 bg-red-500/5 p-4"><Label>Insumo a abastecer *</Label><Select value={formData.insumo_id} onValueChange={v=>setFormData(p=>({...p,insumo_id:v}))}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione um insumo"/></SelectTrigger><SelectContent><ScrollArea className="max-h-56">{insumos.map(i=><SelectItem key={i.id} value={String(i.id)}>{i.nome} — {i.unidade}</SelectItem>)}</ScrollArea></SelectContent></Select>{selectedInsumo&&<p className="text-xs text-muted-foreground">Unidade de medida: {selectedInsumo.unidade}{selectedInsumo.estoque_minimo!=null?` • Estoque mínimo: ${Number(selectedInsumo.estoque_minimo).toLocaleString('pt-BR')}`:''}</p>}{!insumos.length&&<p className="text-sm text-red-400">Nenhum insumo ativo cadastrado. Cadastre primeiro em Cadastros → Insumos.</p>}</div>}
+     {isEstoque&&!isReposicaoFolha&&<div className="space-y-2 rounded-xl border border-red-500/20 bg-red-500/5 p-4"><Label>Insumo a abastecer *</Label><Select value={formData.insumo_id} onValueChange={v=>setFormData(p=>({...p,insumo_id:v}))}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione um insumo"/></SelectTrigger><SelectContent className="max-h-60 overflow-y-auto">{insumos.map(i=><SelectItem key={i.id} value={String(i.id)}>{i.nome} — {i.unidade}</SelectItem>)}</SelectContent></Select>{selectedInsumo&&<p className="text-xs text-muted-foreground">Unidade de medida: {selectedInsumo.unidade}{selectedInsumo.estoque_minimo!=null?` • Estoque mínimo: ${Number(selectedInsumo.estoque_minimo).toLocaleString('pt-BR')}`:''}</p>}{!insumos.length&&<p className="text-sm text-red-400">Nenhum insumo ativo cadastrado. Cadastre primeiro em Cadastros → Insumos.</p>}</div>}
 
      <div className="space-y-2"><Label>Quantidade *</Label><Input type="number" min="0.001" step="0.001" value={formData.quantidade} onChange={e=>setFormData(p=>({...p,quantidade:e.target.value}))} required className="h-11 rounded-xl bg-input"/></div>
      <div className="space-y-2"><Label>Tipo de Custo *</Label><RadioGroup value={formData.tipo_custo} onValueChange={v=>setFormData(p=>({...p,tipo_custo:v}))} className="flex gap-5 pt-2"><div className="flex items-center gap-2"><RadioGroupItem value="Fixo" id="fixo"/><Label htmlFor="fixo">Fixo</Label></div><div className="flex items-center gap-2"><RadioGroupItem value="Variável" id="variavel"/><Label htmlFor="variavel">Variável</Label></div></RadioGroup></div>
@@ -224,4 +220,5 @@ export default function LancamentoDespesas(){
   </motion.div>
  );
 }
+
 
