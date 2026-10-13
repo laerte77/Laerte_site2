@@ -28,7 +28,9 @@ import*as XLSX from'xlsx';
 const TIME_ZONE='America/Sao_Paulo';
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const CYAN='hsl(190 90% 50%)';
-const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
+const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2});
+const moneyNumber=v=>{const d=String(v??'').replace(/\D/g,'');return d?Number(d)/100:0};
+const moneyInput=v=>{const d=String(v??'').replace(/\D/g,'');return d?BRL.format(Number(d)/100):''};
 const getSPParts=()=>Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
 const todaySP=()=>{const p=getSPParts();return`${p.year}-${p.month}-${p.day}`};
 const currentSP=()=>{const p=getSPParts();return{month:Number(p.month)-1,year:Number(p.year)}};
@@ -58,7 +60,7 @@ export default function LancamentoServicos(){
   if(item){
    const cid=item.cliente_id||clientesOpcoes.find(c=>c.nome===item.cliente)?.id||'';
    setEditingId(item.id);
-   setFormData({data:String(item.data||'').slice(0,10),servico_id:item.servico_id,cliente_id:cid,valor:item.valor,forma_pagamento:item.forma_pagamento||''});
+   setFormData({data:String(item.data||'').slice(0,10),servico_id:item.servico_id,cliente_id:cid,valor:moneyInput(Math.round(Number(item.valor||0)*100)),forma_pagamento:item.forma_pagamento||''});
    setOriginalFolhas(item.folhas_gastas?JSON.parse(JSON.stringify(item.folhas_gastas)):[]);
    setFolhasConsumo(item.folhas_gastas||[]);
   }else{
@@ -92,17 +94,18 @@ export default function LancamentoServicos(){
 
  const save=async e=>{
   e.preventDefault();
+  const valorNumerico=moneyNumber(formData.valor);
   if(!formData.data||!formData.servico_id||!formData.cliente_id||!formData.valor||!formData.forma_pagamento){
    toast({title:'Atenção',description:'Preencha todos os campos obrigatórios.',variant:'destructive'});return;
   }
-  if(!Number.isFinite(Number(formData.valor))||Number(formData.valor)<=0){
+  if(!Number.isFinite(valorNumerico)||valorNumerico<=0){
    toast({title:'Valor inválido',description:'Informe um valor maior que zero.',variant:'destructive'});return;
   }
   const v=validate();
   if(!v.ok){toast({title:'Aviso de Estoque',description:v.msg,variant:'destructive'});return}
   setSaving(true);
   try{
-   const payload={user_id:user.id,data:formData.data,servico_id:formData.servico_id,cliente_id:formData.cliente_id,cliente:clientesOpcoes.find(c=>c.id===formData.cliente_id)?.nome||null,valor:Number(formData.valor),forma_pagamento:formData.forma_pagamento,folhas_gastas:folhasConsumo.length?folhasConsumo:null};
+   const payload={user_id:user.id,data:formData.data,servico_id:formData.servico_id,cliente_id:formData.cliente_id,cliente:clientesOpcoes.find(c=>c.id===formData.cliente_id)?.nome||null,valor:valorNumerico,forma_pagamento:formData.forma_pagamento,folhas_gastas:folhasConsumo.length?folhasConsumo:null};
    if(!isOnline&&!editingId){
     await saveOfflineData('lm_servicos',payload);
     toast({title:'Offline',description:'Serviço salvo localmente.'});checkPending();
@@ -173,10 +176,10 @@ export default function LancamentoServicos(){
     <form id="form-servico" onSubmit={save} className="max-h-[calc(100vh-300px)] space-y-5 overflow-y-auto pr-1">
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div className="space-y-2"><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))} required disabled={saving} className="h-11 rounded-xl bg-input"/></div>
-      <div className="space-y-2"><Label>Valor (R$) *</Label><Input type="number" min="0.01" step="0.01" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:e.target.value}))} required disabled={saving} placeholder="0,00" className="h-11 rounded-xl bg-input"/></div>
+      <div className="space-y-2"><Label>Valor (R$) *</Label><Input type="text" inputMode="numeric" autoComplete="off" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:moneyInput(e.target.value)}))} required disabled={saving} placeholder="R$ 0,00" className="h-11 rounded-xl bg-input tabular-nums"/></div>
      </div>
-     <div className="space-y-2"><Label>Tipo do Serviço *</Label><Select value={formData.servico_id} onValueChange={v=>setFormData(p=>({...p,servico_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o serviço"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{servicosOpcoes.map(s=><SelectItem key={s.id} value={s.id}>{s.servico}{s.usa_folha?' 📄':''}</SelectItem>)}</ScrollArea></SelectContent></Select>{selectedServico?.usa_folha&&<Alert className="border-cyan-500/30 bg-cyan-500/10"><AlertTriangle className="h-4 w-4"/><AlertDescription>Este serviço consome folhas e terá validação do estoque.</AlertDescription></Alert>}</div>
-     <div className="space-y-2"><Label>Cliente *</Label><Select value={formData.cliente_id} onValueChange={v=>setFormData(p=>({...p,cliente_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o cliente"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{clientesOpcoes.map(c=><SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
+     <div className="space-y-2"><Label>Tipo do Serviço *</Label><Select value={formData.servico_id} onValueChange={v=>setFormData(p=>({...p,servico_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o serviço"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{servicosOpcoes.map(s=><SelectItem key={s.id} value={s.id}>{s.servico}{s.usa_folha?' 📄':''}</SelectItem>)}</ScrollArea></Select>{selectedServico?.usa_folha&&<Alert className="border-cyan-500/30 bg-cyan-500/10"><AlertTriangle className="h-4 w-4"/><AlertDescription>Este serviço consome folhas e terá validação do estoque.</AlertDescription></Alert>}</div>
+     <div className="space-y-2"><Label>Cliente *</Label><Select value={formData.cliente_id} onValueChange={v=>setFormData(p=>({...p,cliente_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o cliente"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{clientesOpcoes.map(c=><SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</ScrollArea></Select></div>
      <div className="space-y-2"><Label>Forma de Pagamento *</Label><Select value={formData.forma_pagamento} onValueChange={v=>setFormData(p=>({...p,forma_pagamento:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o pagamento"/></SelectTrigger><SelectContent>{['Dinheiro','PIX','Cartão de Crédito','Cartão de Débito'].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div>
      {selectedServico?.usa_folha&&<div className="space-y-2 border-t border-border pt-4"><FolhasTable folhas={folhasConsumo} setFolhas={setFolhasConsumo} tiposFolha={tiposFolha} estoqueAtual={estoqueAtual} disabled={saving}/></div>}
     </form>
@@ -189,3 +192,4 @@ export default function LancamentoServicos(){
   </motion.div>
  );
 }
+
