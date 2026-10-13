@@ -23,19 +23,25 @@ const TZ='America/Sao_Paulo';
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const RED='hsl(0 84% 60%)';
 const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2});
-const getSPDate=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return`${p.year}-${p.month}-${p.day}`};
-const getSPYear=()=>Number(getSPDate().slice(0,4));
+const getSPDate=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return`${p.year}-${p.month}-${p.day}`};
 const dateKey=v=>String(v||'').slice(0,10);
 const dateBR=v=>{const m=dateKey(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?`${m[3]}/${m[2]}/${m[1]}`:'-'};
+const moneyNumber=v=>{const digits=String(v??'').replace(/\D/g,'');return digits?Number(digits)/100:0};
+const moneyInput=v=>{const digits=String(v??'').replace(/\D/g,'');return digits?BRL.format(Number(digits)/100):''};
+const isReposicaoFolhaName=v=>/reposi.{0,8}de folha/i.test(String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''));
 
 export default function LancamentoDespesas(){
  const{user}=useAuth(),{toast}=useToast(),{isOnline,checkPending}=useOnlineStatus(),mounted=useRef(true);
  const[despesas,setDespesas]=useState([]),[tiposDespesa,setTiposDespesa]=useState([]),[tiposFolha,setTiposFolha]=useState([]),[loading,setLoading]=useState(true);
  const today=getSPDate();
- const[searchTerm,setSearchTerm]=useState(''),[selectedMonth,setSelectedMonth]=useState(String(Number(today.slice(5,7))-1)),[selectedYear,setSelectedYear]=useState(String(getSPYear()));
+ const[searchTerm,setSearchTerm]=useState(''),[selectedMonth,setSelectedMonth]=useState(String(Number(today.slice(5,7))-1)),[selectedYear,setSelectedYear]=useState(today.slice(0,4));
  const[dialogOpen,setDialogOpen]=useState(false),[editingId,setEditingId]=useState(null);
  const initialForm={data:getSPDate(),despesa_id:'',valor:'',forma_pagamento:'',parcelas:1,tipo_custo:'Fixo',categoria:'',recorrencia:'',tipo_lancamento:'',quantidade:'',tipo_folha:''};
  const[formData,setFormData]=useState(initialForm);
+ const selectedDespesa=tiposDespesa.find(d=>String(d.id)===String(formData.despesa_id));
+ const isEstoque=formData.tipo_lancamento==='Estoque';
+ const isReposicaoFolha=isEstoque&&isReposicaoFolhaName(selectedDespesa?.despesa);
+ const showParcelas=formData.forma_pagamento==='Cartão de Crédito';
 
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
 
@@ -59,7 +65,7 @@ export default function LancamentoDespesas(){
 
  const years=useMemo(()=>{
   const y=despesas.map(x=>Number(dateKey(x.data).slice(0,4))).filter(Number.isFinite);
-  y.push(getSPYear());
+  y.push(Number(getSPDate().slice(0,4)));
   return[...new Set(y)].sort((a,b)=>b-a);
  },[despesas]);
 
@@ -75,26 +81,11 @@ export default function LancamentoDespesas(){
  },[despesas,selectedYear,selectedMonth,searchTerm]);
 
  const total=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
- const isEstoque=formData.tipo_lancamento==='Estoque';
- const showParcelas=formData.forma_pagamento==='Cartão de Crédito';
-
- useEffect(()=>{
-  if(isEstoque&&!editingId){
-   const x=tiposDespesa.find(d=>(d.despesa||'').toLowerCase().includes('reposição de folha'));
-   if(x)setFormData(p=>({...p,despesa_id:x.id}));
-  }
- },[isEstoque,tiposDespesa,editingId]);
 
  const openDialog=item=>{
   if(item){
    setEditingId(item.id);
-   setFormData({
-    data:dateKey(item.data),despesa_id:item.despesa_id,valor:item.valor??'',
-    forma_pagamento:item.forma_pagamento||'',parcelas:item.parcelas||1,
-    tipo_custo:item.tipo_custo||'Fixo',categoria:item.categoria||'',
-    recorrencia:item.recorrencia||'',tipo_lancamento:item.tipo_lancamento||'',
-    quantidade:item.quantidade??'',tipo_folha:item.tipo_folha||''
-   });
+   setFormData({data:dateKey(item.data),despesa_id:String(item.despesa_id||''),valor:moneyInput(Math.round(Number(item.valor||0)*100)),forma_pagamento:item.forma_pagamento||'',parcelas:item.parcelas||1,tipo_custo:item.tipo_custo||'Fixo',categoria:item.categoria||item.lm_despesas?.categoria||'',recorrencia:item.recorrencia||'',tipo_lancamento:item.tipo_lancamento||'',quantidade:item.quantidade??'',tipo_folha:item.tipo_folha||''});
   }else{
    setEditingId(null);setFormData({...initialForm,data:getSPDate()});
   }
@@ -103,28 +94,36 @@ export default function LancamentoDespesas(){
 
  const closeDialog=()=>{setDialogOpen(false);setEditingId(null);setFormData({...initialForm,data:getSPDate()})};
 
+ const changeDespesa=id=>{
+  const item=tiposDespesa.find(d=>String(d.id)===String(id));
+  setFormData(p=>({...p,despesa_id:id,categoria:item?.categoria||p.categoria,tipo_folha:''}));
+ };
+
  const save=async e=>{
   e.preventDefault();
+  const valorNumerico=moneyNumber(formData.valor);
   if(!formData.despesa_id||!formData.valor||!formData.data||!formData.forma_pagamento||!formData.tipo_custo||!formData.categoria||!formData.recorrencia||!formData.tipo_lancamento||!formData.quantidade){
    toast({title:'Atenção',description:'Preencha os campos obrigatórios.',variant:'destructive'});return;
   }
-  if(!Number.isFinite(Number(formData.valor))||Number(formData.valor)<=0){
+  if(!Number.isFinite(valorNumerico)||valorNumerico<=0){
    toast({title:'Valor inválido',description:'Informe um valor maior que zero.',variant:'destructive'});return;
-  }
-  if(isEstoque&&!formData.tipo_folha){
-   toast({title:'Atenção',description:'Tipo Folha é obrigatório para Estoque.',variant:'destructive'});return;
   }
   if(!Number.isFinite(Number(formData.quantidade))||Number(formData.quantidade)<=0){
    toast({title:'Atenção',description:'Quantidade inválida.',variant:'destructive'});return;
   }
+  if(isReposicaoFolha&&!formData.tipo_folha){
+   toast({title:'Atenção',description:'Selecione o tipo de folha que será abastecido.',variant:'destructive'});return;
+  }
+
   const payload={
    user_id:user.id,data:dateKey(formData.data),despesa_id:formData.despesa_id,
-   valor:Number(formData.valor),forma_pagamento:formData.forma_pagamento,
+   valor:valorNumerico,forma_pagamento:formData.forma_pagamento,
    parcelas:showParcelas?Math.max(1,Number(formData.parcelas)||1):null,
    tipo_custo:formData.tipo_custo,categoria:formData.categoria,
    recorrencia:formData.recorrencia,tipo_lancamento:formData.tipo_lancamento,
-   quantidade:Number(formData.quantidade),tipo_folha:isEstoque?formData.tipo_folha:null
+   quantidade:Number(formData.quantidade),tipo_folha:isReposicaoFolha?formData.tipo_folha:null
   };
+
   try{
    if(!isOnline&&!editingId){
     await saveOfflineData('lm_despesas',payload);
@@ -167,7 +166,7 @@ export default function LancamentoDespesas(){
     <div className="flex flex-wrap gap-2">
      <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[150px]"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Todos os meses</SelectItem>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select>
      <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[125px]"><SelectValue/></SelectTrigger><SelectContent><SelectItem value="all">Todos os anos</SelectItem>{years.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
-     <Button variant="outline" onClick={()=>{setSearchTerm('');setSelectedMonth(String(Number(getSPDate().slice(5,7))-1));setSelectedYear(String(getSPYear()))}}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button>
+     <Button variant="outline" onClick={()=>{setSearchTerm('');setSelectedMonth(String(Number(getSPDate().slice(5,7))-1));setSelectedYear(getSPDate().slice(0,4))}}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button>
     </div>
    </div></CardContent></Card>
 
@@ -175,11 +174,15 @@ export default function LancamentoDespesas(){
     <form id="form-despesa" onSubmit={save} className="max-h-[calc(100vh-300px)] space-y-5 overflow-y-auto pr-1">
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div className="space-y-2"><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))} required className="h-11 rounded-xl bg-input"/></div>
-      <div className="space-y-2"><Label>Valor (R$) *</Label><Input type="number" min="0.01" step="0.01" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:e.target.value}))} required placeholder="0,00" className="h-11 rounded-xl bg-input"/></div>
+      <div className="space-y-2"><Label>Valor (R$) *</Label><Input type="text" inputMode="numeric" autoComplete="off" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:moneyInput(e.target.value)}))} required placeholder="R$ 0,00" className="h-11 rounded-xl bg-input tabular-nums"/></div>
      </div>
-     <div className="space-y-2"><Label>Descrição *</Label><Select value={formData.despesa_id} onValueChange={v=>setFormData(p=>({...p,despesa_id:v}))} disabled={isEstoque}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione a despesa"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{tiposDespesa.map(t=><SelectItem key={t.id} value={t.id}>{t.despesa}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
-     <div className="space-y-2"><Label>Tipo de Lançamento *</Label><Select value={formData.tipo_lancamento} onValueChange={v=>setFormData(p=>({...p,tipo_lancamento:v,tipo_folha:v==='Estoque'?p.tipo_folha:''}))}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent><SelectItem value="Estoque">Estoque</SelectItem><SelectItem value="Consumo">Consumo</SelectItem><SelectItem value="Perda">Perda</SelectItem></SelectContent></Select></div>
-     {isEstoque&&<div className="space-y-2"><Label>Tipo de Folha *</Label><Select value={formData.tipo_folha} onValueChange={v=>setFormData(p=>({...p,tipo_folha:v}))}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione a folha"/></SelectTrigger><SelectContent>{tiposFolha.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}</SelectItem>)}</SelectContent></Select></div>}
+
+     <div className="space-y-2"><Label>Descrição *</Label><Select value={formData.despesa_id} onValueChange={changeDespesa}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione a despesa"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{tiposDespesa.map(t=><SelectItem key={t.id} value={String(t.id)}>{t.despesa}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
+
+     <div className="space-y-2"><Label>Tipo de Lançamento *</Label><Select value={formData.tipo_lancamento} onValueChange={v=>setFormData(p=>({...p,tipo_lancamento:v,tipo_folha:''}))}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent><SelectItem value="Estoque">Estoque</SelectItem><SelectItem value="Consumo">Consumo</SelectItem><SelectItem value="Perda">Perda</SelectItem></SelectContent></Select></div>
+
+     {isReposicaoFolha&&<div className="space-y-2 rounded-xl border border-red-500/20 bg-red-500/5 p-4"><Label>Tipo de Folha a Abastecer *</Label><Select value={formData.tipo_folha} onValueChange={v=>setFormData(p=>({...p,tipo_folha:v}))}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione a folha"/></SelectTrigger><SelectContent>{tiposFolha.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">A quantidade informada será adicionada ao estoque desta folha.</p></div>}
+
      <div className="space-y-2"><Label>Quantidade *</Label><Input type="number" min="1" step="1" value={formData.quantidade} onChange={e=>setFormData(p=>({...p,quantidade:e.target.value}))} required className="h-11 rounded-xl bg-input"/></div>
      <div className="space-y-2"><Label>Tipo de Custo *</Label><RadioGroup value={formData.tipo_custo} onValueChange={v=>setFormData(p=>({...p,tipo_custo:v}))} className="flex gap-5 pt-2"><div className="flex items-center gap-2"><RadioGroupItem value="Fixo" id="fixo"/><Label htmlFor="fixo">Fixo</Label></div><div className="flex items-center gap-2"><RadioGroupItem value="Variável" id="variavel"/><Label htmlFor="variavel">Variável</Label></div></RadioGroup></div>
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -194,10 +197,9 @@ export default function LancamentoDespesas(){
    </ModalLancamentoPadrao>
 
    <Card className="border-border bg-card"><CardContent className="p-0"><ScrollArea className="h-[520px]"><Table>
-    <TableHeader className="sticky top-0 z-10 bg-secondary/70"><TableRow><TableHead>Data</TableHead><TableHead>Descrição</TableHead><TableHead>Tipo</TableHead><TableHead>Folha</TableHead><TableHead className="text-center">Qtd</TableHead><TableHead>Categoria</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-center">Ações</TableHead></TableRow></TableHeader>
-    <TableBody>{loading?<TableRow><TableCell colSpan={8} className="py-12 text-center">Carregando...</TableCell></TableRow>:!filtered.length?<TableRow><TableCell colSpan={8} className="py-12 text-center text-muted-foreground">Nenhuma despesa encontrada.</TableCell></TableRow>:filtered.map(x=><TableRow key={x.id} className="hover:bg-muted/40"><TableCell>{dateBR(x.data)}</TableCell><TableCell className="font-semibold">{x.lm_despesas?.despesa||'N/A'}</TableCell><TableCell><Badge variant="outline">{x.tipo_lancamento||'-'}</Badge></TableCell><TableCell>{x.tipo_folha||'-'}</TableCell><TableCell className="text-center">{x.quantidade||'-'}</TableCell><TableCell><Badge variant="outline">{x.categoria||'N/A'}</Badge></TableCell><TableCell className="text-right font-bold tabular-nums" style={{color:RED}}>{BRL.format(Number(x.valor)||0)}</TableCell><TableCell><div className="flex justify-center"><Button variant="ghost" size="icon" title="Editar despesa" onClick={()=>openDialog(x)} style={{color:RED}}><Edit className="h-4 w-4"/></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" title="Excluir despesa" className="text-red-500"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir despesa?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></TableCell></TableRow>)}</TableBody>
+    <TableHeader className="sticky top-0 z-10 bg-secondary/70"><TableRow><TableHead>Data</TableHead><TableHead>Descrição</TableHead><TableHead>Tipo</TableHead><TableHead>Folha/Produto</TableHead><TableHead className="text-center">Qtd</TableHead><TableHead>Categoria</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-center">Ações</TableHead></TableRow></TableHeader>
+    <TableBody>{loading?<TableRow><TableCell colSpan={8} className="py-12 text-center">Carregando...</TableCell></TableRow>:!filtered.length?<TableRow><TableCell colSpan={8} className="py-12 text-center text-muted-foreground">Nenhuma despesa encontrada.</TableCell></TableRow>:filtered.map(x=><TableRow key={x.id} className="hover:bg-muted/40"><TableCell>{dateBR(x.data)}</TableCell><TableCell className="font-semibold">{x.lm_despesas?.despesa||'N/A'}</TableCell><TableCell><Badge variant="outline">{x.tipo_lancamento||'-'}</Badge></TableCell><TableCell>{x.tipo_folha||x.lm_despesas?.despesa||'-'}</TableCell><TableCell className="text-center">{x.quantidade||'-'}</TableCell><TableCell><Badge variant="outline">{x.categoria||x.lm_despesas?.categoria||'N/A'}</Badge></TableCell><TableCell className="text-right font-bold tabular-nums" style={{color:RED}}>{BRL.format(Number(x.valor)||0)}</TableCell><TableCell><div className="flex justify-center"><Button variant="ghost" size="icon" title="Editar despesa" onClick={()=>openDialog(x)} style={{color:RED}}><Edit className="h-4 w-4"/></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" title="Excluir despesa" className="text-red-500"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir despesa?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></TableCell></TableRow>)}</TableBody>
    </Table></ScrollArea></CardContent></Card>
   </motion.div>
  );
 }
-
