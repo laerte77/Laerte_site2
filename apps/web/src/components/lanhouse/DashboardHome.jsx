@@ -1,4 +1,3 @@
-
 import React,{useCallback,useEffect,useMemo,useState}from'react';
 import{Wallet,Users,ArrowUp,ArrowDown,ShoppingCart,CreditCard,CalendarClock,AlertTriangle,CheckCircle2,Printer,Activity,TrendingUp}from'lucide-react';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
