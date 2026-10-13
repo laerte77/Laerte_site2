@@ -67,40 +67,27 @@ WHERE NULLIF(TRIM(produto), '') IS NOT NULL
 ORDER BY user_id, LOWER(TRIM(produto)), produto
 ON CONFLICT DO NOTHING;
 
+
 -- 5. Migrar materiais usados em lançamentos de estoque
 INSERT INTO public.lm_insumos (user_id, nome, unidade)
-SELECT DISTINCT ON (l.user_id, LOWER(TRIM(
-  CASE
-    WHEN d.despesa ILIKE '%reposi%folha%' THEN l.tipo_folha
-    ELSE d.despesa
-  END
-)))
-  l.user_id,
-  TRIM(CASE
-    WHEN d.despesa ILIKE '%reposi%folha%' THEN l.tipo_folha
-    ELSE d.despesa
-  END),
-  CASE WHEN d.despesa ILIKE '%reposi%folha%' THEN 'folha' ELSE 'unidade' END
+SELECT DISTINCT ON (l.user_id, LOWER(TRIM(n.nome)))
+  l.user_id, TRIM(n.nome), n.unidade
 FROM public.lm_lanc_despesas l
 JOIN public.lm_despesas d ON d.id = l.despesa_id
-WHERE l.tipo_lancamento = 'Estoque'
-  AND NULLIF(TRIM(CASE
-    WHEN d.despesa ILIKE '%reposi%folha%' THEN l.tipo_folha
-    ELSE d.despesa
-  END), '') IS NOT NULL
-ORDER BY l.user_id, LOWER(TRIM(
-  CASE
-    WHEN d.despesa ILIKE '%reposi%folha%' THEN l.tipo_folha
-    ELSE d.despesa
-  END
-)), MIN(l.data) OVER (
-  PARTITION BY l.user_id, LOWER(TRIM(
+CROSS JOIN LATERAL (
+  SELECT
     CASE
       WHEN d.despesa ILIKE '%reposi%folha%' THEN l.tipo_folha
       ELSE d.despesa
-    END
-  ))
-)
+    END AS nome,
+    CASE
+      WHEN d.despesa ILIKE '%reposi%folha%' THEN 'folha'
+      ELSE 'unidade'
+    END AS unidade
+) n
+WHERE l.tipo_lancamento = 'Estoque'
+  AND NULLIF(TRIM(n.nome), '') IS NOT NULL
+ORDER BY l.user_id, LOWER(TRIM(n.nome))
 ON CONFLICT DO NOTHING;
 
 -- 6. Vincular tipos de folha aos insumos migrados
