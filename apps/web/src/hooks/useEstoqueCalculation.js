@@ -1,126 +1,86 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
+import{useState,useEffect,useCallback,useRef}from'react';
+import{supabase}from'@/lib/customSupabaseClient';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
 
-export function useEstoqueCalculation() {
-    const { user } = useAuth();
-    const [stockData, setStockData] = useState({});
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [lastUpdate, setLastUpdate] = useState(new Date());
+const normalizeKey=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()||'DESCONHECIDO';
+const isReposicaoFolha=v=>/reposi.{0,8}de folha/i.test(String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''));
 
-    const isMounted = useRef(true);
+export function useEstoqueCalculation(){
+ const{user}=useAuth();
+ const[stockData,setStockData]=useState({});
+ const[loading,setLoading]=useState(true);
+ const[error,setError]=useState(null);
+ const[lastUpdate,setLastUpdate]=useState(new Date());
+ const isMounted=useRef(true);
 
-    const normalizeKey = (key) => key ? key.toString().toUpperCase().trim() : 'DESCONHECIDO';
+ const fetchAllData=useCallback(async()=>{
+  if(!user){setStockData({});setLoading(false);return}
+  try{
+   setLoading(true);setError(null);
+   const[a,b,c]=await Promise.all([
+    supabase.from('lm_estoques_inicial').select('produto,quantidade_inicial').eq('user_id',user.id),
+    supabase.from('lm_lanc_despesas').select('tipo_lancamento,tipo_folha,quantidade,lm_despesas(despesa)').eq('user_id',user.id).eq('tipo_lancamento','Estoque').not('quantidade','is',null),
+    supabase.from('lm_lanc_servicos').select('folhas_gastas').eq('user_id',user.id).not('folhas_gastas','is',null)
+   ]);
+   if(a.error)throw a.error;
+   if(b.error)throw b.error;
+   if(c.error)throw c.error;
 
-    const fetchAllData = useCallback(async () => {
-        if (!user) return;
-        
-        try {
-            setLoading(true);
-            setError(null);
+   const map={};
+   const ensure=(name)=>{
+    const key=normalizeKey(name);
+    if(!map[key])map[key]={tipo_folha:key,baseline:0,reposicoes:0,folhasGastas:0,estoqueAtual:0};
+    return map[key];
+   };
 
-            // 1. Fetch Baseline (lm_estoques_inicial)
-            const { data: baselineData, error: baselineError } = await supabase
-                .from('lm_estoques_inicial')
-                .select('produto, quantidade_inicial')
-                .eq('user_id', user.id);
+   (a.data||[]).forEach(x=>{
+    if(x.produto)ensure(x.produto).baseline+=Number(x.quantidade_inicial)||0;
+   });
 
-            if (baselineError) throw baselineError;
+   (b.data||[]).forEach(x=>{
+    const descricao=x.lm_despesas?.despesa;
+    const nome=isReposicaoFolha(descricao)?x.tipo_folha:descricao;
+    if(nome)ensure(nome).reposicoes+=Number(x.quantidade)||0;
+   });
 
-            // 2. Fetch Replenishments (lm_lanc_despesas where tipo_folha & quantidade exist)
-            const { data: repData, error: repError } = await supabase
-                .from('lm_lanc_despesas')
-                .select('tipo_folha, quantidade')
-                .eq('user_id', user.id)
-                .eq('tipo_lancamento', 'Estoque')
-                .not('tipo_folha', 'is', null)
-                .not('quantidade', 'is', null);
+   (c.data||[]).forEach(x=>{
+    if(!Array.isArray(x.folhas_gastas))return;
+    x.folhas_gastas.forEach(f=>{
+     if(!f.e_rascunho&&f.tipo_folha&&Number(f.quantidade)>0){
+      ensure(f.tipo_folha).folhasGastas+=Number(f.quantidade);
+     }
+    });
+   });
 
-            if (repError) throw repError;
+   Object.values(map).forEach(x=>{
+    x.estoqueAtual=x.baseline+x.reposicoes-x.folhasGastas;
+   });
 
-            // 3. Fetch Used (lm_lanc_servicos -> folhas_gastas)
-            const { data: servData, error: servError } = await supabase
-                .from('lm_lanc_servicos')
-                .select('folhas_gastas')
-                .eq('user_id', user.id)
-                .not('folhas_gastas', 'is', null);
+   if(isMounted.current){setStockData(map);setLastUpdate(new Date())}
+  }catch(e){
+   console.error('Erro ao calcular estoque:',e);
+   if(isMounted.current)setError(e.message||'Não foi possível calcular o estoque.');
+  }finally{
+   if(isMounted.current)setLoading(false);
+  }
+ },[user]);
 
-            if (servError) throw servError;
+ useEffect(()=>{
+  isMounted.current=true;
+  fetchAllData();
+  if(!user)return()=>{isMounted.current=false};
 
-            // Process Data
-            const map = {};
+  const channel=supabase.channel(`stock-updates-${user.id}`)
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_estoques_inicial',filter:`user_id=eq.${user.id}`},fetchAllData)
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_lanc_despesas',filter:`user_id=eq.${user.id}`},fetchAllData)
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_lanc_servicos',filter:`user_id=eq.${user.id}`},fetchAllData)
+   .subscribe();
 
-            // Initialize with baseline
-            (baselineData || []).forEach(item => {
-                const key = normalizeKey(item.produto);
-                if (!map[key]) map[key] = { tipo_folha: key, baseline: 0, reposicoes: 0, folhasGastas: 0, estoqueAtual: 0 };
-                map[key].baseline += parseInt(item.quantidade_inicial || 0, 10);
-            });
+  return()=>{
+   isMounted.current=false;
+   supabase.removeChannel(channel);
+  };
+ },[user,fetchAllData]);
 
-            // Add Replenishments
-            (repData || []).forEach(item => {
-                const key = normalizeKey(item.tipo_folha);
-                if (!map[key]) map[key] = { tipo_folha: key, baseline: 0, reposicoes: 0, folhasGastas: 0, estoqueAtual: 0 };
-                map[key].reposicoes += parseInt(item.quantidade || 0, 10);
-            });
-
-            // Add Used
-            (servData || []).forEach(item => {
-                const folhas = item.folhas_gastas || [];
-                if (Array.isArray(folhas)) {
-                    folhas.forEach(f => {
-                        if (!f.e_rascunho && f.tipo_folha && f.quantidade) {
-                            const key = normalizeKey(f.tipo_folha);
-                            if (!map[key]) map[key] = { tipo_folha: key, baseline: 0, reposicoes: 0, folhasGastas: 0, estoqueAtual: 0 };
-                            map[key].folhasGastas += parseInt(f.quantidade || 0, 10);
-                        }
-                    });
-                }
-            });
-
-            // Calculate final stock
-            Object.keys(map).forEach(key => {
-                map[key].estoqueAtual = map[key].baseline + map[key].reposicoes - map[key].folhasGastas;
-            });
-
-            if (isMounted.current) {
-                setStockData(map);
-                setLastUpdate(new Date());
-            }
-
-        } catch (err) {
-            console.error("Error calculating stock:", err);
-            if (isMounted.current) setError(err.message);
-        } finally {
-            if (isMounted.current) setLoading(false);
-        }
-    }, [user]);
-
-    useEffect(() => {
-        isMounted.current = true;
-        fetchAllData();
-
-        if (!user) return;
-
-        // Setup Subscriptions for real-time updates
-        const channels = supabase.channel('stock-updates')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'lm_estoques_inicial', filter: `user_id=eq.${user.id}` }, () => {
-                fetchAllData();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'lm_lanc_despesas', filter: `user_id=eq.${user.id}` }, () => {
-                fetchAllData();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'lm_lanc_servicos', filter: `user_id=eq.${user.id}` }, () => {
-                fetchAllData();
-            })
-            .subscribe();
-
-        return () => {
-            isMounted.current = false;
-            supabase.removeChannel(channels);
-        };
-    }, [user, fetchAllData]);
-
-    return { stockData, loading, error, refresh: fetchAllData, lastUpdate };
+ return{stockData,loading,error,refresh:fetchAllData,lastUpdate};
 }
