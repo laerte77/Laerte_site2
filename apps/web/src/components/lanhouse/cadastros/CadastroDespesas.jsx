@@ -1,5 +1,5 @@
 import React,{useState,useEffect,useCallback}from'react';
-import{Plus,Edit,Trash2,DollarSign,RefreshCw,Search}from'lucide-react';
+import{Plus,Edit,Trash2,TrendingDown,RefreshCw,Search}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -10,7 +10,7 @@ import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
-const C='hsl(var(--neon-lanhouse))';
+const RED='text-red-400';
 
 export default function CadastroDespesas(){
  const{user}=useAuth(),{toast}=useToast();
@@ -63,22 +63,22 @@ export default function CadastroDespesas(){
  return <div className="dark-lm-impressoes space-y-4">
   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
    <div className="flex items-center gap-3">
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-lanhouse)/.2)] bg-[hsl(var(--neon-lanhouse)/.08)]">
-     <DollarSign className="h-5 w-5" style={{color:C}}/>
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10">
+     <TrendingDown className="h-5 w-5 text-red-400"/>
     </div>
     <div>
-     <p className="text-[11px] font-semibold uppercase tracking-[.2em]" style={{color:C}}>Cadastros</p>
+     <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-red-400">Cadastros</p>
      <h1 className="text-2xl font-bold tracking-tight">Tipos de Despesa</h1>
      <p className="text-sm text-muted-foreground">Cadastre e organize os tipos de despesas.</p>
     </div>
    </div>
    <div className="flex flex-wrap gap-2">
     <Button variant="outline" onClick={load}><RefreshCw className="mr-2 h-4 w-4"/>Atualizar</Button>
-    <Button onClick={()=>openForm()} className="text-slate-950 hover:opacity-90" style={{background:C}}><Plus className="mr-2 h-4 w-4"/>Novo Tipo</Button>
+    <Button onClick={()=>openForm()} className="bg-red-500 text-white hover:bg-red-600"><Plus className="mr-2 h-4 w-4"/>Novo Tipo</Button>
    </div>
   </div>
 
-  <Card className="border-border bg-card">
+  <Card className="border-border bg-card/80">
    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
     <div className="relative w-full max-w-md">
      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
@@ -91,47 +91,44 @@ export default function CadastroDespesas(){
   <div className="grid gap-4 sm:grid-cols-2">
    <Card className="border-border bg-card">
     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tipos cadastrados</CardTitle></CardHeader>
-    <CardContent><p className="text-2xl font-bold" style={{color:C}}>{data.length}</p></CardContent>
+    <CardContent><p className="text-2xl font-bold text-red-400">{data.length}</p></CardContent>
    </Card>
    <Card className="border-border bg-card">
-    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Resultado da pesquisa</CardTitle></CardHeader>
+    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Resultado atual</CardTitle></CardHeader>
     <CardContent><p className="text-2xl font-bold">{list.length}</p></CardContent>
    </Card>
   </div>
 
-  <ModalLancamentoPadrao open={open} onClose={closeForm} title={editId?'Editar Tipo de Despesa':'Novo Tipo de Despesa'} description="Informe o nome do tipo de despesa." icon={DollarSign} theme="cyan" footer={<><Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button><Button type="submit" form="f-despesa" className="text-slate-950 hover:opacity-90" style={{background:C}}>{editId?'Salvar Alterações':'Salvar Tipo'}</Button></>}>
+  <ModalLancamentoPadrao open={open} onClose={closeForm} title={editId?'Editar Tipo de Despesa':'Novo Tipo de Despesa'} description="Informe o nome do tipo de despesa." icon={TrendingDown} theme="red" footer={<><Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button><Button type="submit" form="f-despesa" className="bg-red-500 text-white hover:bg-red-600">{editId?'Salvar Alterações':'Salvar Tipo'}</Button></>}>
    <form id="f-despesa" onSubmit={save} className="space-y-5">
     <div className="space-y-2">
      <Label htmlFor="nome-despesa">Nome da Despesa</Label>
-     <Input id="nome-despesa" value={nome} onChange={e=>setNome(e.target.value)} placeholder="Ex.: Internet" className="h-11 rounded-xl bg-input" required autoFocus/>
+     <Input id="nome-despesa" value={nome} onChange={e=>setNome(e.target.value)} placeholder="Ex.: Internet" className="h-11 rounded-xl bg-input" required/>
     </div>
    </form>
   </ModalLancamentoPadrao>
 
   <Card className="overflow-hidden border-border bg-card">
-   <CardHeader className="pb-3"><CardTitle className="text-lg" style={{color:C}}>Tipos de despesa cadastrados</CardTitle></CardHeader>
+   <CardHeader className="pb-3"><CardTitle className="text-lg text-red-400">Tipos de despesa cadastrados</CardTitle></CardHeader>
    <CardContent className="p-0">
     <div className="overflow-x-auto">
      <table className="w-full min-w-[440px]">
-      <thead><tr className="border-b bg-muted/30">
-       <th className="p-4 text-left text-sm font-medium text-muted-foreground">Nome da Despesa</th>
-       <th className="w-28 p-4 text-right text-sm font-medium text-muted-foreground">Ações</th>
+      <thead><tr className="border-b border-border bg-muted/30">
+       <th className="p-4 text-left text-sm font-semibold text-muted-foreground">Nome da Despesa</th>
+       <th className="w-28 p-4 text-right text-sm font-semibold text-muted-foreground">Ações</th>
       </tr></thead>
       <tbody>
        {loading?<tr><td colSpan={2} className="p-10 text-center text-muted-foreground">Carregando...</td></tr>
-       :!list.length?<tr><td colSpan={2} className="p-10 text-center text-muted-foreground"><DollarSign className="mx-auto mb-2 h-10 w-10 opacity-40"/><p>{data.length?'Nenhum resultado encontrado.':'Nenhum tipo cadastrado.'}</p></td></tr>
-       :list.map(x=><tr key={x.id} className="border-b last:border-0 hover:bg-[hsl(var(--neon-lanhouse)/.04)]">
+       :!list.length?<tr><td colSpan={2} className="p-10 text-center text-muted-foreground"><TrendingDown className="mx-auto mb-2 h-10 w-10 opacity-50"/><p>{data.length?'Nenhum tipo corresponde à pesquisa.':'Nenhum tipo de despesa cadastrado.'}</p></td></tr>
+       :list.map(x=><tr key={x.id} className="border-b border-border last:border-0 hover:bg-red-500/5">
         <td className="p-4 font-medium">{x.despesa}</td>
         <td className="p-4 text-right">
          <div className="flex justify-end gap-1">
-          <Button type="button" variant="ghost" size="icon" onClick={()=>openForm(x)} style={{color:C}} title="Editar tipo de despesa" aria-label={`Editar ${x.despesa}`}><Edit className="h-4 w-4"/></Button>
+          <Button type="button" variant="ghost" size="icon" onClick={()=>openForm(x)} className="text-blue-400 hover:bg-blue-500/10" title="Editar" aria-label={`Editar ${x.despesa}`}><Edit className="h-4 w-4"/></Button>
           <AlertDialog>
-           <AlertDialogTrigger asChild><Button type="button" variant="ghost" size="icon" className="text-red-400 hover:bg-red-500/10" title="Excluir tipo de despesa" aria-label={`Excluir ${x.despesa}`}><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
+           <AlertDialogTrigger asChild><Button type="button" variant="ghost" size="icon" className="text-red-400 hover:bg-red-500/10" title="Excluir" aria-label={`Excluir ${x.despesa}`}><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
            <AlertDialogContent className="dark-lm-impressoes border-border bg-card">
-            <AlertDialogHeader>
-             <AlertDialogTitle>Excluir tipo de despesa?</AlertDialogTitle>
-             <AlertDialogDescription>Deseja excluir <strong>{x.despesa}</strong>? Essa ação não poderá ser desfeita.</AlertDialogDescription>
-            </AlertDialogHeader>
+            <AlertDialogHeader><AlertDialogTitle>Confirmar exclusão</AlertDialogTitle><AlertDialogDescription>Deseja remover o tipo <strong>{x.despesa}</strong>? Essa ação não poderá ser desfeita.</AlertDialogDescription></AlertDialogHeader>
             <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600 text-white hover:bg-red-700">Excluir</AlertDialogAction></AlertDialogFooter>
            </AlertDialogContent>
           </AlertDialog>
@@ -145,3 +142,4 @@ export default function CadastroDespesas(){
   </Card>
  </div>;
 }
+
