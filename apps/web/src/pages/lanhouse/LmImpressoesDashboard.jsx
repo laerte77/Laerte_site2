@@ -10,6 +10,7 @@ import CadastroClientes from'@/components/lanhouse/cadastros/CadastroClientes';
 import CadastroServicos from'@/components/lanhouse/cadastros/CadastroServicos';
 import CadastroDespesas from'@/components/lanhouse/cadastros/CadastroDespesas';
 import CadastroTiposFolhas from'@/components/lanhouse/cadastros/CadastroTiposFolhas';
+import CadastroInsumos from'@/components/lanhouse/cadastros/CadastroInsumos';
 import CadastroPedidos from'@/components/lanhouse/cadastros/CadastroPedidos';
 import LancamentoServicos from'@/components/lanhouse/lancamentos/LancamentoServicos';
 import LancamentoDespesas from'@/components/lanhouse/lancamentos/LancamentoDespesas';
@@ -70,20 +71,17 @@ export default function LmImpressoesDashboard(){
  return(
   <div className="flex min-h-screen w-full bg-gradient-professional" style={{'--primary':'var(--neon-lanhouse)','--ring':'var(--neon-lanhouse)'}}>
    <Sidebar isOpen={isSidebarOpen} setOpen={setSidebarOpen} isMobile={isMobile}/>
-
    <div className={cn('flex flex-1 flex-col transition-[margin] duration-300',!isMobile&&(isSidebarOpen?'ml-60':'ml-20'))}>
     <Header toggleSidebar={()=>setSidebarOpen(v=>!v)} isSidebarOpen={isSidebarOpen}/>
-
     <main className="relative flex-1 overflow-y-auto bg-transparent p-2 md:p-4 lg:p-5">
      <Routes>
       <Route path="/" element={<DashboardHome/>}/>
       <Route path="despesas-previstas-mes" element={<ContasMesLM/>}/>
-
       <Route path="cadastros/clientes" element={<CadastroClientes/>}/>
       <Route path="cadastros/servicos" element={<CadastroServicos/>}/>
       <Route path="cadastros/despesas" element={<CadastroDespesas/>}/>
       <Route path="cadastros/tipos-folha" element={<CadastroTiposFolhas/>}/>
-
+      <Route path="cadastros/insumos" element={<CadastroInsumos/>}/>
       <Route path="lancamentos/servicos" element={<LancamentoServicos/>}/>
       <Route path="lancamentos/despesas" element={<LancamentoDespesas/>}/>
       <Route path="lancamentos/folhas" element={<LancamentoFolhas/>}/>
@@ -91,33 +89,24 @@ export default function LmImpressoesDashboard(){
       <Route path="lancamentos/clientes-debito" element={<LancamentoClientesDebito/>}/>
       <Route path="lancamentos/dizimos-ofertas" element={<LancamentoDizimosOfertas/>}/>
       <Route path="lancamentos/metas" element={<LancamentoMetas/>}/>
-
       <Route path="custos/lancamentos" element={<LancamentoCustos/>}/>
       <Route path="custos/controle" element={<ControleFolhas/>}/>
       <Route path="custos/relatorio-custos" element={<RelatorioCustosPorTipo/>}/>
       <Route path="custos/relatorio-lucro" element={<RelatorioLucroMensal/>}/>
-
       <Route path="pedidos/cadastro" element={<CadastroPedidos/>}/>
       <Route path="pedidos/consulta" element={<ConsultaPedidos/>}/>
-
       <Route path="relatorios/servicos" element={<RelatorioServicos/>}/>
       <Route path="relatorios/despesas" element={<RelatorioDespesas/>}/>
       <Route path="relatorios/despesas-previstas" element={<RelatorioDespesasPrevistas/>}/>
       <Route path="relatorios/clientes-debito" element={<RelatorioClientesDebito/>}/>
-
       <Route path="estoques/inicial" element={<EstoqueInicial/>}/>
       <Route path="estoques/controle" element={<ControleEstoque/>}/>
       <Route path="estoques" element={<Estoques/>}/>
-
       <Route path="*" element={<Navigate to="/lm-impressoes/dashboard" replace/>}/>
      </Routes>
     </main>
    </div>
-
-   {isMobile&&isSidebarOpen&&(
-    <div onClick={()=>setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" aria-hidden="true"/>
-   )}
-
+   {isMobile&&isSidebarOpen&&<div onClick={()=>setSidebarOpen(false)} className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" aria-hidden="true"/>}
    <Toaster/>
   </div>
  );
