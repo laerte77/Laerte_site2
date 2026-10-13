@@ -4,7 +4,7 @@ import {
   MonitorPlay, Home, List, BarChart3, DollarSign, LogOut,
   LayoutGrid, CheckSquare, PlusCircle, PackageSearch,
   ClipboardList, CalendarDays, Users, Printer, Wallet,
-  ShoppingCart, Boxes, Target, Search, FileBarChart
+  ShoppingCart, Boxes, Target, Search, FileBarChart, Package
 } from 'lucide-react';
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger
@@ -105,6 +105,7 @@ export default function Sidebar({ isOpen, setOpen, isMobile }) {
               <NavLink to="/lm-impressoes/dashboard/cadastros/servicos" icon={Printer}>Serviços</NavLink>
               <NavLink to="/lm-impressoes/dashboard/cadastros/despesas" icon={Wallet}>Despesas</NavLink>
               <NavLink to="/lm-impressoes/dashboard/cadastros/tipos-folha" icon={List}>Tipos de Folha</NavLink>
+              <NavLink to="/lm-impressoes/dashboard/cadastros/insumos" icon={Package}>Insumos</NavLink>
             </Group>
 
             <Group value="lancamentos" icon={FileBarChart} title="Lançamentos">
