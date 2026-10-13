@@ -1,3 +1,4 @@
+
 import React,{useCallback,useEffect,useMemo,useState}from'react';
 import{Wallet,Users,ArrowUp,ArrowDown,ShoppingCart,CreditCard,CalendarClock,AlertTriangle,CheckCircle2,Printer,Activity,TrendingUp}from'lucide-react';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
@@ -12,6 +13,7 @@ const monthNames=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho',
 const years=Array.from({length:5},(_,i)=>new Date().getFullYear()-i);
 const fmt=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
 const getMonth=d=>/^\d{4}-\d{2}-\d{2}/.test(String(d))?Number(String(d).slice(5,7))-1:new Date(d).getMonth();
+const dateKey=(y,m,d)=>`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
 export default function DashboardHome(){
  const{user,isAdmin}=useAuth(),now=new Date();
@@ -25,17 +27,17 @@ export default function DashboardHome(){
 
   try{
    const{year,month}=filters;
-   const start=month==='all'?new Date(Date.UTC(year,0,1)):new Date(Date.UTC(year,Number(month),1));
-   const end=month==='all'?new Date(Date.UTC(year,11,31,23,59,59,999)):new Date(Date.UTC(year,Number(month)+1,0,23,59,59,999));
-   const ys=new Date(Date.UTC(year,0,1)).toISOString(),ye=new Date(Date.UTC(year,11,31,23,59,59,999)).toISOString();
+   const start=dateKey(year,month==='all'?1:Number(month)+1,1);
+   const end=dateKey(year,month==='all'?12:Number(month)+1,month==='all'?31:new Date(year,Number(month)+1,0).getDate());
+   const ys=dateKey(year,1,1),ye=dateKey(year,12,31);
 
    const[servRes,despRes,cliRes,pedRes,debRes,prevRes,allServRes,allDespRes,allDizimosRes,entAnoRes,despAnoRes]=await Promise.all([
-    getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_servicos','data,valor,cliente,cliente_id,lm_servicos(servico)').gte('data',start.toISOString()).lte('data',end.toISOString()),
-    getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_despesas','data,valor').gte('data',start.toISOString()).lte('data',end.toISOString()),
+    getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_servicos','data,valor,cliente,cliente_id,lm_servicos(servico)').gte('data',start).lte('data',end),
+    getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_despesas','data,valor').gte('data',start).lte('data',end),
     getAccessibleDataQuery(user.id,isAdmin,'lm_clientes','id'),
-    getAccessibleDataQuery(user.id,isAdmin,'lm_pedidos','data_pedido,status').gte('data_pedido',start.toISOString().slice(0,10)).lte('data_pedido',end.toISOString().slice(0,10)),
+    getAccessibleDataQuery(user.id,isAdmin,'lm_pedidos','data_pedido,status').gte('data_pedido',start).lte('data_pedido',end),
     getAccessibleDataQuery(user.id,isAdmin,'lm_clientes_debito','cliente,status,valor').eq('status','DEVENDO'),
-    getAccessibleDataQuery(user.id,isAdmin,'lm_despesas_previstas','data_vencimento,valor,status').gte('data_vencimento',start.toISOString().slice(0,10)).lte('data_vencimento',end.toISOString().slice(0,10)),
+    getAccessibleDataQuery(user.id,isAdmin,'lm_despesas_previstas','data_vencimento,valor,status').gte('data_vencimento',start).lte('data_vencimento',end),
     getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_servicos','valor'),
     getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_despesas','valor'),
     getAccessibleDataQuery(user.id,isAdmin,'lm_dizimos_ofertas','valor'),
@@ -101,7 +103,6 @@ export default function DashboardHome(){
  if(error)return <div className="mx-auto max-w-7xl p-4"><NeonCard colorScheme="lanhouse" className="p-8 text-center"><AlertTriangle className="mx-auto mb-3 h-10 w-10 text-destructive"/><p className="font-semibold text-destructive">Erro ao carregar o painel</p><p className="mt-2 text-sm text-muted-foreground">{error}</p></NeonCard></div>;
 
  return <div className="relative mx-auto w-full max-w-[1400px] space-y-5 p-2 md:space-y-6 md:p-3">
-
   <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[hsl(var(--neon-lanhouse)/.10)] blur-3xl"/>
   <div className="pointer-events-none absolute -left-24 top-[380px] h-56 w-56 rounded-full bg-cyan-400/5 blur-3xl"/>
 
@@ -138,7 +139,6 @@ export default function DashboardHome(){
      <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full w-full rounded-full bg-[hsl(var(--neon-lanhouse))]"/></div>
     </div>
    </NeonCard>
-
    <KPICard colorScheme="lanhouse" icon={ArrowUp} label="Entradas • Período" value={data.entradas} isCurrency iconColor="lanhouse" className="w-full"/>
    <KPICard colorScheme="lanhouse" icon={ArrowDown} label="Despesas • Período" value={data.despesas} isCurrency iconColor="orange" className="w-full"/>
   </div>
@@ -195,6 +195,5 @@ export default function DashboardHome(){
    <div className="mb-4 flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wider text-muted-foreground">Monitoramento</p><h3 className="text-lg font-semibold">Atenção do LM Impressões</h3><p className="mt-1 text-xs text-muted-foreground">Pendências financeiras e operacionais</p></div><span className="rounded-full bg-[hsl(var(--neon-lanhouse)/.10)] px-2.5 py-1 text-[10px] font-semibold uppercase text-[hsl(var(--neon-lanhouse))]">{alertas.length} {alertas.length===1?'alerta':'alertas'}</span></div>
    {alertas.length?<div className="grid grid-cols-1 gap-3 md:grid-cols-3">{alertas.map((a,i)=><div key={i} className="rounded-xl border border-orange-400/15 bg-orange-400/5 p-4"><a.icon className="mb-3 h-5 w-5 text-orange-300"/><p className="font-semibold">{a.title}</p><p className="mt-1 text-xs text-muted-foreground">{a.description}</p></div>)}</div>:<div className="flex flex-col items-center justify-center py-8 text-center"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-[hsl(var(--neon-lanhouse)/.10)]"><CheckCircle2 className="h-6 w-6 text-[hsl(var(--neon-lanhouse))]"/></div><p className="mt-3 font-semibold">Tudo em ordem</p><p className="mt-1 text-xs text-muted-foreground">Nenhuma pendência financeira ou operacional encontrada.</p></div>}
   </NeonCard>
-
  </div>;
 }
