@@ -1,113 +1,182 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { FileSearch, Download, UserX } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import React,{useState,useEffect,useMemo,useCallback}from'react';
+import{motion}from'framer-motion';
+import{FileSearch,Download,RefreshCw,Calendar,Filter,RotateCcw,Loader2,Users,Wallet,Clock}from'lucide-react';
+import{Button}from'@/components/ui/button';
+import{Input}from'@/components/ui/input';
+import{Label}from'@/components/ui/label';
+import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
+import{Card,CardContent,CardDescription,CardHeader,CardTitle}from'@/components/ui/card';
+import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
+import{Badge}from'@/components/ui/badge';
+import{ScrollArea}from'@/components/ui/scroll-area';
+import{useToast}from'@/components/ui/use-toast';
+import{supabase}from'@/lib/customSupabaseClient';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
 
-const RelatorioClientesDebito = () => {
-    const { toast } = useToast();
-    const { user } = useAuth();
-    const [debitos, setDebitos] = useState([]);
-    const [clientes, setClientes] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [filters, setFilters] = useState({ dataInicio: '', dataFim: '', cliente: 'todos', status: 'todos' });
+const CYAN='#06b6d4';
+const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
+const dateKey=v=>String(v||'').slice(0,10);
+const collator=new Intl.Collator('pt-BR',{sensitivity:'base'});
+const money=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2});
+const dateBR=v=>{const d=dateKey(v);if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return'—';const[y,m,day]=d.split('-');return`${day}/${m}/${y}`};
+const todaySP=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return`${p.year}-${p.month}-${p.day}`};
+const calculateDays=value=>{const date=dateKey(value);if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return 0;const[a,b,c]=date.split('-').map(Number);const[y,m,d]=todaySP().split('-').map(Number);return Math.max(0,Math.floor((Date.UTC(y,m-1,d)-Date.UTC(a,b-1,c))/86400000))};
+const csvCell=v=>`"${String(v??'').replace(/"/g,'""')}"`;
 
-    const fetchData = useCallback(async () => {
-        if (!user) return;
-        setLoading(true);
-        const [debitosRes, clientesRes] = await Promise.all([
-            supabase.from('lm_clientes_debito').select('*').eq('user_id', user.id),
-            supabase.from('lm_clientes').select('id, nome').eq('user_id', user.id).order('nome', { ascending: true }),
-        ]);
-        if (debitosRes.error) toast({ title: 'Erro ao buscar débitos', variant: 'destructive' });
-        else setDebitos(debitosRes.data);
-        if (clientesRes.error) toast({ title: 'Erro ao buscar clientes', variant: 'destructive' });
-        else setClientes(clientesRes.data);
-        setLoading(false);
-    }, [user, toast]);
+export default function RelatorioClientesDebito(){
+ const{toast}=useToast();
+ const{user}=useAuth();
+ const[debitos,setDebitos]=useState([]);
+ const[clientes,setClientes]=useState([]);
+ const[loading,setLoading]=useState(true);
+ const[filters,setFilters]=useState({dataInicio:'',dataFim:'',cliente:'todos',status:'todos'});
 
-    useEffect(() => {
-        fetchData();
-        if (!user) return;
-        const channel = supabase.channel('relatorio_clientes_debito_changes').on('postgres_changes', { event: '*', schema: 'public' }, fetchData).subscribe();
-        return () => supabase.removeChannel(channel);
-    }, [user, fetchData]);
+ const fetchData=useCallback(async()=>{
+  if(!user){setDebitos([]);setClientes([]);setLoading(false);return}
+  setLoading(true);
+  try{
+   const[a,b]=await Promise.all([
+    supabase.from('lm_clientes_debito').select('*').eq('user_id',user.id),
+    supabase.from('lm_clientes').select('id,nome').eq('user_id',user.id).order('nome',{ascending:true})
+   ]);
+   if(a.error)throw a.error;
+   if(b.error)throw b.error;
+   setDebitos(a.data||[]);
+   setClientes(b.data||[]);
+  }catch(e){
+   console.error('Erro no relatório de débitos:',e);
+   toast({title:'Erro ao carregar relatório',description:e.message||'Não foi possível buscar os dados.',variant:'destructive'});
+  }finally{setLoading(false)}
+ },[user,toast]);
 
-    const filteredDebitos = useMemo(() => {
-        return debitos.filter(d => {
-            const dataDebito = new Date(d.data);
-            const dataInicio = filters.dataInicio ? new Date(filters.dataInicio) : null;
-            const dataFim = filters.dataFim ? new Date(filters.dataFim) : null;
-            if (dataInicio && dataDebito < dataInicio) return false;
-            if (dataFim && dataDebito > dataFim) return false;
-            if (filters.cliente !== 'todos' && d.cliente !== filters.cliente) return false;
-            if (filters.status !== 'todos' && d.status !== filters.status) return false;
-            return true;
-        }).sort((a, b) => new Date(b.data) - new Date(a.data));
-    }, [debitos, filters]);
+ useEffect(()=>{
+  fetchData();
+  if(!user)return;
+  const channel=supabase.channel(`relatorio_debitos_${user.id}`)
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_clientes_debito',filter:`user_id=eq.${user.id}`},fetchData)
+   .subscribe();
+  return()=>supabase.removeChannel(channel);
+ },[user,fetchData]);
 
-    const handleExport = () => toast({ title: '🚧 Funcionalidade em breve! 🚀', description: 'A exportação para PDF/Excel será implementada em breve!' });
+ const nomesClientes=useMemo(()=>[...new Set(clientes.map(x=>x.nome).filter(Boolean))].sort(collator.compare),[clientes]);
 
-    const getStatusBadge = (status) => {
-        switch (status) {
-            case 'PAGO': return <Badge variant="default" className="bg-green-500">Pago</Badge>;
-            case 'DEVENDO': return <Badge variant="destructive">Devendo</Badge>;
-            case 'PARCIAL': return <Badge variant="secondary" className="bg-yellow-500">Parcial</Badge>;
-            default: return <Badge variant="outline">{status}</Badge>;
-        }
-    };
+ const filteredDebitos=useMemo(()=>debitos.filter(d=>{
+  const date=dateKey(d.data);
+  if(filters.dataInicio&&(!date||date<filters.dataInicio))return false;
+  if(filters.dataFim&&(!date||date>filters.dataFim))return false;
+  if(filters.cliente!=='todos'&&d.cliente!==filters.cliente)return false;
+  if(filters.status!=='todos'&&norm(d.status)!==filters.status)return false;
+  return true;
+ }).sort((a,b)=>dateKey(b.data).localeCompare(dateKey(a.data))),[debitos,filters]);
 
-    const calculateDays = (dateString) => {
-        const debtDate = new Date(dateString);
-        const today = new Date();
-        const differenceInTime = today.getTime() - debtDate.getTime();
-        return Math.floor(differenceInTime / (1000 * 3600 * 24));
-    };
+ const stats=useMemo(()=>({
+  total:filteredDebitos.length,
+  devendo:filteredDebitos.filter(x=>norm(x.status)==='DEVENDO').length,
+  parcial:filteredDebitos.filter(x=>norm(x.status)==='PARCIAL').length,
+  pagos:filteredDebitos.filter(x=>norm(x.status)==='PAGO').length
+ }),[filteredDebitos]);
 
-    return (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            <div className="flex justify-between items-start">
-                <div><h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">Relatório de Clientes com Débito</h2><p className="text-muted-foreground">Filtre e visualize os débitos dos clientes.</p></div>
-                <Button onClick={handleExport} variant="outline" className="text-cyan-400 border-cyan-400 hover:bg-cyan-400/10 hover:text-cyan-300"><Download className="w-4 h-4 mr-2" />Exportar</Button>
-            </div>
-            <div className="bg-card/80 p-6 rounded-xl border border-cyan-500/10">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                    <div><Label className="text-muted-foreground">Data Inicial</Label><Input type="date" value={filters.dataInicio} onChange={e => setFilters({ ...filters, dataInicio: e.target.value })} className="bg-slate-900 border-slate-700 text-slate-100" /></div>
-                    <div><Label className="text-muted-foreground">Data Final</Label><Input type="date" value={filters.dataFim} onChange={e => setFilters({ ...filters, dataFim: e.target.value })} className="bg-slate-900 border-slate-700 text-slate-100" /></div>
-                    <div><Label className="text-muted-foreground">Filtrar por Cliente</Label><Select value={filters.cliente} onValueChange={(v) => setFilters({ ...filters, cliente: v })}><SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent className="bg-slate-900 border-slate-700 text-slate-100"><ScrollArea className="h-48"><SelectItem value="todos">Todos os Clientes</SelectItem>{clientes.map(c => <SelectItem key={c.id} value={c.nome}>{c.nome}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
-                    <div><Label className="text-muted-foreground">Status</Label><Select value={filters.status} onValueChange={(v) => setFilters({ ...filters, status: v })}><SelectTrigger className="bg-slate-900 border-slate-700 text-slate-100"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent className="bg-slate-900 border-slate-700 text-slate-100"><SelectItem value="todos">Todos</SelectItem><SelectItem value="DEVENDO">Devendo</SelectItem><SelectItem value="PAGO">Pago</SelectItem><SelectItem value="PARCIAL">Parcial</SelectItem></SelectContent></Select></div>
-                </div>
-            </div>
-            <div className="bg-card/80 backdrop-blur-sm border border-cyan-500/10 rounded-xl shadow-lg shadow-cyan-500/5 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead><tr className="border-b border-cyan-500/10"><th className="p-4 text-left text-muted-foreground">Data</th><th className="p-4 text-left text-muted-foreground">Cliente</th><th className="p-4 text-left text-muted-foreground">Serviço</th><th className="p-4 text-left text-muted-foreground">Status</th><th className="p-4 text-left text-muted-foreground">Dias da Dívida</th><th className="p-4 text-right text-muted-foreground">Valor</th></tr></thead>
-                        <tbody>
-                            {loading ? (<tr><td colSpan="6" className="p-8 text-center">Carregando...</td></tr>) : filteredDebitos.length === 0 ? (<tr><td colSpan="6" className="p-8 text-center text-muted-foreground"><FileSearch className="mx-auto w-10 h-10 mb-2" />Nenhum débito encontrado para os filtros aplicados.</td></tr>) : (
-                                filteredDebitos.map((debito) => (
-                                    <tr key={debito.id} className="border-b border-cyan-500/10 last:border-b-0 hover:bg-blue-500/10 text-foreground transition-colors duration-200">
-                                        <td className="p-4">{new Date(debito.data).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                                        <td className="p-4">{debito.cliente}</td>
-                                        <td className="p-4">{debito.servico}</td>
-                                        <td className="p-4">{getStatusBadge(debito.status)}</td>
-                                        <td className="p-4">{debito.status === 'DEVENDO' ? `${calculateDays(debito.data)} dias` : '-'}</td>
-                                        <td className="p-4 text-right font-semibold text-cyan-400">R$ {parseFloat(debito.valor).toFixed(2)}</td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </motion.div>
-    );
-};
+ const setFilter=(key,value)=>setFilters(prev=>({...prev,[key]:value}));
 
-export default RelatorioClientesDebito;
+ const clearFilters=()=>setFilters({dataInicio:'',dataFim:'',cliente:'todos',status:'todos'});
+
+ const handleExport=()=>{
+  if(!filteredDebitos.length){
+   toast({title:'Sem dados',description:'Não há registros para exportar com os filtros atuais.',variant:'destructive'});
+   return;
+  }
+  const rows=[
+   ['Data','Cliente','Serviço','Status','Dias da Dívida','Valor'],
+   ...filteredDebitos.map(d=>[
+    dateBR(d.data),d.cliente,d.servico,d.status,
+    norm(d.status)==='DEVENDO'?calculateDays(d.data):'-',
+    Number(d.valor||0).toFixed(2).replace('.',',')
+   ])
+  ];
+  const csv='\uFEFF'+rows.map(row=>row.map(csvCell).join(';')).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=url;
+  link.download=`Relatorio_Clientes_Debito_${todaySP()}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast({title:'Exportação concluída',description:`${filteredDebitos.length} registro(s) exportado(s).`});
+ };
+
+ const statusBadge=status=>{
+  const s=norm(status);
+  if(s==='PAGO')return <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400">Pago</Badge>;
+  if(s==='DEVENDO')return <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-400">Devendo</Badge>;
+  if(s==='PARCIAL')return <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-400">Parcial</Badge>;
+  return <Badge variant="outline">{status||'Não informado'}</Badge>;
+ };
+
+ const Stat=({title,value,Icon,color})=><Card className="border-cyan-500/20 bg-card/80"><CardContent className="flex items-center justify-between gap-3 p-4"><div><p className="text-xs uppercase tracking-wider text-muted-foreground">{title}</p><p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p></div><Icon className={`h-6 w-6 ${color}`}/></CardContent></Card>;
+
+ return <motion.div initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} className="dark-lm-impressoes space-y-5 py-5">
+  <Card className="border-cyan-500/20 bg-card/80">
+   <CardContent className="flex flex-col justify-between gap-4 p-5 lg:flex-row lg:items-center">
+    <div className="flex items-start gap-3">
+     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-cyan-500/25 bg-cyan-500/10"><FileSearch className="h-6 w-6 text-cyan-400"/></div>
+     <div><p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">Relatórios • LM Impressões</p><h1 className="mt-1 text-2xl font-bold">Clientes com Débito</h1><p className="mt-1 text-sm text-muted-foreground">Consulte pendências, acompanhe os registros e exporte os resultados.</p></div>
+    </div>
+    <div className="flex flex-wrap gap-2">
+     <Button variant="outline" onClick={fetchData} disabled={loading} className="border-cyan-500/40 text-cyan-400"><RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>Atualizar</Button>
+     <Button variant="outline" onClick={handleExport} disabled={loading||!filteredDebitos.length} className="border-cyan-500/40 text-cyan-400"><Download className="mr-2 h-4 w-4"/>Exportar CSV</Button>
+    </div>
+   </CardContent>
+  </Card>
+
+  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+   <Stat title="Registros filtrados" value={stats.total} Icon={FileSearch} color="text-cyan-400"/>
+   <Stat title="Devendo" value={stats.devendo} Icon={Clock} color="text-red-400"/>
+   <Stat title="Pagamento parcial" value={stats.parcial} Icon={Wallet} color="text-amber-400"/>
+   <Stat title="Pagos" value={stats.pagos} Icon={Users} color="text-emerald-400"/>
+  </div>
+
+  <Card className="border-cyan-500/20 bg-card/80">
+   <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Filter className="h-5 w-5 text-cyan-400"/>Filtros</CardTitle><CardDescription>Os resultados e os indicadores são atualizados conforme os filtros selecionados.</CardDescription></CardHeader>
+   <CardContent>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+     <div className="space-y-2"><Label>Data inicial</Label><Input type="date" value={filters.dataInicio} onChange={e=>setFilter('dataInicio',e.target.value)}/></div>
+     <div className="space-y-2"><Label>Data final</Label><Input type="date" value={filters.dataFim} onChange={e=>setFilter('dataFim',e.target.value)}/></div>
+     <div className="space-y-2"><Label>Cliente</Label><Select value={filters.cliente} onValueChange={v=>setFilter('cliente',v)}><SelectTrigger><SelectValue placeholder="Selecione o cliente"/></SelectTrigger><SelectContent><ScrollArea className="h-48"><SelectItem value="todos">Todos os clientes</SelectItem>{nomesClientes.map(nome=><SelectItem key={nome} value={nome}>{nome}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
+     <div className="space-y-2"><Label>Status</Label><Select value={filters.status} onValueChange={v=>setFilter('status',v)}><SelectTrigger><SelectValue placeholder="Todos os status"/></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="DEVENDO">Devendo</SelectItem><SelectItem value="PARCIAL">Parcial</SelectItem><SelectItem value="PAGO">Pago</SelectItem></SelectContent></Select></div>
+     <div className="flex items-end"><Button variant="outline" className="w-full" onClick={clearFilters}><RotateCcw className="mr-2 h-4 w-4"/>Limpar filtros</Button></div>
+    </div>
+    {filters.dataInicio&&filters.dataFim&&filters.dataInicio>filters.dataFim&&<p className="mt-3 text-sm text-red-400">A data inicial deve ser anterior ou igual à data final.</p>}
+   </CardContent>
+  </Card>
+
+  <Card className="overflow-hidden border-cyan-500/20 bg-card/80">
+   <CardHeader className="border-b border-cyan-500/10">
+    <div className="flex flex-wrap items-center justify-between gap-2"><div><CardTitle className="text-lg">Resultados</CardTitle><CardDescription>Débitos ordenados do mais recente para o mais antigo.</CardDescription></div><Badge variant="outline" className="border-cyan-500/30 text-cyan-400">{filteredDebitos.length} registro(s)</Badge></div>
+   </CardHeader>
+   <CardContent className="p-0">
+    <ScrollArea className="w-full">
+     <div className="overflow-x-auto">
+      <Table>
+       <TableHeader className="bg-secondary/70"><TableRow><TableHead>Data</TableHead><TableHead>Cliente</TableHead><TableHead>Serviço</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Dias da dívida</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader>
+       <TableBody>
+        {loading?<TableRow><TableCell colSpan={6} className="py-12 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin text-cyan-400"/>Carregando registros...</TableCell></TableRow>
+        :filters.dataInicio&&filters.dataFim&&filters.dataInicio>filters.dataFim?<TableRow><TableCell colSpan={6} className="py-10 text-center text-red-400">Corrija o período selecionado.</TableCell></TableRow>
+        :!filteredDebitos.length?<TableRow><TableCell colSpan={6} className="py-12 text-center text-muted-foreground"><FileSearch className="mx-auto mb-2 h-10 w-10 opacity-50"/>Nenhum registro encontrado para os filtros aplicados.</TableCell></TableRow>
+        :filteredDebitos.map(d=><TableRow key={d.id} className="hover:bg-cyan-500/5">
+         <TableCell className="whitespace-nowrap">{dateBR(d.data)}</TableCell>
+         <TableCell className="font-medium">{d.cliente||'—'}</TableCell>
+         <TableCell>{d.servico||'—'}</TableCell>
+         <TableCell>{statusBadge(d.status)}</TableCell>
+         <TableCell className="text-right tabular-nums">{norm(d.status)==='DEVENDO'?`${calculateDays(d.data)} dias`:'—'}</TableCell>
+         <TableCell className="whitespace-nowrap text-right font-semibold text-cyan-400">{money(d.valor)}</TableCell>
+        </TableRow>)}
+       </TableBody>
+      </Table>
+     </div>
+    </ScrollArea>
+   </CardContent>
+  </Card>
+ </motion.div>;
+}
