@@ -1,4 +1,5 @@
 import React,{useState,useEffect,useMemo,useCallback}from'react';
+import{motion}from'framer-motion';
 import{FileSearch,Filter,Download,RefreshCw,Receipt,Calendar,RotateCcw,Loader2,TrendingDown,TrendingUp}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
