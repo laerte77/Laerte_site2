@@ -130,15 +130,16 @@ export default function LancamentoFolhas(){
   }
  };
 
- const handleDelete=async id=>{
+  const handleDelete=async id=>{
   try{
    const{error}=await supabase.from('lm_folhas').delete().eq('id',id).eq('user_id',user.id);
    if(error)throw error;
    toast({title:'Movimentação excluída',description:'O estoque será recalculado.'});
    await fetchData();
   }catch(e){
- toast({title:'Erro ao excluir',description:e.message||'Não foi possível excluir.',variant:'destructive'});
-}
+   toast({title:'Erro ao excluir',description:e.message||'Não foi possível excluir.',variant:'destructive'});
+  }
+};
 
  const clearFilters=()=>{setSearchTerm('');setSelectedMonth(String(new Date().getMonth()));setSelectedYear(String(new Date().getFullYear()))};
 
