@@ -68,7 +68,7 @@ export default function CadastroInsumos(){
   else{toast({title:'Sucesso',description:'Insumo excluído.'});await load()}
  };
 
- const list=data.filter(x=>`${x.nome||''} ${x.unidade||''}`.toLowerCase().includes(search.trim().toLowerCase()));
+ const list=data.filter(x=>`${x.nome||''} ${x.unidade||''}`.toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR',{sensitivity:'base',numeric:true}));
  const fmt=v=>v==null||v===''?'—':Number(v).toLocaleString('pt-BR',{maximumFractionDigits:3});
 
  return <div className="dark-lm-impressoes space-y-4">
