@@ -54,6 +54,11 @@ export function useEstoqueCalculation(){
     return map[key];
    };
 
+   // Cria uma linha para cada insumo cadastrado, mesmo sem movimentações.
+   (d.data||[]).forEach(i=>{
+    ensure(nomePorInsumo(i.id)||i.nome);
+   });
+
    (a.data||[]).forEach(x=>{
     const nome=nomePorInsumo(x.insumo_id)||x.produto;
     if(nome)ensure(nome).baseline+=Number(x.quantidade_inicial)||0;
