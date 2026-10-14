@@ -1,5 +1,5 @@
 import React,{useState,useEffect,useCallback}from'react';
-import{Plus,Edit,Trash2,TrendingDown,RefreshCw,Search,PackagePlus,ReceiptText}from'lucide-react';
+import{Plus,Edit,Trash2,TrendingDown,RefreshCw,Search,PackagePlus,Receipt}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -195,8 +195,8 @@ export default function CadastroDespesas(){
         <SelectItem value="Estoque">
          <span className="flex items-center gap-2"><PackagePlus className="h-4 w-4"/>Entrada no estoque</span>
         </SelectItem>
-        <SelectItem value="Despesa operacional">
-         <span className="flex items-center gap-2"><ReceiptText className="h-4 w-4"/>Despesa operacional</span>
+        <SelectItem value="Despesa operacional"> 
+        <span className="flex items-center gap-2"><Receipt className="h-4 w-4"/>Despesa operacional</span>
         </SelectItem>
        </SelectContent>
       </Select>
