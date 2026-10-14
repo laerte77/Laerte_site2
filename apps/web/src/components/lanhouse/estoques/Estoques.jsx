@@ -1,488 +1,204 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Package, Search, TrendingUp, TrendingDown, AlertTriangle, Calendar, Clock } from 'lucide-react';
-import { supabase } from '@/lib/customSupabaseClient';
-import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useToast } from '@/components/ui/use-toast';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import React,{useState,useEffect,useCallback,useRef,useMemo}from'react';
+import{motion}from'framer-motion';
+import{Package,Search,TrendingUp,TrendingDown,AlertTriangle,Calendar,Clock,RefreshCw,Boxes,ArrowDownToLine,ArrowUpFromLine,Loader2}from'lucide-react';
+import{supabase}from'@/lib/customSupabaseClient';
+import{useAuth}from'@/contexts/SupabaseAuthContext';
+import{Input}from'@/components/ui/input';
+import{Card,CardContent,CardHeader,CardTitle,CardDescription}from'@/components/ui/card';
+import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/components/ui/table';
+import{useToast}from'@/components/ui/use-toast';
+import{ScrollArea}from'@/components/ui/scroll-area';
+import{Badge}from'@/components/ui/badge';
+import{Tabs,TabsContent,TabsList,TabsTrigger}from'@/components/ui/tabs';
+import{Alert,AlertDescription}from'@/components/ui/alert';
 
-const Estoques = () => {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const isMountedRef = useRef(true);
+const CYAN='text-[hsl(var(--neon-lanhouse))]';
+const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
+const dateKey=v=>String(v||'').slice(0,10);
+const dateBR=v=>v?new Date(`${dateKey(v)}T12:00:00-03:00`).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'}):'Não definida';
+const qty=v=>Number(v||0).toLocaleString('pt-BR',{maximumFractionDigits:3});
+const blank=nome=>({produto:nome,unidade:'unidade',baseline:0,entradas:0,saidas:0,perdas:0,estoqueAtual:0,variacao:0});
 
-  const [loading, setLoading] = useState(true);
-  const [estoqueData, setEstoqueData] = useState([]);
-  const [baselineDate, setBaselineDate] = useState(null);
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+export default function Estoques(){
+ const{user}=useAuth();
+ const{toast}=useToast();
+ const mounted=useRef(true);
+ const[loading,setLoading]=useState(true);
+ const[estoqueData,setEstoqueData]=useState([]);
+ const[baselineDate,setBaselineDate]=useState(null);
+ const[lastUpdate,setLastUpdate]=useState(null);
+ const[searchTerm,setSearchTerm]=useState('');
 
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
-  }, []);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
 
-  const fetchEstoque = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      // Fetch baseline inventory
-      const { data: baselineData, error: baselineError } = await supabase
-        .from('lm_estoques_inicial')
-        .select('*')
-        .eq('user_id', user.id);
+ const fetchEstoque=useCallback(async()=>{
+  if(!user){setEstoqueData([]);setLoading(false);return}
+  setLoading(true);
+  try{
+   const[baseRes,insRes,folRes,servRes,repRes]=await Promise.all([
+    supabase.from('lm_estoques_inicial').select('*').eq('user_id',user.id),
+    supabase.from('lm_insumos').select('id,nome,unidade,estoque_minimo,ativo').eq('user_id',user.id),
+    supabase.from('lm_folhas').select('*').eq('user_id',user.id),
+    supabase.from('lm_lanc_servicos').select('data,folhas_gastas').eq('user_id',user.id).not('folhas_gastas','is',null),
+    supabase.from('lm_lanc_despesas').select('*').eq('user_id',user.id).eq('tipo_lancamento','Estoque').not('quantidade','is',null)
+   ]);
+   for(const r of[baseRes,insRes,folRes,servRes,repRes])if(r.error)throw r.error;
 
-      if (baselineError) throw baselineError;
+   const bases=baseRes.data||[],insumos=insRes.data||[];
+   const dates=bases.map(x=>dateKey(x.data_inventario)).filter(Boolean).sort();
+   const baseline=dates[0]||null;
+   const afterBase=x=>!baseline||!x?.data||dateKey(x.data)>=baseline;
+   const byId=new Map(insumos.map(i=>[String(i.id),i]));
+   const byName=new Map(insumos.map(i=>[norm(i.nome),i]));
+   const map={};
+   const ensure=(name,unit='unidade')=>{
+    const key=norm(name);
+    if(!key)return null;
+    if(!map[key])map[key]={...blank(String(name).trim()),unidade:unit||'unidade'};
+    if(unit&&map[key].unidade==='unidade')map[key].unidade=unit;
+    return map[key];
+   };
+   const linkedName=id=>id?byId.get(String(id))?.nome:null;
+   const linkedUnit=id=>id?byId.get(String(id))?.unidade:null;
 
-      // Get baseline date from first record
-      let baseline = baselineData?.[0]?.data_inventario || null;
-      if (baselineData && baselineData.length > 0) {
-    baseline = baselineData[0].data_inventario;
-    setBaselineDate(baseline);
+   // Todos os insumos aparecem, inclusive os que começam com saldo zero.
+   insumos.forEach(i=>ensure(i.nome,i.unidade));
+
+   bases.forEach(x=>{
+    const name=linkedName(x.insumo_id)||x.produto;
+    const row=ensure(name,linkedUnit(x.insumo_id)||x.unidade);
+    if(row)row.baseline+=Number(x.quantidade_inicial)||0;
+   });
+
+   let latest=null;
+   const trackDate=d=>{
+    if(d&&(!latest||dateKey(d)>dateKey(latest)))latest=d;
+   };
+
+   (folRes.data||[]).filter(afterBase).forEach(x=>{
+    if(!x.tipo_folha)return;
+    const ins=byName.get(norm(x.tipo_folha));
+    const row=ensure(ins?.nome||x.tipo_folha,ins?.unidade);
+    if(!row)return;
+    const n=Number(x.quantidade)||0;
+    const type=norm(x.tipo_movimento);
+    if(type==='ENTRADA')row.entradas+=n;
+    else if(type==='SAIDA')row.saidas+=n;
+    else if(type==='PERDA')row.perdas+=n;
+    trackDate(x.data);
+   });
+
+   (servRes.data||[]).filter(afterBase).forEach(x=>{
+    if(!Array.isArray(x.folhas_gastas))return;
+    x.folhas_gastas.forEach(f=>{
+     if(f.e_rascunho||!f.tipo_folha||Number(f.quantidade)<=0)return;
+     const ins=byName.get(norm(f.tipo_folha));
+     const row=ensure(ins?.nome||f.tipo_folha,ins?.unidade);
+     if(row)row.saidas+=Number(f.quantidade)||0;
+    });
+    trackDate(x.data);
+   });
+
+   (repRes.data||[]).filter(afterBase).forEach(x=>{
+    if(Number(x.quantidade)<=0)return;
+    const ins=x.insumo_id?byId.get(String(x.insumo_id)):null;
+    const name=ins?.nome||x.tipo_folha;
+    const row=ensure(name,ins?.unidade);
+    if(row)row.entradas+=Number(x.quantidade)||0;
+    trackDate(x.data);
+   });
+
+   Object.values(map).forEach(x=>{
+    x.estoqueAtual=x.baseline+x.entradas-x.saidas-x.perdas;
+    x.variacao=x.estoqueAtual-x.baseline;
+   });
+
+   const result=Object.values(map).sort((a,b)=>a.produto.localeCompare(b.produto,'pt-BR'));
+   if(!mounted.current)return;
+   setEstoqueData(result);
+   setBaselineDate(baseline);
+   setLastUpdate(latest);
+  }catch(e){
+   console.error('Erro ao carregar rastreamento de estoque:',e);
+   if(mounted.current)toast({title:'Erro ao carregar estoque',description:e.message||'Não foi possível carregar os dados.',variant:'destructive'});
+  }finally{
+   if(mounted.current)setLoading(false);
+  }
+ },[user,toast]);
+
+ useEffect(()=>{
+  fetchEstoque();
+  if(!user)return;
+  const channel=supabase.channel(`estoques-consolidados-${user.id}`)
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_insumos',filter:`user_id=eq.${user.id}`},fetchEstoque)
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_estoques_inicial',filter:`user_id=eq.${user.id}`},fetchEstoque)
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_folhas',filter:`user_id=eq.${user.id}`},fetchEstoque)
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_lanc_servicos',filter:`user_id=eq.${user.id}`},fetchEstoque)
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_lanc_despesas',filter:`user_id=eq.${user.id}`},fetchEstoque)
+   .subscribe();
+  return()=>{supabase.removeChannel(channel)};
+ },[user,fetchEstoque]);
+
+ const filtered=useMemo(()=>estoqueData.filter(x=>x.produto.toLowerCase().includes(searchTerm.trim().toLowerCase())),[estoqueData,searchTerm]);
+ const totals=useMemo(()=>filtered.reduce((a,x)=>({
+  itens:a.itens+1,entradas:a.entradas+x.entradas,saidas:a.saidas+x.saidas,negativos:a.negativos+(x.estoqueAtual<0?1:0)
+ }),{itens:0,entradas:0,saidas:0,negativos:0}),[filtered]);
+ const status=x=>x.estoqueAtual<0?{label:'Negativo',cls:'border-red-500/30 bg-red-500/10 text-red-400'}:x.estoqueAtual===0?{label:'Zerado',cls:'border-amber-500/30 bg-amber-500/10 text-amber-400'}:x.estoqueAtual<10?{label:'Baixo',cls:'border-amber-500/30 bg-amber-500/10 text-amber-400'}:{label:'Disponível',cls:'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'};
+ const stat=(title,value,icon,color)=> <Card className="border-border bg-card/80"><CardContent className="flex items-center justify-between gap-3 p-4"><div><p className="text-sm text-muted-foreground">{title}</p><p className={`mt-1 text-2xl font-bold ${color}`}>{qty(value)}</p></div><div className="rounded-xl border border-border bg-muted/40 p-3"><icon.type className={`h-5 w-5 ${color}`}/></div></CardContent></Card>;
+
+ return <motion.div initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} className="dark-lm-impressoes space-y-5 py-5">
+  <div className="flex flex-col justify-between gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center">
+   <div className="flex items-start gap-3">
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-lanhouse)/.25)] bg-[hsl(var(--neon-lanhouse)/.1)]"><Package className={`h-6 w-6 ${CYAN}`}/></div>
+    <div><p className={`text-[11px] font-semibold uppercase tracking-[.2em] ${CYAN}`}>Estoque</p><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Rastreamento de Estoque</h1><p className="mt-1 text-sm text-muted-foreground">Acompanhe o saldo inicial, as entradas, as saídas e as perdas.</p></div>
+   </div>
+   <button type="button" onClick={fetchEstoque} disabled={loading} className="inline-flex h-10 items-center justify-center rounded-lg border border-border px-4 text-sm font-medium transition hover:bg-muted disabled:opacity-50"><RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>Atualizar</button>
+  </div>
+
+  <Alert className="border-[hsl(var(--neon-lanhouse)/.25)] bg-[hsl(var(--neon-lanhouse)/.07)]">
+   <div className="flex items-start gap-3"><Calendar className={`mt-0.5 h-4 w-4 ${CYAN}`}/><div className="space-y-1"><AlertDescription className="text-sm font-medium text-foreground">Data baseline: <strong>{dateBR(baselineDate)}</strong></AlertDescription><AlertDescription className="flex items-center gap-2 text-sm text-muted-foreground"><Clock className="h-4 w-4"/>{lastUpdate?`Última movimentação: ${dateBR(lastUpdate)}`:'Nenhuma movimentação registrada'}</AlertDescription></div></div>
+  </Alert>
+
+  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+   {stat('Insumos na consulta',totals.itens,Boxes,CYAN)}
+   {stat('Total de entradas',totals.entradas,ArrowDownToLine,'text-emerald-400')}
+   {stat('Total de saídas',totals.saidas,ArrowUpFromLine,'text-red-400')}
+   {stat('Estoques negativos',totals.negativos,AlertTriangle,totals.negativos?'text-red-400':'text-muted-foreground')}
+  </div>
+
+  <Card className="border-border bg-card/80">
+   <CardContent className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
+    <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Buscar por insumo ou produto..." className="h-11 rounded-xl bg-input pl-9"/></div>
+    <span className="text-sm text-muted-foreground">{filtered.length} item(ns)</span>
+   </CardContent>
+  </Card>
+
+  <Tabs defaultValue="movimentacao" className="w-full space-y-4">
+   <TabsList className="grid h-auto w-full grid-cols-2 rounded-xl border border-border bg-card p-1">
+    <TabsTrigger value="movimentacao" className="rounded-lg py-2.5 data-[state=active]:bg-[hsl(var(--neon-lanhouse))] data-[state=active]:text-slate-950">Movimentação desde Baseline</TabsTrigger>
+    <TabsTrigger value="comparacao" className="rounded-lg py-2.5 data-[state=active]:bg-[hsl(var(--neon-lanhouse))] data-[state=active]:text-slate-950">Baseline vs. Atual</TabsTrigger>
+   </TabsList>
+
+   <TabsContent value="movimentacao">
+    <Card className="overflow-hidden border-border bg-card">
+     <CardHeader className="border-b border-border bg-muted/20"><CardTitle className={`text-xl ${CYAN}`}>Movimentação desde {dateBR(baselineDate)}</CardTitle><CardDescription>Insumos cadastrados e movimentações registradas após a data de referência.</CardDescription></CardHeader>
+     <CardContent className="p-0"><ScrollArea className="h-[600px]"><div className="overflow-x-auto"><Table>
+      <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur"><TableRow><TableHead className="min-w-[210px]">Insumo / Produto</TableHead><TableHead className="min-w-[110px] text-center">Baseline</TableHead><TableHead className="min-w-[110px] text-center text-emerald-400">Entradas (+)</TableHead><TableHead className="min-w-[110px] text-center text-red-400">Saídas (-)</TableHead><TableHead className="min-w-[100px] text-center text-red-400">Perdas (-)</TableHead><TableHead className="min-w-[130px] text-center">Estoque atual</TableHead><TableHead className="min-w-[120px] text-center">Status</TableHead></TableRow></TableHeader>
+      <TableBody>{loading?<TableRow><TableCell colSpan={7} className="py-12 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>Carregando estoque...</TableCell></TableRow>:!filtered.length?<TableRow><TableCell colSpan={7} className="py-12 text-center text-muted-foreground"><Package className="mx-auto mb-2 h-9 w-9 opacity-40"/>{searchTerm?'Nenhum item corresponde à pesquisa.':'Nenhum insumo cadastrado.'}</TableCell></TableRow>:filtered.map(x=><TableRow key={norm(x.produto)} className="transition-colors hover:bg-[hsl(var(--neon-lanhouse)/.04)]"><TableCell><div className="font-semibold">{x.produto}</div><div className="text-xs text-muted-foreground">{x.unidade}</div></TableCell><TableCell className="text-center font-medium text-violet-400">{qty(x.baseline)}</TableCell><TableCell className="text-center font-medium text-emerald-400">+{qty(x.entradas)}</TableCell><TableCell className="text-center font-medium text-red-400">-{qty(x.saidas)}</TableCell><TableCell className="text-center font-medium text-red-400">-{qty(x.perdas)}</TableCell><TableCell className="text-center"><Badge variant="outline" className={`border px-3 py-1 text-sm font-bold ${x.estoqueAtual<0?'border-red-500/30 bg-red-500/10 text-red-400':x.estoqueAtual===0?'border-amber-500/30 bg-amber-500/10 text-amber-400':'border-[hsl(var(--neon-lanhouse)/.3)] bg-[hsl(var(--neon-lanhouse)/.1)] text-[hsl(var(--neon-lanhouse))]'}`}>{qty(x.estoqueAtual)}</Badge></TableCell><TableCell className="text-center"><Badge variant="outline" className={status(x).cls}>{status(x).label}</Badge></TableCell></TableRow>)}</TableBody>
+     </Table></div></ScrollArea></CardContent>
+    </Card>
+   </TabsContent>
+
+   <TabsContent value="comparacao">
+    <Card className="overflow-hidden border-border bg-card">
+     <CardHeader className="border-b border-border bg-muted/20"><CardTitle className={`text-xl ${CYAN}`}>Baseline vs. Estoque Atual</CardTitle><CardDescription>Compare o inventário de referência com o saldo calculado de cada insumo.</CardDescription></CardHeader>
+     <CardContent className="p-0"><ScrollArea className="h-[600px]"><div className="overflow-x-auto"><Table>
+      <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur"><TableRow><TableHead className="min-w-[220px]">Insumo / Produto</TableHead><TableHead className="min-w-[130px] text-center">Baseline</TableHead><TableHead className="min-w-[130px] text-center">Estoque atual</TableHead><TableHead className="min-w-[130px] text-center">Variação</TableHead><TableHead className="min-w-[120px] text-center">Status</TableHead></TableRow></TableHeader>
+      <TableBody>{loading?<TableRow><TableCell colSpan={5} className="py-12 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>Carregando estoque...</TableCell></TableRow>:!filtered.length?<TableRow><TableCell colSpan={5} className="py-12 text-center text-muted-foreground">Nenhum insumo encontrado.</TableCell></TableRow>:filtered.map(x=><TableRow key={norm(x.produto)} className="hover:bg-[hsl(var(--neon-lanhouse)/.04)]"><TableCell><div className="font-semibold">{x.produto}</div><div className="text-xs text-muted-foreground">{x.unidade}</div></TableCell><TableCell className="text-center font-medium text-violet-400">{qty(x.baseline)}</TableCell><TableCell className="text-center"><Badge variant="outline" className={`px-3 py-1 font-bold ${x.estoqueAtual<0?'border-red-500/30 bg-red-500/10 text-red-400':x.estoqueAtual===0?'border-amber-500/30 bg-amber-500/10 text-amber-400':'border-[hsl(var(--neon-lanhouse)/.3)] bg-[hsl(var(--neon-lanhouse)/.1)] text-[hsl(var(--neon-lanhouse))]'}`}>{qty(x.estoqueAtual)}</Badge></TableCell><TableCell className="text-center"><span className={`inline-flex items-center justify-center gap-1 font-semibold ${x.variacao>0?'text-emerald-400':x.variacao<0?'text-red-400':'text-muted-foreground'}`}>{x.variacao>0?<TrendingUp className="h-4 w-4"/>:x.variacao<0?<TrendingDown className="h-4 w-4"/>:null}{x.variacao>0?'+':''}{qty(x.variacao)}</span></TableCell><TableCell className="text-center"><Badge variant="outline" className={status(x).cls}>{status(x).label}</Badge></TableCell></TableRow>)}</TableBody>
+     </Table></div></ScrollArea></CardContent>
+    </Card>
+   </TabsContent>
+  </Tabs>
+ </motion.div>;
 }
 
-if (!baseline) {
-    setEstoqueData([]);
-    setLastUpdate(null);
-    return;
-}
-
-      // Create baseline map
-      const baselineMap = {};
-      (baselineData || []).forEach(item => {
-        baselineMap[item.produto.toUpperCase().trim()] = {
-          quantidade: item.quantidade_inicial,
-          data: item.data_inventario
-        };
-      });
-
-      // Fetch movements from lm_folhas after baseline date
-      const { data: folhasData, error: folhasError } = await supabase
-        .from('lm_folhas')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('data', baseline)
-        .order('data', { ascending: false });
-
-      if (folhasError) throw folhasError;
-
-      // Fetch folhas gastas nos serviços
-      const { data: servicosData, error: servicosError } = await supabase
-        .from('lm_lanc_servicos')
-        .select('data, folhas_gastas')
-        .eq('user_id', user.id)
-        .gte('data', baseline)
-        .not('folhas_gastas', 'is', null);
-
-if (servicosError) throw servicosError;
-      // Buscar compras/reposições de folhas
-      const { data: reposicoesData, error: reposicoesError } = await supabase
-        .from('lm_lanc_despesas')
-        .select('data, tipo_folha, quantidade, tipo_lancamento')
-        .eq('user_id', user.id)
-        .eq('tipo_lancamento', 'Estoque')
-        .gte('data', baseline)
-        .not('tipo_folha', 'is', null)
-        .not('quantidade', 'is', null);
-
-if (reposicoesError) throw reposicoesError;
-
-      // Build inventory calculation
-      const prodMap = {};
-
-      // Initialize with baseline
-      Object.keys(baselineMap).forEach(produto => {
-        prodMap[produto] = {
-          produto: produto,
-          baseline: baselineMap[produto].quantidade,
-          entradas: 0,
-          saidas: 0,
-          perdas: 0,
-          estoqueAtual: baselineMap[produto].quantidade,
-          variacao: 0
-        };
-      });
-
-      // Process movements
-      let latestMovement = null;
-      (folhasData || []).forEach(item => {
-        if (!item.tipo_folha) return;
-
-        const produto = item.tipo_folha.toUpperCase().trim();
-        
-        // Track latest movement date
-        if (!latestMovement || new Date(item.data) > new Date(latestMovement)) {
-          latestMovement = item.data;
-        }
-
-        // Initialize product if not in baseline
-        if (!prodMap[produto]) {
-          prodMap[produto] = {
-            produto: produto,
-            baseline: 0,
-            entradas: 0,
-            saidas: 0,
-            perdas: 0,
-            estoqueAtual: 0,
-            variacao: 0
-          };
-        }
-
-        const quantidade = parseInt(item.quantidade || 0);
-        const movimento = item.tipo_movimento?.toLowerCase();
-
-        if (movimento === 'entrada') {
-          prodMap[produto].entradas += quantidade;
-        } else if (movimento === 'saída' || movimento === 'saida') {
-          prodMap[produto].saidas += quantidade;
-        } else if (movimento === 'perda') {
-          prodMap[produto].perdas += quantidade;
-        }
-      });
-      // Processar folhas gastas nos serviços
-      (servicosData || []).forEach(item => {
-        const folhas = item.folhas_gastas || [];
-
-        if (!Array.isArray(folhas)) return;
-
-        if (
-          !latestMovement ||
-          new Date(item.data) > new Date(latestMovement)
-        ) {
-          latestMovement = item.data;
-        }
-
-        folhas.forEach(f => {
-          if (!f.e_rascunho && f.tipo_folha && f.quantidade) {
-            const produto = f.tipo_folha.toUpperCase().trim();
-            const quantidade = parseInt(f.quantidade || 0, 10);
-
-            if (!prodMap[produto]) {
-              prodMap[produto] = {
-                produto,
-                baseline: 0,
-                entradas: 0,
-                saidas: 0,
-                perdas: 0,
-                estoqueAtual: 0,
-                variacao: 0
-              };
-            }
-
-            prodMap[produto].saidas += quantidade;
-          }
-        });
-      });
-      // Processar compras/reposições de folhas
-(reposicoesData || []).forEach(item => {
-  if (!item.tipo_folha || !item.quantidade) return;
-
-  const produto = item.tipo_folha.toUpperCase().trim();
-  const quantidade = parseInt(item.quantidade || 0, 10);
-
-  if (!prodMap[produto]) {
-    prodMap[produto] = {
-      produto,
-      baseline: 0,
-      entradas: 0,
-      saidas: 0,
-      perdas: 0,
-      estoqueAtual: 0,
-      variacao: 0
-    };
-  }
-
-  prodMap[produto].entradas += quantidade;
-
-  if (
-    !latestMovement ||
-    new Date(item.data) > new Date(latestMovement)
-  ) {
-    latestMovement = item.data;
-  }
-});
-      // Calculate current stock and variation for each product
-      Object.keys(prodMap).forEach(produto => {
-        const p = prodMap[produto];
-        p.estoqueAtual = p.baseline + p.entradas - p.saidas - p.perdas;
-        p.variacao = p.estoqueAtual - p.baseline;
-      });
-
-      const aggregated = Object.values(prodMap).sort((a, b) => a.produto.localeCompare(b.produto));
-
-      if (!isMountedRef.current) return;
-      setEstoqueData(aggregated);
-      setLastUpdate(latestMovement);
-    } catch (error) {
-      if (!isMountedRef.current) return;
-      console.error('Erro ao buscar estoque:', error);
-      toast({ 
-        title: 'Erro', 
-        description: 'Falha ao carregar controle de estoque.', 
-        variant: 'destructive' 
-      });
-    } finally {
-      if (isMountedRef.current) setLoading(false);
-    }
-  }, [user, toast]);
-
-  useEffect(() => {
-    fetchEstoque();
-  }, [fetchEstoque]);
-
-  const filteredEstoque = estoqueData.filter(item => 
-    item.produto.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString + 'T00:00:00').toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  };
-
-  const formatDateTime = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 py-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-primary flex items-center gap-2">
-            <Package className="w-8 h-8" /> Rastreamento de Estoque
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Controle de estoque calculado desde {formatDate(baselineDate)} (baseline)
-          </p>
-        </div>
-      </div>
-
-      <Alert className="bg-cyan-500/10 border-cyan-500/20">
-        <div className="flex items-start gap-3">
-          <div className="flex-1 space-y-2">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-cyan-500" />
-              <AlertDescription className="text-sm font-medium">
-                Data Baseline: <strong>{formatDate(baselineDate)}</strong>
-              </AlertDescription>
-            </div>
-            {lastUpdate && (
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-cyan-500" />
-                <AlertDescription className="text-sm text-muted-foreground">
-                  Última Movimentação: {formatDate(lastUpdate)}
-                </AlertDescription>
-              </div>
-            )}
-          </div>
-        </div>
-      </Alert>
-
-      <Card className="shadow-sm border-border/50">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 w-full relative max-w-md">
-            <Search className="w-4 h-4 text-muted-foreground absolute left-3" />
-            <Input 
-              placeholder="Buscar por produto/folha..." 
-              value={searchTerm} 
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 pl-9"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="movimentacao" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="movimentacao">Movimentação desde Baseline</TabsTrigger>
-          <TabsTrigger value="comparacao">Baseline vs. Atual</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="movimentacao">
-          <Card className="shadow-sm border-border/50 overflow-hidden">
-            <CardHeader>
-              <CardTitle className="text-cyan-400">Movimentação desde {formatDate(baselineDate)}</CardTitle>
-              <CardDescription>
-                Entradas, saídas e perdas registradas após a data baseline
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-[600px]">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-muted/50">
-                      <TableRow>
-                        <TableHead className="min-w-[200px]">Produto</TableHead>
-                        <TableHead className="text-center min-w-[100px]">Baseline</TableHead>
-                        <TableHead className="text-center min-w-[100px]">Entradas</TableHead>
-                        <TableHead className="text-center min-w-[100px]">Saídas</TableHead>
-                        <TableHead className="text-center min-w-[100px]">Perdas</TableHead>
-                        <TableHead className="text-center min-w-[120px]">Estoque Atual</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {loading ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                            Carregando estoque...
-                          </TableCell>
-                        </TableRow>
-                      ) : filteredEstoque.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                            Nenhum produto em estoque.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredEstoque.map((item, idx) => (
-                          <TableRow key={idx} className="hover:bg-accent/30 transition-colors">
-                            <TableCell className="font-semibold">{item.produto}</TableCell>
-                            <TableCell className="text-center font-medium text-purple-600">
-                              {item.baseline}
-                            </TableCell>
-                            <TableCell className="text-center text-green-600 font-medium">
-                              {item.entradas}
-                            </TableCell>
-                            <TableCell className="text-center text-blue-600 font-medium">
-                              {item.saidas}
-                            </TableCell>
-                            <TableCell className="text-center text-red-600 font-medium">
-                              {item.perdas}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge 
-                                variant={item.estoqueAtual < 0 ? "destructive" : item.estoqueAtual < 10 ? "secondary" : "default"} 
-                                className="text-sm px-3 font-semibold"
-                              >
-                                {item.estoqueAtual}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="comparacao">
-          <Card className="shadow-sm border-border/50 overflow-hidden">
-            <CardHeader>
-              <CardTitle className="text-cyan-400">Baseline vs. Estoque Atual</CardTitle>
-              <CardDescription>
-                Comparação entre o inventário inicial ({formatDate(baselineDate)}) e o estoque calculado atual
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-[600px]">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-muted/50">
-                      <TableRow>
-                        <TableHead className="min-w-[200px]">Produto</TableHead>
-                        <TableHead className="text-center min-w-[120px]">Baseline ({formatDate(baselineDate)})</TableHead>
-                        <TableHead className="text-center min-w-[120px]">Estoque Atual</TableHead>
-                        <TableHead className="text-center min-w-[120px]">Variação</TableHead>
-                        <TableHead className="text-center min-w-[100px]">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {loading ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                            Carregando estoque...
-                          </TableCell>
-                        </TableRow>
-                      ) : filteredEstoque.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                            Nenhum produto em estoque.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredEstoque.map((item, idx) => (
-                          <TableRow key={idx} className="hover:bg-accent/30 transition-colors">
-                            <TableCell className="font-semibold">{item.produto}</TableCell>
-                            <TableCell className="text-center font-medium text-purple-600">
-                              {item.baseline}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Badge 
-                                variant={item.estoqueAtual < 0 ? "destructive" : item.estoqueAtual < 10 ? "secondary" : "default"} 
-                                className="text-sm px-3 font-semibold"
-                              >
-                                {item.estoqueAtual}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                {item.variacao > 0 && <TrendingUp className="w-4 h-4 text-green-500" />}
-                                {item.variacao < 0 && <TrendingDown className="w-4 h-4 text-red-500" />}
-                                <span className={
-                                  item.variacao > 0 
-                                    ? 'text-green-500 font-medium' 
-                                    : item.variacao < 0 
-                                    ? 'text-red-500 font-medium' 
-                                    : 'text-muted-foreground'
-                                }>
-                                  {item.variacao > 0 ? '+' : ''}{item.variacao}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {item.estoqueAtual < 0 ? (
-                                <Badge variant="destructive" className="gap-1">
-                                  <AlertTriangle className="w-3 h-3" />
-                                  Negativo
-                                </Badge>
-                              ) : item.estoqueAtual < item.baseline ? (
-                                <Badge variant="secondary" className="gap-1">
-                                  <TrendingDown className="w-3 h-3" />
-                                  Abaixo
-                                </Badge>
-                              ) : item.estoqueAtual > item.baseline ? (
-                                <Badge variant="default" className="gap-1 bg-green-500">
-                                  <TrendingUp className="w-3 h-3" />
-                                  Acima
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline">
-                                  Igual
-                                </Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </motion.div>
-  );
-};
-
-export default Estoques;
