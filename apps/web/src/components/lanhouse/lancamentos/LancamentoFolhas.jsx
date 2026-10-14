@@ -136,8 +136,9 @@ export default function LancamentoFolhas(){
    if(error)throw error;
    toast({title:'Movimentação excluída',description:'O estoque será recalculado.'});
    await fetchData();
-  }catch(e){toast({title:'Erro ao excluir',description:e.message||'Não foi possível excluir.',variant:'destructive')}
- };
+  }catch(e){
+ toast({title:'Erro ao excluir',description:e.message||'Não foi possível excluir.',variant:'destructive'});
+}
 
  const clearFilters=()=>{setSearchTerm('');setSelectedMonth(String(new Date().getMonth()));setSelectedYear(String(new Date().getFullYear()))};
 
