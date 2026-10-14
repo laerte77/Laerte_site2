@@ -74,6 +74,13 @@ export default function LancamentoServicos(){
   setAddOpen(false);setEditingId(null);setFormData({...initial,data:todaySP()});setFolhasConsumo([]);setOriginalFolhas([]);
  };
 
+ const resetAfterSave=()=>{
+  setEditingId(null);
+  setFormData({...initial,data:todaySP()});
+  setFolhasConsumo([]);
+  setOriginalFolhas([]);
+ };
+
  const validate=()=>{
   if(!selectedServico?.usa_folha)return{ok:true};
   if(!folhasConsumo.length)return{ok:false,msg:'Este serviço requer pelo menos uma folha.'};
@@ -113,9 +120,10 @@ export default function LancamentoServicos(){
     if(!isOnline){toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});return}
     const q=editingId?supabase.from('lm_lanc_servicos').update(payload).eq('id',editingId).eq('user_id',user.id):supabase.from('lm_lanc_servicos').insert(payload);
     const{error}=await q;if(error)throw error;
-    toast({title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});await refresh();
+    toast({title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
+    await refresh();
    }
-   closeDialog();
+   resetAfterSave();
   }catch(e){toast({title:'Erro ao salvar',description:e.message,variant:'destructive'})}
   finally{setSaving(false)}
  };
@@ -192,3 +200,4 @@ export default function LancamentoServicos(){
   </motion.div>
  );
 }
+
