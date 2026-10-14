@@ -45,4 +45,38 @@ export default function Estoques(){
 
   <Tabs defaultValue="movimentacao" className="w-full space-y-4">
    <TabsList className="grid h-auto w-full grid-cols-2 rounded-xl border border-border bg-card p-1"><TabsTrigger value="movimentacao" className="rounded-lg py-2.5 data-[state=active]:bg-cyan-400 data-[state=active]:text-slate-950">Movimentações</TabsTrigger><TabsTrigger value="comparacao" className="rounded-lg py-2.5 data-[state=active]:bg-cyan-400 data-[state=active]:text-slate-950">Estoque atual</TabsTrigger></TabsList>
-   <TabsContent value="movimentacao"><Card className="overflow-hidden border-border bg-card"><CardHeader className="border-b border-border bg-muted/20"><CardTitle className="text-xl text-cyan-400">Movimentações por material</CardTitle><CardDescription>Reposições financeiras e movimentos manuais são discriminados para facilitar a conferência.</CardDescription></CardHeader><CardContent className="p-0"><ScrollArea className="h-[600px]"><div className="overflow-x-auto"><Table><TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur"><TableRow><TableHead className="min-w-[210px]">Insumo</TableHead><TableHead className="text-center">Base</TableHead><TableHead className="text-center text-emerald-400">Reposições</TableHead><TableHead className="text-center text-emerald-400">Entradas manuais</TableHead><TableHead className="
+
+   <TabsContent value="movimentacao">
+    <Card className="overflow-hidden border-border bg-card">
+     <CardHeader className="border-b border-border bg-muted/20"><CardTitle className="text-xl text-cyan-400">Movimentações por material</CardTitle><CardDescription>Reposições financeiras e movimentos manuais são discriminados para facilitar a conferência.</CardDescription></CardHeader>
+     <CardContent className="p-0"><ScrollArea className="h-[600px]"><div className="overflow-x-auto"><Table>
+      <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur"><TableRow><TableHead className="min-w-[210px]">Insumo</TableHead><TableHead className="text-center">Base</TableHead><TableHead className="text-center text-emerald-400">Reposições</TableHead><TableHead className="text-center text-emerald-400">Entradas manuais</TableHead><TableHead className="text-center text-red-400">Consumo</TableHead><TableHead className="text-center text-red-400">Saídas</TableHead><TableHead className="text-center text-red-400">Perdas</TableHead><TableHead className="text-center">Atual</TableHead><TableHead className="text-center">Status</TableHead></TableRow></TableHeader>
+      <TableBody>
+       {loading?<TableRow><TableCell colSpan={9} className="py-12 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>Calculando estoque...</TableCell></TableRow>:!filtered.length?tableEmpty(9):filtered.map(x=><TableRow key={x.insumo_id||x.tipo_folha} className="hover:bg-cyan-500/5">
+        <TableCell><div className="font-semibold">{x.nomeInsumo||x.tipo_folha}</div><div className="text-xs text-muted-foreground">{x.unidade||'unidade'}</div></TableCell>
+        <TableCell className="text-center text-violet-400">{qty(x.baseline)}</TableCell><TableCell className="text-center text-emerald-400">+{qty(x.reposicoes)}</TableCell><TableCell className="text-center text-emerald-400">+{qty(x.entradas)}</TableCell><TableCell className="text-center text-red-400">-{qty(x.folhasGastas)}</TableCell><TableCell className="text-center text-red-400">-{qty(x.saidas)}</TableCell><TableCell className="text-center text-red-400">-{qty(x.perdas)}</TableCell>
+        <TableCell className="text-center"><Badge variant="outline" className={`font-bold ${x.estoqueAtual<0?'border-red-500/30 bg-red-500/10 text-red-400':x.estoqueAtual===0?'border-amber-500/30 bg-amber-500/10 text-amber-400':'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'}`}>{qty(x.estoqueAtual)}</Badge></TableCell><TableCell className="text-center"><Badge variant="outline" className={status(x).cls}>{status(x).label}</Badge></TableCell>
+       </TableRow>)}
+      </TableBody>
+     </Table></div></ScrollArea></CardContent>
+    </Card>
+   </TabsContent>
+
+   <TabsContent value="comparacao">
+    <Card className="overflow-hidden border-border bg-card">
+     <CardHeader className="border-b border-border bg-muted/20"><CardTitle className="text-xl text-cyan-400">Saldo disponível por insumo</CardTitle><CardDescription>Os materiais recém-cadastrados aparecem mesmo sem estoque inicial ou movimentações.</CardDescription></CardHeader>
+     <CardContent className="p-0"><ScrollArea className="h-[600px]"><div className="overflow-x-auto"><Table>
+      <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur"><TableRow><TableHead className="min-w-[220px]">Insumo</TableHead><TableHead className="text-center">Unidade</TableHead><TableHead className="text-center">Estoque mínimo</TableHead><TableHead className="text-center">Estoque atual</TableHead><TableHead className="text-center">Variação</TableHead><TableHead className="text-center">Status</TableHead></TableRow></TableHeader>
+      <TableBody>
+       {loading?<TableRow><TableCell colSpan={6} className="py-12 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin"/>Carregando...</TableCell></TableRow>:!filtered.length?tableEmpty(6):filtered.map(x=><TableRow key={x.insumo_id||x.tipo_folha} className="hover:bg-cyan-500/5">
+        <TableCell className="font-semibold">{x.nomeInsumo||x.tipo_folha}</TableCell><TableCell className="text-center text-muted-foreground">{x.unidade||'unidade'}</TableCell><TableCell className="text-center">{x.estoque_minimo==null?'—':qty(x.estoque_minimo)}</TableCell>
+        <TableCell className="text-center"><Badge variant="outline" className={`px-3 py-1 font-bold ${x.estoqueAtual<0?'border-red-500/30 bg-red-500/10 text-red-400':x.estoqueAtual===0?'border-amber-500/30 bg-amber-500/10 text-amber-400':'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'}`}>{qty(x.estoqueAtual)}</Badge></TableCell>
+        <TableCell className="text-center"><span className={`inline-flex items-center gap-1 font-semibold ${x.variacao>0?'text-emerald-400':x.variacao<0?'text-red-400':'text-muted-foreground'}`}>{x.variacao>0?<TrendingUp className="h-4 w-4"/>:x.variacao<0?<TrendingDown className="h-4 w-4"/>:null}{x.variacao>0?'+':''}{qty(x.variacao)}</span></TableCell><TableCell className="text-center"><Badge variant="outline" className={status(x).cls}>{status(x).label}</Badge></TableCell>
+       </TableRow>)}
+      </TableBody>
+     </Table></div></ScrollArea></CardContent>
+    </Card>
+   </TabsContent>
+  </Tabs>
+ </motion.div>;
+}
