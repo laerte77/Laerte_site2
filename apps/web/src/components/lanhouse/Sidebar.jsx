@@ -99,7 +99,7 @@ export default function Sidebar({ isOpen, setOpen, isMobile }) {
             </NavLink>
           </li>
 
-          <Accordion type="multiple" className="w-full">
+          <Accordion type="single" collapsible className="w-full">
             <Group value="cadastros" icon={List} title="Cadastros">
               <NavLink to="/lm-impressoes/dashboard/cadastros/clientes" icon={Users}>Clientes</NavLink>
               <NavLink to="/lm-impressoes/dashboard/cadastros/servicos" icon={Printer}>Serviços</NavLink>
