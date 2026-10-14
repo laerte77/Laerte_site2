@@ -56,14 +56,15 @@ export default function ContasMesLM(){
     const reais=launches.filter(z=>normalize(z.lm_despesas?.despesa)===desc);
     const real=reais.reduce((sum,z)=>sum+(Number(z.valor)||0),0);
     const dif=real-previsto;
+    
     const savedStatus=normalize(x.status);
     let st;
 
-    if(previsto>0&&real>=previsto)st='Pago';
-    else if(real>0)st='Pago Parcialmente';
-    else if(savedStatus==='pago')st='Pago';
-    else if(savedStatus==='pago parcialmente'||savedStatus==='parcial')st='Pago Parcialmente';
-    else if(savedStatus==='atrasado')st='Atrasado';
+    if(savedStatus==='pago') st='Pago';
+    else if(previsto>0&&real>=previsto) st='Pago';
+    else if(real>0) st='Pago Parcialmente';
+    else if(savedStatus==='pago parcialmente'||savedStatus==='parcial') st='Pago Parcialmente';
+    else if(savedStatus==='atrasado') st='Atrasado';
     else st=dateKey(x.data_vencimento)<today?'Atrasado':'Pendente';
 
     return{
