@@ -13,11 +13,12 @@ import EstoqueAtualCard from'./EstoqueAtualCard';
 import{cn}from'@/lib/utils';
 
 const qty=v=>Number(v||0).toLocaleString('pt-BR',{maximumFractionDigits:3});
+const collator=new Intl.Collator('pt-BR',{sensitivity:'base',numeric:true});
 
 export default function ControleEstoque(){
  const{stockData,loading,refresh,lastUpdate,error}=useEstoqueCalculation();
  const[searchTerm,setSearchTerm]=useState('');
- const items=useMemo(()=>Object.values(stockData).sort((a,b)=>(a.nomeInsumo||a.tipo_folha).localeCompare(b.nomeInsumo||b.tipo_folha,'pt-BR')),[stockData]);
+ const items=useMemo(()=>Object.values(stockData).sort((a,b)=>collator.compare(a.nomeInsumo||a.tipo_folha||'',b.nomeInsumo||b.tipo_folha||'')),[stockData]);
  const filtered=useMemo(()=>items.filter(x=>`${x.nomeInsumo||''} ${x.tipo_folha||''} ${x.unidade||''}`.toLowerCase().includes(searchTerm.trim().toLowerCase())),[items,searchTerm]);
 
  const exportData=()=>{
