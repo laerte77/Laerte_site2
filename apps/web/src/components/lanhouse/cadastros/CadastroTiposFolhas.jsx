@@ -58,7 +58,7 @@ export default function CadastroTiposFolhas(){
   else{toast({title:'Sucesso',description:'Tipo de folha excluído.'});await load()}
  };
 
- const list=data.filter(x=>String(x.tipo_folha||'').toLowerCase().includes(search.trim().toLowerCase()));
+ const list=data.filter(x=>String(x.tipo_folha||'').toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>String(a.tipo_folha||'').localeCompare(String(b.tipo_folha||''),'pt-BR',{sensitivity:'base',numeric:true}));
 
  return <div className="dark-lm-impressoes space-y-4">
   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
