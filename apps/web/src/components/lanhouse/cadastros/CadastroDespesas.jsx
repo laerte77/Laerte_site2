@@ -58,7 +58,7 @@ export default function CadastroDespesas(){
   else{toast({title:'Sucesso',description:'Tipo excluído.'});await load()}
  };
 
- const list=data.filter(x=>String(x.despesa||'').toLowerCase().includes(search.trim().toLowerCase()));
+ const list=data.filter(x=>String(x.despesa||'').toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>String(a.despesa||'').localeCompare(String(b.despesa||''),'pt-BR',{sensitivity:'base',numeric:true}));
 
  return <div className="dark-lm-impressoes space-y-4">
   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
