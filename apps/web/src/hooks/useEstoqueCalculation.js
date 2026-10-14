@@ -4,6 +4,7 @@ import{useAuth}from'@/contexts/SupabaseAuthContext';
 
 const normalizeKey=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()||'DESCONHECIDO';
 const isReposicaoFolha=v=>/reposi.{0,8}de folha/i.test(String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+const dateKey=v=>String(v||'').slice(0,10);
 
 export function useEstoqueCalculation(){
  const{user}=useAuth();
@@ -18,17 +19,17 @@ export function useEstoqueCalculation(){
   try{
    setLoading(true);setError(null);
    const[a,b,c,d,e]=await Promise.all([
-    supabase.from('lm_estoques_inicial').select('produto,quantidade_inicial,insumo_id').eq('user_id',user.id),
-    supabase.from('lm_lanc_despesas').select('tipo_lancamento,tipo_folha,quantidade,insumo_id,lm_despesas(despesa)').eq('user_id',user.id).eq('tipo_lancamento','Estoque').not('quantidade','is',null),
-    supabase.from('lm_lanc_servicos').select('folhas_gastas').eq('user_id',user.id).not('folhas_gastas','is',null),
+    supabase.from('lm_estoques_inicial').select('produto,quantidade_inicial,insumo_id,data_inventario').eq('user_id',user.id),
+    supabase.from('lm_lanc_despesas').select('data,tipo_lancamento,tipo_folha,quantidade,insumo_id,lm_despesas(despesa)').eq('user_id',user.id).eq('tipo_lancamento','Estoque').not('quantidade','is',null),
+    supabase.from('lm_lanc_servicos').select('data,folhas_gastas').eq('user_id',user.id).not('folhas_gastas','is',null),
     supabase.from('lm_insumos').select('id,nome,unidade,estoque_minimo').eq('user_id',user.id),
     supabase.from('lm_tipos_folha').select('tipo_folha,insumo_id').eq('user_id',user.id)
    ]);
-   if(a.error)throw a.error;
-   if(b.error)throw b.error;
-   if(c.error)throw c.error;
-   if(d.error)throw d.error;
-   if(e.error)throw e.error;
+   for(const r of[a,b,c,d,e])if(r.error)throw r.error;
+
+   const baselineDates=(a.data||[]).map(x=>dateKey(x.data_inventario)).filter(Boolean).sort();
+   const baselineDate=baselineDates[0]||null;
+   const afterBaseline=x=>!baselineDate||!x?.data||dateKey(x.data)>=baselineDate;
 
    const insumoPorId=new Map((d.data||[]).map(i=>[String(i.id),i]));
    const folhaPorInsumo=new Map();
@@ -49,13 +50,7 @@ export function useEstoqueCalculation(){
    const map={};
    const ensure=name=>{
     const key=normalizeKey(name);
-    if(!map[key])map[key]={
-     tipo_folha:String(name||key),
-     baseline:0,
-     reposicoes:0,
-     folhasGastas:0,
-     estoqueAtual:0
-    };
+    if(!map[key])map[key]={tipo_folha:String(name||key),baseline:0,reposicoes:0,folhasGastas:0,estoqueAtual:0};
     return map[key];
    };
 
@@ -64,7 +59,7 @@ export function useEstoqueCalculation(){
     if(nome)ensure(nome).baseline+=Number(x.quantidade_inicial)||0;
    });
 
-   (b.data||[]).forEach(x=>{
+   (b.data||[]).filter(afterBaseline).forEach(x=>{
     const descricao=x.lm_despesas?.despesa;
     const nome=isReposicaoFolha(descricao)
      ?(nomePorInsumo(x.insumo_id)||x.tipo_folha)
@@ -72,7 +67,7 @@ export function useEstoqueCalculation(){
     if(nome)ensure(nome).reposicoes+=Number(x.quantidade)||0;
    });
 
-   (c.data||[]).forEach(x=>{
+   (c.data||[]).filter(afterBaseline).forEach(x=>{
     if(!Array.isArray(x.folhas_gastas))return;
     x.folhas_gastas.forEach(f=>{
      if(f.e_rascunho||!f.tipo_folha||Number(f.quantidade)<=0)return;
@@ -86,7 +81,10 @@ export function useEstoqueCalculation(){
     x.estoqueAtual=x.baseline+x.reposicoes-x.folhasGastas;
    });
 
-   if(isMounted.current){setStockData(map);setLastUpdate(new Date())}
+   if(isMounted.current){
+    setStockData(map);
+    setLastUpdate(new Date());
+   }
   }catch(e){
    console.error('Erro ao calcular estoque:',e);
    if(isMounted.current)setError(e.message||'Não foi possível calcular o estoque.');
