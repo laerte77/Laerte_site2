@@ -18,7 +18,7 @@ export default function DashboardHome(){
  const{user,isAdmin}=useAuth(),now=new Date();
  const[filters,setFilters]=useState({year:now.getFullYear(),month:now.getMonth()});
  const[loading,setLoading]=useState(true),[error,setError]=useState(null);
- const[data,setData]=useState({saldoGeral:0,entradas:0,despesas:0,saldo:0,clientes:0,pedidos:0,debitos:0,despesasPrevistas:0,topClientes:[],topServicos:[],entradasChart:[],despesasChart:[]});
+ const[data,setData]=useState({saldoGeral:0,entradas:0,despesas:0,saldo:0,dizimosOfertasPeriodo:0,clientes:0,pedidos:0,debitos:0,despesasPrevistas:0,topClientes:[],topServicos:[],entradasChart:[],despesasChart:[]});
 
  const fetchData=useCallback(async()=>{
   if(!user)return;
@@ -30,7 +30,7 @@ export default function DashboardHome(){
    const end=dateKey(year,month==='all'?12:Number(month)+1,month==='all'?31:new Date(year,Number(month)+1,0).getDate());
    const ys=dateKey(year,1,1),ye=dateKey(year,12,31);
 
-   const[servRes,despRes,cliRes,pedRes,debRes,prevRes,allServRes,allDespRes,allDizimosRes,entAnoRes,despAnoRes]=await Promise.all([
+   const[servRes,despRes,cliRes,pedRes,debRes,prevRes,allServRes,allDespRes,allDizimosRes,dizimosPeriodoRes,entAnoRes,despAnoRes]=await Promise.all([
     getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_servicos','data,valor,cliente,cliente_id,lm_servicos(servico)').gte('data',start).lte('data',end),
     getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_despesas','data,valor').gte('data',start).lte('data',end),
     getAccessibleDataQuery(user.id,isAdmin,'lm_clientes','id'),
@@ -40,17 +40,20 @@ export default function DashboardHome(){
     getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_servicos','valor'),
     getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_despesas','valor'),
     getAccessibleDataQuery(user.id,isAdmin,'lm_dizimos_ofertas','valor'),
+    getAccessibleDataQuery(user.id,isAdmin,'lm_dizimos_ofertas','data,valor').gte('data',start).lte('data',end),
     getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_servicos','data,valor').gte('data',ys).lte('data',ye),
     getAccessibleDataQuery(user.id,isAdmin,'lm_lanc_despesas','data,valor').gte('data',ys).lte('data',ye)
    ]);
 
-   const err=[servRes,despRes,cliRes,pedRes,debRes,prevRes,allServRes,allDespRes,allDizimosRes,entAnoRes,despAnoRes].map(r=>r.error).find(Boolean);
+   const err=[servRes,despRes,cliRes,pedRes,debRes,prevRes,allServRes,allDespRes,allDizimosRes,dizimosPeriodoRes,entAnoRes,despAnoRes].map(r=>r.error).find(Boolean);
    if(err)throw new Error(err.message||'Erro ao carregar os dados.');
 
    const serv=servRes.data||[],desp=despRes.data||[],prev=prevRes.data||[];
    const soma=a=>a.reduce((t,i)=>t+Number(i.valor||0),0);
-   const entradas=soma(serv),despesas=soma(desp),saldo=entradas-despesas;
+   const entradas=soma(serv),despesas=soma(desp);
    const totalDizimosOfertas=soma(allDizimosRes.data||[]);
+   const totalDizimosPeriodo=soma(dizimosPeriodoRes.data||[]);
+   const saldo=entradas-despesas-totalDizimosPeriodo;
    const saldoGeral=soma(allServRes.data||[])-soma(allDespRes.data||[])-totalDizimosOfertas;
    const debitos=new Set((debRes.data||[]).map(i=>i.cliente)).size;
 
@@ -76,7 +79,7 @@ export default function DashboardHome(){
     if(m>=0&&m<12)despesasChart[m].Despesas+=Number(i.valor||0);
    });
 
-   setData({saldoGeral,entradas,despesas,saldo,clientes:cliRes.data?.length||0,pedidos:pedRes.data?.length||0,debitos,despesasPrevistas:soma(prev),topClientes,topServicos,entradasChart,despesasChart});
+   setData({saldoGeral,entradas,despesas,saldo,dizimosOfertasPeriodo:totalDizimosPeriodo,clientes:cliRes.data?.length||0,pedidos:pedRes.data?.length||0,debitos,despesasPrevistas:soma(prev),topClientes,topServicos,entradasChart,despesasChart});
   }catch(e){
    console.error(e);
    setError(e?.message||'Não foi possível carregar o dashboard.');
@@ -93,7 +96,7 @@ export default function DashboardHome(){
   const a=[];
   if(data.debitos>0)a.push({icon:CreditCard,title:`${data.debitos} cliente${data.debitos>1?'s':''} com débito`,description:'Existem valores pendentes registrados no período.'});
   if(data.despesasPrevistas>0)a.push({icon:CalendarClock,title:'Despesas previstas',description:`Há ${fmt(data.despesasPrevistas)} em compromissos para o período.`});
-  if(data.saldo<0)a.push({icon:AlertTriangle,title:'Saldo do período negativo',description:'As despesas ultrapassaram as entradas.'});
+  if(data.saldo<0)a.push({icon:AlertTriangle,title:'Saldo do período negativo',description:'Despesas e dízimos/ofertas ultrapassaram as entradas.'});
   return a;
  },[data]);
 
@@ -155,7 +158,7 @@ export default function DashboardHome(){
     <div className="text-left md:text-right"><p className="text-xs text-muted-foreground">Despesas consomem</p><p className={`text-2xl font-black ${percentualDespesas>=80?'text-destructive':'text-[hsl(var(--neon-lanhouse))]'}`}>{percentualDespesas.toFixed(1)}%</p><p className="text-xs text-muted-foreground">das entradas</p></div>
    </div>
    <div className="mt-5 h-3 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[hsl(var(--neon-lanhouse))] to-cyan-300 transition-[width] duration-500" style={{width:`${percentualDespesas}%`}}/></div>
-   <div className="mt-3 flex justify-between gap-3 text-xs text-muted-foreground"><span>Entradas <strong className="text-foreground">{fmt(data.entradas)}</strong></span><span>Despesas <strong className="text-foreground">{fmt(data.despesas)}</strong></span></div>
+   <div className="mt-3 flex flex-wrap justify-between gap-3 text-xs text-muted-foreground"><span>Entradas <strong className="text-foreground">{fmt(data.entradas)}</strong></span><span>Despesas <strong className="text-foreground">{fmt(data.despesas)}</strong></span><span>Dízimos/Ofertas <strong className="text-foreground">{fmt(data.dizimosOfertasPeriodo)}</strong></span></div>
   </NeonCard>
 
   <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
