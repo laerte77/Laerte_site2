@@ -24,6 +24,8 @@ const RED='hsl(0 84% 60%)';
 const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2});
 const getSPDate=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return`${p.year}-${p.month}-${p.day}`};
 const dateKey=v=>String(v||'').slice(0,10);
+const monthKey=v=>dateKey(v).slice(0,7);
+const monthLabel=v=>{const k=monthKey(v);if(!/^\d{4}-\d{2}$/.test(k))return'mês selecionado';const[m,y]=k.split('-');return`${meses[Number(m)-1]} de ${y}`};
 const dateBR=v=>{const m=dateKey(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?`${m[3]}/${m[2]}/${m[1]}`:'-'};
 const moneyInput=v=>{const d=String(v??'').replace(/\D/g,'');return d?BRL.format(Number(d)/100):''};
 const moneyNumber=v=>{const d=String(v??'').replace(/\D/g,'');return d?Number(d)/100:0};
@@ -47,6 +49,12 @@ export default function LancamentoDespesas(){
  const selectedInsumo=insumos.find(i=>String(i.id)===String(formData.insumo_id));
  const selectedFolha=tiposFolha.find(t=>String(t.tipo_folha)===String(formData.tipo_folha));
  const showParcelas=formData.forma_pagamento==='Cartão de Crédito';
+
+ // Mostra apenas contas previstas do mesmo mês e ano da data do lançamento.
+ const contasPrevistasDoMes=useMemo(()=>{
+  const k=monthKey(formData.data);
+  return k?despesasPrevistas.filter(p=>monthKey(p.data_vencimento)===k):[];
+ },[despesasPrevistas,formData.data]);
 
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
 
@@ -107,11 +115,15 @@ export default function LancamentoDespesas(){
   if(item){
    const folha=tiposFolha.find(t=>normalize(t.tipo_folha)===normalize(item.tipo_folha));
    const insumoId=item.insumo_id||folha?.insumo_id||insumos.find(i=>normalize(i.nome)===normalize(item.tipo_folha||item.lm_despesas?.despesa))?.id||'';
+   const linkId=String(item.despesa_prevista_id||'');
+   const link=despesasPrevistas.find(p=>String(p.id)===linkId);
+   const linkValido=!!link&&monthKey(link.data_vencimento)===monthKey(item.data);
+   if(linkId&&!linkValido)toast({title:'Vínculo fora do período',description:'A conta anteriormente vinculada pertence a outro mês/ano ou não está disponível. Selecione uma conta do período do lançamento.',variant:'destructive'});
    setEditingId(item.id);
    setFormData({
     data:dateKey(item.data),
     despesa_id:String(item.despesa_id||''),
-    despesa_prevista_id:String(item.despesa_prevista_id||''),
+    despesa_prevista_id:linkValido?linkId:'',
     valor:moneyInput(Math.round(Number(item.valor||0)*100)),
     forma_pagamento:item.forma_pagamento||'',
     parcelas:item.parcelas||1,
@@ -135,6 +147,15 @@ export default function LancamentoDespesas(){
   setFormData({...initialForm,data:getSPDate()});
  };
 
+ const changeData=v=>{
+  const id=formData.despesa_prevista_id;
+  const link=despesasPrevistas.find(p=>String(p.id)===String(id));
+  if(id&&(!link||monthKey(link.data_vencimento)!==monthKey(v))){
+   setFormData(p=>({...p,data:v,despesa_prevista_id:''}));
+   toast({title:'Vínculo removido',description:`A data mudou de mês/ano. Selecione uma conta prevista de ${monthLabel(v)}.`});
+  }else setFormData(p=>({...p,data:v}));
+ };
+
  const changeDespesa=id=>{
   const item=tiposDespesa.find(d=>String(d.id)===String(id));
   setFormData(p=>({...p,despesa_id:id,despesa_prevista_id:'',categoria:item?.categoria||p.categoria,quantidade:'',tipo_folha:'',insumo_id:''}));
@@ -156,8 +177,11 @@ export default function LancamentoDespesas(){
    toast({title:'Quantidade inválida',description:'Informe uma quantidade maior que zero para a entrada no estoque.',variant:'destructive'});
    return;
   }
-  if(formData.despesa_prevista_id&&!despesasPrevistas.some(p=>String(p.id)===String(formData.despesa_prevista_id))){
-   toast({title:'Conta prevista inválida',description:'Atualize a lista e selecione novamente a conta.',variant:'destructive'});
+
+  // Impede associar uma despesa a uma conta prevista de outro mês/ano.
+  const contaSelecionada=formData.despesa_prevista_id?despesasPrevistas.find(p=>String(p.id)===String(formData.despesa_prevista_id)):null;
+  if(formData.despesa_prevista_id&&(!contaSelecionada||monthKey(contaSelecionada.data_vencimento)!==monthKey(formData.data))){
+   toast({title:'Conta prevista fora do período',description:'Selecione uma conta prevista do mesmo mês e ano da data do lançamento.',variant:'destructive'});
    return;
   }
 
@@ -263,22 +287,23 @@ export default function LancamentoDespesas(){
    <ModalLancamentoPadrao open={dialogOpen} onClose={closeDialog} title={editingId?'Editar Despesa':'Nova Despesa'} description={editingId?'Atualize os dados da despesa.':'Registre uma nova despesa.'} icon={Receipt} theme="red" footer={<><Button type="button" variant="outline" onClick={closeDialog} className="h-11 rounded-xl border-border px-5">Cancelar</Button><Button type="submit" form="form-despesa" className="h-11 rounded-xl bg-red-500 px-6 font-semibold text-white hover:bg-red-600">{editingId?'Atualizar':'Salvar'}</Button></>}>
     <form id="form-despesa" onSubmit={save} className="max-h-[calc(100vh-300px)] space-y-5 overflow-y-auto pr-1">
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <div className="space-y-2"><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))} required className="h-11 rounded-xl bg-input"/></div>
+      <div className="space-y-2"><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>changeData(e.target.value)} required className="h-11 rounded-xl bg-input"/></div>
       <div className="space-y-2"><Label>Valor (R$) *</Label><Input type="text" inputMode="numeric" autoComplete="off" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:moneyInput(e.target.value)}))} required placeholder="R$ 0,00" className="h-11 rounded-xl bg-input tabular-nums"/></div>
      </div>
 
      <div className="space-y-2"><Label>Descrição *</Label><Select value={formData.despesa_id} onValueChange={changeDespesa}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione a despesa"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{tiposDespesa.map(t=><SelectItem key={t.id} value={String(t.id)}>{t.despesa}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
 
      <div className="space-y-2">
-      <Label>Conta prevista vinculada (opcional)</Label>
+      <Label>Conta prevista vinculada — {monthLabel(formData.data)} (opcional)</Label>
       <Select value={formData.despesa_prevista_id||'nenhuma'} onValueChange={v=>setFormData(p=>({...p,despesa_prevista_id:v==='nenhuma'?'':v}))}>
        <SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Sem vínculo"/></SelectTrigger>
        <SelectContent className="max-h-72">
         <SelectItem value="nenhuma">Sem vínculo</SelectItem>
-        {despesasPrevistas.map(p=><SelectItem key={p.id} value={String(p.id)}>{`${p.descricao||'Conta'} • Venc. ${dateBR(p.data_vencimento)} • ${BRL.format(Number(p.valor)||0)}`}</SelectItem>)}
+        {contasPrevistasDoMes.map(p=><SelectItem key={p.id} value={String(p.id)}>{`${p.descricao||'Conta'} • Venc. ${dateBR(p.data_vencimento)} • ${BRL.format(Number(p.valor)||0)}`}</SelectItem>)}
        </SelectContent>
       </Select>
-      <p className="text-xs text-muted-foreground">Selecione a conta que está sendo paga, total ou parcialmente. A associação é manual; não escolha apenas porque as descrições são parecidas.</p>
+      <p className="text-xs text-muted-foreground">Somente contas com vencimento no mesmo mês e ano da data do lançamento aparecem aqui. O vínculo é manual e pode ser deixado vazio.</p>
+      {!contasPrevistasDoMes.length&&<p className="text-sm text-amber-400">Não há contas previstas para {monthLabel(formData.data)}. A despesa pode ser salva sem vínculo.</p>}
      </div>
 
      <div className="space-y-2">
@@ -368,7 +393,7 @@ export default function LancamentoDespesas(){
          <TableCell className="font-semibold">{x.lm_despesas?.despesa||'N/A'}</TableCell>
          <TableCell className="text-sm">{despesasPrevistas.find(p=>String(p.id)===String(x.despesa_prevista_id))?.descricao||'—'}</TableCell>
          <TableCell><Badge variant="outline">{tipoLabel(x.tipo_lancamento)}</Badge></TableCell>
-         <TableCell>{x.tipo_folha||insumos.find(i=>String(i.id)===String(x.insumo_id))?.nome||x.lm_despesas?.despesa||'-'}</TableCell>
+         <TableCell>{x.tipo_folha||insumos.find(i=>String(i.id)===String(x.insumo_id))?.nome||x.lm_despesas?.despesa||'—'}</TableCell>
          <TableCell className="text-center">{x.quantidade??'—'}</TableCell>
          <TableCell><Badge variant="outline">{x.categoria||x.lm_despesas?.categoria||'N/A'}</Badge></TableCell>
          <TableCell className="text-right font-bold tabular-nums" style={{color:RED}}>{BRL.format(Number(x.valor)||0)}</TableCell>
