@@ -20,7 +20,7 @@ export function useEstoqueCalculation(){
   setLoading(true);setError(null);
   try{
    const[a,b,c,d,e,f]=await Promise.all([
-    supabase.from('lm_estoques_inicial').select('produto,quantidade_inicial,insumo_id,data_inventario,unidade').eq('user_id',user.id),
+    supabase.from('lm_estoques_inicial').select('produto,quantidade_inicial,insumo_id,data_inventario').eq('user_id',user.id),
     supabase.from('lm_lanc_despesas').select('data,tipo_lancamento,tipo_folha,quantidade,insumo_id,lm_despesas(despesa)').eq('user_id',user.id).eq('tipo_lancamento','Estoque').not('quantidade','is',null),
     supabase.from('lm_lanc_servicos').select('data,folhas_gastas').eq('user_id',user.id).not('folhas_gastas','is',null),
     supabase.from('lm_insumos').select('id,nome,unidade,estoque_minimo,ativo').eq('user_id',user.id),
