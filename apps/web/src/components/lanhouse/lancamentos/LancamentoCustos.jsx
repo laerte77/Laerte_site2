@@ -125,7 +125,7 @@ export default function LancamentoCustos(){
    if(error)throw error;
    toast({title:'Removido',description:'Lançamento excluído.'});
    await load();
-  }catch(e){toast({title:'Erro',description:e.message,variant:'destructive')}
+    }catch(e){toast({title:'Erro',description:e.message,variant:'destructive'});}
   }
  };
 
