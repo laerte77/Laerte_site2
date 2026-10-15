@@ -68,13 +68,9 @@ export default function LancamentoServicos(){
    setOriginalFolhas(JSON.parse(JSON.stringify(folhas)));
    setFolhasConsumo(folhas);
   }else{
-   setEditingId(null);
-   setFormData({...initial,data:todaySP()});
-   setOriginalFolhas([]);
-   setFolhasConsumo([]);
+   setEditingId(null);setFormData({...initial,data:todaySP()});setOriginalFolhas([]);setFolhasConsumo([]);
   }
-  setSaving(false);
-  setAddOpen(true);
+  setSaving(false);setAddOpen(true);
  };
 
  const closeDialog=()=>{
@@ -105,25 +101,20 @@ export default function LancamentoServicos(){
 
  const prepararCustosFolhas=async(lista,originais=[],emEdicao=false,dataServico=todaySP())=>{
   const filasOriginais=new Map(),pendentes=new Set(),tiposCache=new Map();
-  if(emEdicao){
-   (originais||[]).forEach(f=>{
-    if(!f?.tipo_folha||f.e_rascunho||Number(f.quantidade)<=0)return;
-    const k=normalizar(f.tipo_folha);
-    if(!filasOriginais.has(k))filasOriginais.set(k,[]);
-    filasOriginais.get(k).push(f);
-   });
-  }
+  if(emEdicao)(originais||[]).forEach(f=>{
+   if(!f?.tipo_folha||f.e_rascunho||Number(f.quantidade)<=0)return;
+   const k=normalizar(f.tipo_folha);
+   if(!filasOriginais.has(k))filasOriginais.set(k,[]);
+   filasOriginais.get(k).push(f);
+  });
 
-  const tiposRes=await supabase.from('lm_tipos_folha').select('tipo_folha,preco,is_special').eq('user_id',user.id);
+  const tiposRes=await supabase.from('lm_tipos_folha').select('tipo_folha,preco,is_special,insumo_id').eq('user_id',user.id);
   (tiposRes.data||[]).forEach(t=>tiposCache.set(normalizar(t.tipo_folha),t));
   if(tiposRes.error)console.error('Não foi possível consultar os tipos de folha:',tiposRes.error);
 
   const resolverCusto=async nome=>{
    try{
-    return await resolverCustoUnitarioMaterial({
-     supabase,userId:user.id,tipoFolha:nome,dataReferencia:dataServico,
-     tipoCadastro:tiposCache.get(normalizar(nome))
-    });
+    return await resolverCustoUnitarioMaterial({supabase,userId:user.id,tipoFolha:nome,dataReferencia:dataServico,tipoCadastro:tiposCache.get(normalizar(nome))});
    }catch(e){
     console.error(`Não foi possível buscar o custo de ${nome}:`,e);
     return{ok:false,unitario:0,origem:'pendente',estimado:false,pendente:true,dataCompra:null};
@@ -136,13 +127,7 @@ export default function LancamentoServicos(){
 
    if(original?.custo_automatico===true&&Number.isFinite(Number(original.custo_unitario))){
     const unitario=Number(original.custo_unitario);
-    return{
-     ...f,custo_automatico:true,custo_pendente:false,
-     custo_unitario:unitario,custo_total:custoTotal(f.quantidade,unitario),
-     custo_origem:original.custo_origem||'historico',
-     custo_estimado:original.custo_estimado===true,
-     custo_data_compra:original.custo_data_compra||null
-    };
+    return{...f,custo_automatico:true,custo_pendente:false,custo_unitario:unitario,custo_total:custoTotal(f.quantidade,unitario),custo_origem:original.custo_origem||'historico',custo_estimado:original.custo_estimado===true,custo_data_compra:original.custo_data_compra||null};
    }
 
    if(original&&!original.custo_pendente){
@@ -156,12 +141,7 @@ export default function LancamentoServicos(){
     return{...f,custo_automatico:false,custo_pendente:true,custo_origem:'pendente',custo_estimado:false};
    }
 
-   return{
-    ...f,custo_automatico:true,custo_pendente:false,
-    custo_unitario:custo.unitario,custo_total:custoTotal(f.quantidade,custo.unitario),
-    custo_origem:custo.origem,custo_estimado:custo.estimado,
-    custo_data_compra:custo.dataCompra||null
-   };
+   return{...f,custo_automatico:true,custo_pendente:false,custo_unitario:custo.unitario,custo_total:custoTotal(f.quantidade,custo.unitario),custo_origem:custo.origem,custo_estimado:custo.estimado,custo_data_compra:custo.dataCompra||null};
   }));
 
   return{folhas,semCusto:[...pendentes]};
@@ -201,13 +181,7 @@ export default function LancamentoServicos(){
     }
    }
 
-   const payload={
-    user_id:user.id,data:formData.data,servico_id:formData.servico_id,
-    cliente_id:formData.cliente_id,
-    cliente:clientesOpcoes.find(c=>c.id===formData.cliente_id)?.nome||null,
-    valor:valorNumerico,forma_pagamento:formData.forma_pagamento,
-    folhas_gastas:folhasParaSalvar
-   };
+   const payload={user_id:user.id,data:formData.data,servico_id:formData.servico_id,cliente_id:formData.cliente_id,cliente:clientesOpcoes.find(c=>c.id===formData.cliente_id)?.nome||null,valor:valorNumerico,forma_pagamento:formData.forma_pagamento,folhas_gastas:folhasParaSalvar};
 
    if(!isOnline&&!editingId){
     await saveOfflineData('lm_servicos',payload);
@@ -215,22 +189,15 @@ export default function LancamentoServicos(){
     checkPending();
    }else{
     if(!isOnline){toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});return}
-    const q=editingId
-     ?supabase.from('lm_lanc_servicos').update(payload).eq('id',editingId).eq('user_id',user.id)
-     :supabase.from('lm_lanc_servicos').insert(payload);
+    const q=editingId?supabase.from('lm_lanc_servicos').update(payload).eq('id',editingId).eq('user_id',user.id):supabase.from('lm_lanc_servicos').insert(payload);
     const{error}=await q;
     if(error)throw error;
-    if(custosPendentes.length){
-     toast({title:'Serviço registrado com custo pendente',description:`Confira o cadastro ou as compras destas folhas: ${custosPendentes.join(', ')}.`,variant:'destructive'});
-    }else{
-     toast({title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
-    }
+    toast(custosPendentes.length?{title:'Serviço registrado com custo pendente',description:`Confira o cadastro ou as compras destas folhas: ${custosPendentes.join(', ')}.`,variant:'destructive'}:{title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
     await refresh();
    }
    resetAfterSave();
-  }catch(e){
-   toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar o serviço.',variant:'destructive'});
-  }finally{setSaving(false)}
+  }catch(e){toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar o serviço.',variant:'destructive'})}
+  finally{setSaving(false)}
  };
 
  const remove=async id=>{
@@ -256,56 +223,24 @@ export default function LancamentoServicos(){
    <OfflineIndicator/>
    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
     <div><p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:CYAN}}>LM Impressões</p><h1 className="mt-1 text-2xl font-bold text-foreground">Lançamento de Serviços</h1><p className="text-sm text-muted-foreground">Registre serviços e calcule automaticamente o custo das folhas utilizadas.</p></div>
-    <div className="flex flex-wrap gap-2">
-     <Button variant="outline" onClick={()=>setStockOpen(true)}><PackageSearch className="mr-2 h-4 w-4"/>Estoque</Button>
-     <Button variant="outline" onClick={()=>setExportOpen(true)}><Download className="mr-2 h-4 w-4"/>Exportar</Button>
-     <Button onClick={()=>openDialog()} className="text-white" style={{background:CYAN}}><Plus className="mr-2 h-4 w-4"/>Novo Serviço</Button>
-    </div>
+    <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>setStockOpen(true)}><PackageSearch className="mr-2 h-4 w-4"/>Estoque</Button><Button variant="outline" onClick={()=>setExportOpen(true)}><Download className="mr-2 h-4 w-4"/>Exportar</Button><Button onClick={()=>openDialog()} className="text-white" style={{background:CYAN}}><Plus className="mr-2 h-4 w-4"/>Novo Serviço</Button></div>
    </div>
 
-   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-    {[{l:'Registros',v:filtered.length},{l:'Total',v:BRL.format(total)},{l:'Com Folhas',v:filtered.filter(x=>Array.isArray(x.folhas_gastas)&&x.folhas_gastas.some(f=>!f.e_rascunho)).length},{l:'Clientes',v:new Set(filtered.map(x=>x.cliente_id||x.cliente)).size}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{x.v}</p></CardContent></Card>)}
-   </div>
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[{l:'Registros',v:filtered.length},{l:'Total',v:BRL.format(total)},{l:'Com Folhas',v:filtered.filter(x=>Array.isArray(x.folhas_gastas)&&x.folhas_gastas.some(f=>!f.e_rascunho)).length},{l:'Clientes',v:new Set(filtered.map(x=>x.cliente_id||x.cliente)).size}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{x.v}</p></CardContent></Card>)}</div>
 
-   <Card className="border-border bg-card"><CardContent className="p-4">
-    <div className="flex flex-col gap-3 xl:flex-row">
-     <div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Buscar serviço ou cliente..." className="h-10 pl-9"/></div>
-     <div className="flex flex-wrap gap-2">
-      <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[140px]"><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select>
-      <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[110px]"><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
-      <Button variant="outline" onClick={()=>setSearchTerm('')}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button>
-     </div>
-    </div>
-   </CardContent></Card>
+   <Card className="border-border bg-card"><CardContent className="p-4"><div className="flex flex-col gap-3 xl:flex-row">
+    <div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Buscar serviço ou cliente..." className="h-10 pl-9"/></div>
+    <div className="flex flex-wrap gap-2"><Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[140px]"><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select><Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[110px]"><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select><Button variant="outline" onClick={()=>setSearchTerm('')}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button></div>
+   </div></CardContent></Card>
 
-   <Dialog open={stockOpen} onOpenChange={setStockOpen}><DialogContent className="bg-card border-border sm:max-w-[800px]">
-    <DialogHeader><DialogTitle><PackageSearch className="mr-2 inline h-5 w-5" style={{color:CYAN}}/>Estoque Atual</DialogTitle><DialogDescription>Disponibilidade atual de folhas e materiais.</DialogDescription></DialogHeader>
-    <ScrollArea className="max-h-[60vh]"><div className="grid gap-4 py-4 sm:grid-cols-2 lg:grid-cols-3">{isStockLoading?<Loader2 className="mx-auto h-8 w-8 animate-spin"/>:Object.values(stockData).map(i=><EstoqueAtualCard key={i.tipo_folha} item={i} lastUpdate={lastUpdate}/>)}</div></ScrollArea>
-    <DialogFooter><Button variant="outline" onClick={()=>setStockOpen(false)}>Fechar</Button></DialogFooter>
-   </DialogContent></Dialog>
+   <Dialog open={stockOpen} onOpenChange={setStockOpen}><DialogContent className="bg-card border-border sm:max-w-[800px]"><DialogHeader><DialogTitle><PackageSearch className="mr-2 inline h-5 w-5" style={{color:CYAN}}/>Estoque Atual</DialogTitle><DialogDescription>Disponibilidade atual de folhas e materiais.</DialogDescription></DialogHeader><ScrollArea className="max-h-[60vh]"><div className="grid gap-4 py-4 sm:grid-cols-2 lg:grid-cols-3">{isStockLoading?<Loader2 className="mx-auto h-8 w-8 animate-spin"/>:Object.values(stockData).map(i=><EstoqueAtualCard key={i.tipo_folha} item={i} lastUpdate={lastUpdate}/>)}</div></ScrollArea><DialogFooter><Button variant="outline" onClick={()=>setStockOpen(false)}>Fechar</Button></DialogFooter></DialogContent></Dialog>
 
-   <Dialog open={exportOpen} onOpenChange={setExportOpen}><DialogContent className="bg-card border-border sm:max-w-[430px]">
-    <DialogHeader><DialogTitle>Exportar Serviços</DialogTitle><DialogDescription>Selecione o período.</DialogDescription></DialogHeader>
-    <div className="grid grid-cols-2 gap-4 py-4">
-     <div><Label>Mês</Label><Select value={String(exportFilters.month)} onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select></div>
-     <div><Label>Ano</Label><Select value={String(exportFilters.year)} onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select></div>
-    </div>
-    <DialogFooter><Button variant="outline" onClick={()=>setExportOpen(false)}>Cancelar</Button><Button onClick={exportar} style={{background:CYAN}} className="text-white">Exportar</Button></DialogFooter>
-   </DialogContent></Dialog>
+   <Dialog open={exportOpen} onOpenChange={setExportOpen}><DialogContent className="bg-card border-border sm:max-w-[430px]"><DialogHeader><DialogTitle>Exportar Serviços</DialogTitle><DialogDescription>Selecione o período.</DialogDescription></DialogHeader><div className="grid grid-cols-2 gap-4 py-4"><div><Label>Mês</Label><Select value={String(exportFilters.month)} onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select></div><div><Label>Ano</Label><Select value={String(exportFilters.year)} onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select></div></div><DialogFooter><Button variant="outline" onClick={()=>setExportOpen(false)}>Cancelar</Button><Button onClick={exportar} style={{background:CYAN}} className="text-white">Exportar</Button></DialogFooter></DialogContent></Dialog>
 
    <ModalLancamentoPadrao open={addOpen} onClose={closeDialog} title={editingId?'Editar Serviço':'Novo Serviço'} description={editingId?'Atualize os dados do serviço.':'Registre um novo serviço prestado.'} icon={Receipt} theme="cyan" footer={<><Button type="button" variant="outline" onClick={closeDialog} disabled={saving} className="h-11 rounded-xl border-border px-5">Cancelar</Button><Button type="submit" form="form-servico" disabled={saving} className="h-11 rounded-xl px-6 font-semibold text-white" style={{background:CYAN}}>{saving&&<Loader2 className="mr-2 h-4 w-4 animate-spin"/>}{editingId?'Atualizar':'Salvar'}</Button></>}>
     <form id="form-servico" onSubmit={save} className="max-h-[calc(100vh-300px)] space-y-5 overflow-y-auto pr-1">
-     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <div className="space-y-2"><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))} required disabled={saving} className="h-11 rounded-xl bg-input"/></div>
-      <div className="space-y-2"><Label>Valor (R$) *</Label><Input type="text" inputMode="numeric" autoComplete="off" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:moneyInput(e.target.value)}))} required disabled={saving} placeholder="R$ 0,00" className="h-11 rounded-xl bg-input tabular-nums"/></div>
-     </div>
-     <div className="space-y-2"><Label>Tipo do Serviço *</Label>
-      <Select value={formData.servico_id} onValueChange={v=>setFormData(p=>({...p,servico_id:v}))} disabled={saving}>
-       <SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o serviço"/></SelectTrigger>
-       <SelectContent><ScrollArea className="h-48">{servicosOpcoes.map(s=><SelectItem key={s.id} value={s.id}>{s.servico}{s.usa_folha?' 📄':''}</SelectItem>)}</ScrollArea></SelectContent>
-      </Select>
-      {selectedServico?.usa_folha&&<Alert className="border-cyan-500/30 bg-cyan-500/10"><AlertTriangle className="h-4 w-4"/><AlertDescription>As folhas utilizadas serão verificadas no estoque e terão o custo salvo junto ao serviço.</AlertDescription></Alert>}
-     </div>
+     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))} required disabled={saving} className="h-11 rounded-xl bg-input"/></div><div className="space-y-2"><Label>Valor (R$) *</Label><Input type="text" inputMode="numeric" autoComplete="off" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:moneyInput(e.target.value)}))} required disabled={saving} placeholder="R$ 0,00" className="h-11 rounded-xl bg-input tabular-nums"/></div></div>
+     <div className="space-y-2"><Label>Tipo do Serviço *</Label><Select value={formData.servico_id} onValueChange={v=>setFormData(p=>({...p,servico_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o serviço"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{servicosOpcoes.map(s=><SelectItem key={s.id} value={s.id}>{s.servico}{s.usa_folha?' 📄':''}</SelectItem>)}</ScrollArea></SelectContent></Select>{selectedServico?.usa_folha&&<Alert className="border-cyan-500/30 bg-cyan-500/10"><AlertTriangle className="h-4 w-4"/><AlertDescription>As folhas utilizadas serão verificadas no estoque e terão o custo salvo junto ao serviço.</AlertDescription></Alert>}</div>
      <div className="space-y-2"><Label>Cliente *</Label><Select value={formData.cliente_id} onValueChange={v=>setFormData(p=>({...p,cliente_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o cliente"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{clientesOpcoes.map(c=><SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
      <div className="space-y-2"><Label>Forma de Pagamento *</Label><Select value={formData.forma_pagamento} onValueChange={v=>setFormData(p=>({...p,forma_pagamento:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o pagamento"/></SelectTrigger><SelectContent>{['Dinheiro','PIX','Cartão de Crédito','Cartão de Débito'].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div>
      {selectedServico?.usa_folha&&<div className="space-y-2 border-t border-border pt-4"><FolhasTable folhas={folhasConsumo} setFolhas={setFolhasConsumo} tiposFolha={tiposFolha} estoqueAtual={estoqueAtual} disabled={saving}/></div>}
@@ -317,12 +252,7 @@ export default function LancamentoServicos(){
     <TableBody>
      {loading?<TableRow><TableCell colSpan={6} className="py-12 text-center">Carregando...</TableCell></TableRow>
      :!filtered.length?<TableRow><TableCell colSpan={6} className="py-12 text-center text-muted-foreground">Nenhum serviço encontrado.</TableCell></TableRow>
-     :filtered.map(x=><TableRow key={x.id} className="hover:bg-muted/40">
-      <TableCell>{dateBR(x.data)}</TableCell><TableCell className="font-semibold">{x.lm_servicos?.servico||'N/A'}<div className="text-xs text-muted-foreground">{x.forma_pagamento||''}</div></TableCell><TableCell>{x.lm_clientes?.nome||x.cliente||'-'}</TableCell><TableCell>{folhasText(x.folhas_gastas)}</TableCell><TableCell className="text-right font-bold" style={{color:CYAN}}>{BRL.format(Number(x.valor)||0)}</TableCell>
-      <TableCell><div className="flex justify-center gap-1"><Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço"><Edit className="h-4 w-4"/></Button>
-       <AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-      </div></TableCell>
-     </TableRow>)}
+     :filtered.map(x=><TableRow key={x.id} className="hover:bg-muted/40"><TableCell>{dateBR(x.data)}</TableCell><TableCell className="font-semibold">{x.lm_servicos?.servico||'N/A'}<div className="text-xs text-muted-foreground">{x.forma_pagamento||''}</div></TableCell><TableCell>{x.lm_clientes?.nome||x.cliente||'-'}</TableCell><TableCell>{folhasText(x.folhas_gastas)}</TableCell><TableCell className="text-right font-bold" style={{color:CYAN}}>{BRL.format(Number(x.valor)||0)}</TableCell><TableCell><div className="flex justify-center gap-1"><Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço"><Edit className="h-4 w-4"/></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></TableCell></TableRow>)}
     </TableBody>
    </Table></ScrollArea></CardContent></Card>
   </motion.div>
