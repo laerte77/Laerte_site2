@@ -13,7 +13,7 @@ import{useAuth}from'@/contexts/SupabaseAuthContext';
 import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const TIPOS=[{value:'Estoque',label:'Entrada no estoque'},{value:'Despesa operacional',label:'Despesa operacional'}];
-const CATEGORIAS=['Impressão','Materiais de produção','Digital','Infraestrutura','Manutenção','Outros'];
+const CATEGORIAS=['Impressão','Materiais de produção','Digital','Infraestrutura','Manutenção','Equipamentos e ferramentas','Transporte e deslocamento','Despesas financeiras e tarifas','Outros'];
 const tipoLabel=v=>TIPOS.find(t=>t.value===v)?.label||'Não configurada';
 
 export default function CadastroDespesas(){
