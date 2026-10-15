@@ -1,6 +1,6 @@
 import React,{useState,useEffect,useCallback,useMemo}from'react';
 import{motion}from'framer-motion';
-import{TrendingDown,Save,Trash2,Search,RotateCcw,Receipt,Loader2,Info}from'lucide-react';
+import{TrendingDown,Save,Trash2,Search,RotateCcw,Receipt,Loader2,Info,AlertTriangle}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -14,18 +14,26 @@ import{useToast}from'@/components/ui/use-toast';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
+import{resolverCustoUnitarioMaterial}from'@/lib/lmCustosMateriais';
 
 const C='hsl(190 90% 50%)';
 const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const hoje=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return`${p.year}-${p.month}-${p.day}`};
 const moeda=v=>BRL.format(Number(v)||0);
-const dataBR=v=>v?new Date(`${v}T12:00:00-03:00`).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—';
+const dataBR=v=>v?new Date(`${String(v).slice(0,10)}T12:00:00-03:00`).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—';
+
+const origemTexto=(origem,estimado,dataCompra)=>{
+ if(origem==='compra')return`Compra de ${dataBR(dataCompra)}`;
+ if(origem==='cadastro'||estimado)return'Custo estimado pelo cadastro';
+ if(origem==='especial')return'Material especial sem custo automático';
+ return' Custo pendente';
+};
 
 export default function LancamentoCustos(){
  const{toast}=useToast(),{user}=useAuth();
  const[tiposFolha,setTiposFolha]=useState([]),[entries,setEntries]=useState([]);
  const[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[search,setSearch]=useState(''),[dialogOpen,setDialogOpen]=useState(false);
- const initial={tipo_folha:'',data_lancamento:hoje(),tipo:'Consumo',quantidade:'',custo_unitario:'0.00',custo_total:'0.00',descricao:''};
+ const initial={tipo_folha:'',data_lancamento:hoje(),tipo:'Consumo',quantidade:'',custo_unitario:'0.00',custo_total:'0.00',custo_origem:'pendente',custo_estimado:false,custo_pendente:true,custo_data_compra:'',descricao:''};
  const[form,setForm]=useState(initial);
 
  const load=useCallback(async()=>{
@@ -54,30 +62,31 @@ export default function LancamentoCustos(){
  const selected=useMemo(()=>tiposFolha.find(x=>x.tipo_folha===form.tipo_folha),[tiposFolha,form.tipo_folha]);
  const isSpecial=!!selected?.is_special;
 
- const loadUnitCost=useCallback(async tipo=>{
-  if(!user||!tipo){setForm(p=>({...p,custo_unitario:'0.00'}));return}
+ const loadUnitCost=useCallback(async(tipo,dataReferencia)=>{
   const obj=tiposFolha.find(x=>x.tipo_folha===tipo);
-  if(obj?.is_special){setForm(p=>({...p,custo_unitario:'0.00'}));return}
+  if(!user||!tipo){
+   setForm(p=>({...p,custo_unitario:'0.00',custo_origem:'pendente',custo_estimado:false,custo_pendente:true,custo_data_compra:''}));
+   return;
+  }
   try{
-   const a=await supabase.from('lm_tipos_folha').select('preco').eq('user_id',user.id).eq('tipo_folha',tipo).single();
-   if(!a.error&&Number(a.data?.preco)>0){setForm(p=>({...p,custo_unitario:Number(a.data.preco).toFixed(2)}));return}
-   const{data,error}=await supabase.from('lm_lanc_despesas').select('valor,quantidade').eq('user_id',user.id).eq('tipo_lancamento','Estoque').eq('tipo_folha',tipo).not('quantidade','is',null).gt('quantidade',0).order('data',{ascending:false}).limit(1);
-   if(error)throw error;
-   if(data?.length)setForm(p=>({...p,custo_unitario:(Number(data[0].valor)/Number(data[0].quantidade)).toFixed(2)}));
-   else{
-    setForm(p=>({...p,custo_unitario:'0.00'}));
-    toast({title:'Atenção',description:`Não encontrei um custo cadastrado para "${tipo}". Confira o cadastro e as compras.`});
+   const custo=await resolverCustoUnitarioMaterial({supabase,userId:user.id,tipoFolha:tipo,dataReferencia,tipoCadastro:obj});
+   setForm(p=>({...p,custo_unitario:Number(custo.unitario||0).toFixed(2),custo_origem:custo.origem,custo_estimado:!!custo.estimado,custo_pendente:!!custo.pendente,custo_data_compra:custo.dataCompra||''}));
+   if(custo.pendente){
+    toast({title:'Custo pendente',description:`Não encontrei compra anterior nem custo de referência para "${tipo}". O registro ficará marcado para conferência.`});
+   }else if(custo.estimado){
+    toast({title:'Custo estimado',description:`"${tipo}" será calculado pelo custo de referência cadastrado, pois não há compra anterior válida.`});
    }
   }catch(e){
-   setForm(p=>({...p,custo_unitario:'0.00'}));
-   toast({title:'Erro ao buscar custo',description:e.message,variant:'destructive'});
+   console.error('Erro ao buscar custo unitário:',e);
+   setForm(p=>({...p,custo_unitario:'0.00',custo_origem:'pendente',custo_estimado:false,custo_pendente:true,custo_data_compra:''}));
+   toast({title:'Custo pendente',description:'Não foi possível confirmar o custo. O lançamento poderá ser conferido depois.',variant:'destructive'});
   }
  },[user,tiposFolha,toast]);
 
  useEffect(()=>{
-  if(form.tipo_folha)loadUnitCost(form.tipo_folha);
-  else setForm(p=>({...p,custo_unitario:'0.00'}));
- },[form.tipo_folha,loadUnitCost]);
+  if(form.tipo_folha)loadUnitCost(form.tipo_folha,form.data_lancamento);
+  else setForm(p=>({...p,custo_unitario:'0.00',custo_origem:'pendente',custo_estimado:false,custo_pendente:true,custo_data_compra:''}));
+ },[form.tipo_folha,form.data_lancamento,loadUnitCost]);
 
  useEffect(()=>{
   const total=(Number(form.quantidade)||0)*(Number(form.custo_unitario)||0);
@@ -86,12 +95,14 @@ export default function LancamentoCustos(){
 
  const filtered=useMemo(()=>{
   const s=search.toLowerCase().trim();
-  return s?entries.filter(x=>`${x.tipo_folha||''} ${x.tipo||''} ${x.descricao||''}`.toLowerCase().includes(s)):entries;
+  return s?entries.filter(x=>`${x.tipo_folha||''} ${x.tipo||''} ${x.descricao||''} ${x.custo_origem||''}`.toLowerCase().includes(s)):entries;
  },[entries,search]);
 
  const total=filtered.reduce((s,x)=>s+Number(x.custo_total||0),0);
  const consumo=filtered.filter(x=>x.tipo==='Consumo').reduce((s,x)=>s+Number(x.custo_total||0),0);
  const perdas=filtered.filter(x=>x.tipo==='Perda').reduce((s,x)=>s+Number(x.custo_total||0),0);
+ const pendentes=filtered.filter(x=>x.custo_pendente===true).length;
+ const estimados=filtered.filter(x=>x.custo_estimado===true).length;
 
  const openDialog=()=>{setForm({...initial,data_lancamento:hoje()});setDialogOpen(true)};
  const closeDialog=()=>{if(!saving){setDialogOpen(false);setForm({...initial,data_lancamento:hoje()})}};
@@ -111,10 +122,14 @@ export default function LancamentoCustos(){
    const{error}=await supabase.from('lm_lanc_custos').insert({
     user_id:user.id,tipo_folha:form.tipo_folha,tipo:form.tipo,quantidade,
     custo_unitario:unitario,custo_total:custoTotal,
+    custo_origem:form.custo_origem||'pendente',
+    custo_estimado:!!form.custo_estimado,
+    custo_pendente:!!form.custo_pendente&&!isSpecial,
+    custo_data_compra:form.custo_data_compra||null,
     data_lancamento:form.data_lancamento,descricao:form.descricao.trim()||null
    });
    if(error)throw error;
-   toast({title:'Registrado',description:form.tipo==='Consumo'?'Uso fora de serviço registrado.':'Perda de material registrada.'});
+   toast({title:'Registrado',description:form.custo_pendente?'Lançamento salvo com custo pendente de conferência.':form.custo_estimado?'Lançamento salvo com custo estimado.':form.tipo==='Consumo'?'Uso fora de serviço registrado.':'Perda de material registrada.'});
    setDialogOpen(false);
    setForm({...initial,data_lancamento:hoje()});
    await load();
@@ -150,14 +165,14 @@ export default function LancamentoCustos(){
      <Info className="mt-0.5 h-5 w-5 shrink-0 text-cyan-400"/>
      <div className="space-y-1 text-sm">
       <p className="font-semibold">Quando usar esta tela</p>
-      <p className="text-muted-foreground">Registre aqui folhas usadas fora de um serviço cadastrado ou folhas desperdiçadas. Quando um serviço já tiver as folhas informadas no lançamento, não registre essas mesmas folhas novamente aqui.</p>
-      <p className="text-muted-foreground">Este registro calcula o custo financeiro, mas não altera diretamente a quantidade física do estoque.</p>
+      <p className="text-muted-foreground">Registre aqui folhas usadas fora de um serviço cadastrado ou folhas desperdiçadas. Não registre novamente as folhas já informadas em um serviço.</p>
+      <p className="text-muted-foreground">Este registro calcula o custo financeiro, mas não altera diretamente a quantidade física do estoque. O custo estimado e o custo pendente são identificados separadamente.</p>
      </div>
     </CardContent>
    </Card>
 
-   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-    {[{l:'Lançamentos',v:filtered.length},{l:'Custo registrado',v:moeda(total)},{l:'Uso fora de serviço',v:moeda(consumo)},{l:'Perdas',v:moeda(perdas)}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:C}}>{x.v}</p></CardContent></Card>)}
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    {[{l:'Lançamentos',v:filtered.length},{l:'Custo registrado',v:moeda(total)},{l:'Uso fora de serviço',v:moeda(consumo)},{l:'Perdas',v:moeda(perdas)},{l:'Custos estimados',v:estimados},{l:'Custos pendentes',v:pendentes}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:x.l.includes('pendentes')?'#f59e0b':C}}>{x.v}</p></CardContent></Card>)}
    </div>
 
    <Card className="border-border bg-card">
@@ -194,9 +209,12 @@ export default function LancamentoCustos(){
 
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div className="space-y-2"><Label>Quantidade *</Label><Input type="number" min="1" step="1" value={form.quantidade} onChange={e=>setForm(p=>({...p,quantidade:e.target.value}))} disabled={isSpecial}/></div>
-      <div className="space-y-2"><Label>Custo por unidade (automático)</Label><Input value={`R$ ${form.custo_unitario}`} readOnly disabled/></div>
-      <div className="space-y-2"><Label>Custo total (automático)</Label><Input value={`R$ ${form.custo_total}`} readOnly disabled className="font-bold"/></div>
+      <div className="space-y-2"><Label>Custo por unidade</Label><Input value={moeda(form.custo_unitario)} readOnly disabled/><p className="text-xs text-muted-foreground">{origemTexto(form.custo_origem,form.custo_estimado,form.custo_data_compra)}</p></div>
+      <div className="space-y-2"><Label>Custo total (automático)</Label><Input value={moeda(form.custo_total)} readOnly disabled className="font-bold"/></div>
      </div>
+
+     {form.custo_estimado&&<div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-400"><AlertTriangle className="h-4 w-4 shrink-0 mt-0.5"/>Este valor é uma estimativa do cadastro, pois não foi encontrada compra válida anterior à data.</div>}
+     {form.custo_pendente&&<div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-400"><AlertTriangle className="h-4 w-4 shrink-0 mt-0.5"/>O lançamento poderá ser salvo, mas o custo ficará pendente e não deve ser tratado como custo confirmado.</div>}
 
      <div className="space-y-2"><Label>Observação (opcional)</Label><textarea value={form.descricao} onChange={e=>setForm(p=>({...p,descricao:e.target.value}))} className="min-h-[90px] w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-foreground" placeholder="Ex.: folhas usadas em teste de impressão..."/></div>
     </div>
@@ -210,14 +228,14 @@ export default function LancamentoCustos(){
         <TableRow>
          <TableHead>Material</TableHead><TableHead>Data</TableHead><TableHead>Registro</TableHead>
          <TableHead className="text-right">Quantidade</TableHead><TableHead className="text-right">Custo unitário</TableHead>
-         <TableHead className="text-right">Custo total</TableHead><TableHead>Observação</TableHead><TableHead className="text-center">Ações</TableHead>
+         <TableHead className="text-right">Custo total</TableHead><TableHead>Origem / situação</TableHead><TableHead>Observação</TableHead><TableHead className="text-center">Ações</TableHead>
         </TableRow>
        </TableHeader>
        <TableBody>
         {loading?
-         <TableRow><TableCell colSpan={8} className="py-12 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin"/></TableCell></TableRow>
+         <TableRow><TableCell colSpan={9} className="py-12 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin"/></TableCell></TableRow>
         :!filtered.length?
-         <TableRow><TableCell colSpan={8} className="py-12 text-center text-muted-foreground"><Receipt className="mx-auto mb-2 h-8 w-8"/>{search?'Nenhum resultado para a pesquisa.':'Nenhum registro encontrado.'}</TableCell></TableRow>
+         <TableRow><TableCell colSpan={9} className="py-12 text-center text-muted-foreground"><Receipt className="mx-auto mb-2 h-8 w-8"/>{search?'Nenhum resultado para a pesquisa.':'Nenhum registro encontrado.'}</TableCell></TableRow>
         :filtered.map(x=><TableRow key={x.id} className="hover:bg-muted/40">
          <TableCell className="font-semibold">{x.tipo_folha||'—'}</TableCell>
          <TableCell>{dataBR(x.data_lancamento)}</TableCell>
@@ -225,6 +243,7 @@ export default function LancamentoCustos(){
          <TableCell className="text-right font-mono">{x.quantidade}</TableCell>
          <TableCell className="text-right font-mono">{moeda(x.custo_unitario)}</TableCell>
          <TableCell className="text-right font-bold" style={{color:C}}>{moeda(x.custo_total)}</TableCell>
+         <TableCell><Badge variant="outline" className={x.custo_pendente===true?'text-amber-400':x.custo_estimado===true?'text-amber-400':'text-cyan-400'}>{x.custo_pendente===true?'Pendente':x.custo_estimado===true?'Estimado':origemTexto(x.custo_origem,x.custo_estimado,x.custo_data_compra)}</Badge></TableCell>
          <TableCell className="max-w-[220px] truncate text-sm text-muted-foreground">{x.descricao||'—'}</TableCell>
          <TableCell><div className="flex justify-center"><Button variant="ghost" size="icon" onClick={()=>remove(x.id)} className="text-red-500 hover:bg-red-500/10" title="Excluir registro"><Trash2 className="h-4 w-4"/></Button></div></TableCell>
         </TableRow>)}
