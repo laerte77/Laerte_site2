@@ -108,7 +108,11 @@ export default function LancamentoCustos(){
   const custoTotal=Math.round(quantidade*unitario*100)/100;
   setSaving(true);
   try{
-   const{error}=await supabase.from('lm_lanc_custos').insert({user_id:user.id,tipo_folha:form.tipo_folha,tipo:form.tipo,quantidade,custo_unitario:unitario,custo_total:custoTotal,data_lancamento:form.data_lancamento,descricao:form.descricao.trim()||null});
+   const{error}=await supabase.from('lm_lanc_custos').insert({
+    user_id:user.id,tipo_folha:form.tipo_folha,tipo:form.tipo,quantidade,
+    custo_unitario:unitario,custo_total:custoTotal,
+    data_lancamento:form.data_lancamento,descricao:form.descricao.trim()||null
+   });
    if(error)throw error;
    toast({title:'Registrado',description:form.tipo==='Consumo'?'Uso fora de serviço registrado.':'Perda de material registrada.'});
    setDialogOpen(false);
@@ -125,7 +129,8 @@ export default function LancamentoCustos(){
    if(error)throw error;
    toast({title:'Removido',description:'Lançamento excluído.'});
    await load();
-    }catch(e){toast({title:'Erro',description:e.message,variant:'destructive'});}
+  }catch(e){
+   toast({title:'Erro',description:e.message,variant:'destructive'});
   }
  };
 
@@ -171,7 +176,9 @@ export default function LancamentoCustos(){
        <Label>Material / Tipo de folha *</Label>
        <Select value={form.tipo_folha} onValueChange={v=>setForm(p=>({...p,tipo_folha:v}))}>
         <SelectTrigger><SelectValue placeholder="Selecione o material"/></SelectTrigger>
-        <SelectContent>{available.length?available.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}{t.is_special?' — Especial':''}</SelectItem>):<SelectItem value="none" disabled>Nenhum tipo cadastrado</SelectItem>}</SelectContent>
+        <SelectContent>
+         {available.length?available.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}{t.is_special?' — Especial':''}</SelectItem>):<SelectItem value="none" disabled>Nenhum tipo cadastrado</SelectItem>}
+        </SelectContent>
        </Select>
       </div>
       <div className="space-y-2"><Label>Data do uso ou perda *</Label><Input type="date" value={form.data_lancamento} onChange={e=>setForm(p=>({...p,data_lancamento:e.target.value}))}/></div>
@@ -199,10 +206,18 @@ export default function LancamentoCustos(){
     <CardContent className="p-0">
      <ScrollArea className="h-[520px]">
       <Table>
-       <TableHeader className="sticky top-0 z-10 bg-secondary/70"><TableRow><TableHead>Material</TableHead><TableHead>Data</TableHead><TableHead>Registro</TableHead><TableHead className="text-right">Quantidade</TableHead><TableHead className="text-right">Custo unitário</TableHead><TableHead className="text-right">Custo total</TableHead><TableHead>Observação</TableHead><TableHead className="text-center">Ações</TableHead></TableRow></TableHeader>
+       <TableHeader className="sticky top-0 z-10 bg-secondary/70">
+        <TableRow>
+         <TableHead>Material</TableHead><TableHead>Data</TableHead><TableHead>Registro</TableHead>
+         <TableHead className="text-right">Quantidade</TableHead><TableHead className="text-right">Custo unitário</TableHead>
+         <TableHead className="text-right">Custo total</TableHead><TableHead>Observação</TableHead><TableHead className="text-center">Ações</TableHead>
+        </TableRow>
+       </TableHeader>
        <TableBody>
-        {loading?<TableRow><TableCell colSpan={8} className="py-12 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin"/></TableCell></TableRow>
-        :!filtered.length?<TableRow><TableCell colSpan={8} className="py-12 text-center text-muted-foreground"><Receipt className="mx-auto mb-2 h-8 w-8"/>{search?'Nenhum resultado para a pesquisa.':'Nenhum registro encontrado.'}</TableCell></TableRow>
+        {loading?
+         <TableRow><TableCell colSpan={8} className="py-12 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin"/></TableCell></TableRow>
+        :!filtered.length?
+         <TableRow><TableCell colSpan={8} className="py-12 text-center text-muted-foreground"><Receipt className="mx-auto mb-2 h-8 w-8"/>{search?'Nenhum resultado para a pesquisa.':'Nenhum registro encontrado.'}</TableCell></TableRow>
         :filtered.map(x=><TableRow key={x.id} className="hover:bg-muted/40">
          <TableCell className="font-semibold">{x.tipo_folha||'—'}</TableCell>
          <TableCell>{dataBR(x.data_lancamento)}</TableCell>
@@ -221,4 +236,3 @@ export default function LancamentoCustos(){
   </motion.div>
  );
 }
-
