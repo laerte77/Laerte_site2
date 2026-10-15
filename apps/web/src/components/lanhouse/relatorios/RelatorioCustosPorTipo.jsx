@@ -13,7 +13,9 @@ const CYAN='#06b6d4',RED='#ef4444',GREEN='#10b981',AMBER='#f59e0b';
 const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
 const money=v=>BRL.format(Number(v)||0);
-const empty=()=>({tipo_folha:'Não especificado',total_consumo:0,total_servicos:0,total_perda:0,itens_pendentes:0,itens_estimados:0});
+const empty=()=>({tipo_folha:'Não especificado',total_consumo:0,total_servicos:0,total_perda:0,itens_pendentes:0,itens_estimados:0,itens_sem_origem:0});
+
+const origemNaoIdentificada=x=>!x.custo_origem&&x.custo_estimado==null;
 
 export default function RelatorioCustosPorTipo(){
  const{toast}=useToast(),{user}=useAuth();
@@ -52,6 +54,7 @@ export default function RelatorioCustosPorTipo(){
    (manualRes.data||[]).forEach(x=>{
     const row=ensure(x.tipo_folha);
     if(x.custo_pendente===true){row.itens_pendentes++;return}
+    if(origemNaoIdentificada(x))row.itens_sem_origem++;
     if(norm(x.tipo)==='consumo')row.total_consumo+=Number(x.custo_total)||0;
     if(norm(x.tipo)==='perda')row.total_perda+=Number(x.custo_total)||0;
     if(x.custo_estimado===true||x.custo_origem==='cadastro')row.itens_estimados++;
@@ -65,10 +68,13 @@ export default function RelatorioCustosPorTipo(){
      const confirmado=f.custo_automatico===true&&!f.custo_pendente&&
       f.custo_total!==undefined&&f.custo_total!==null&&
       Number.isFinite(Number(f.custo_total))&&Number(f.custo_total)>=0;
+
      if(!confirmado){row.itens_pendentes++;return}
      row.total_servicos+=Number(f.custo_total);
-     if(f.custo_estimado===true||f.custo_origem==='cadastro')row.itens_estimados++;
-   });
+
+     if(!f.custo_origem||f.custo_origem==='historico')row.itens_sem_origem++;
+     else if(f.custo_estimado===true||f.custo_origem==='cadastro')row.itens_estimados++;
+    });
    });
 
    const resultado=[...grouped.values()].map(x=>{
@@ -95,14 +101,15 @@ export default function RelatorioCustosPorTipo(){
   perda:a.perda+x.total_perda,
   total:a.total+x.total_custos,
   pendentes:a.pendentes+x.itens_pendentes,
-  estimados:a.estimados+x.itens_estimados
- }),{consumo:0,servicos:0,perda:0,total:0,pendentes:0,estimados:0}),[rows]);
+  estimados:a.estimados+x.itens_estimados,
+  semOrigem:a.semOrigem+x.itens_sem_origem
+ }),{consumo:0,servicos:0,perda:0,total:0,pendentes:0,estimados:0,semOrigem:0}),[rows]);
 
  const exportar=()=>{
   if(!rows.length){toast({title:'Nada para exportar',description:'Não há dados no período selecionado.'});return}
   const lines=[
-   ['Tipo de Folha','Uso fora de serviço','Folhas em serviços','Perdas','Total de custos','Itens estimados','Itens pendentes','Margem de perda'],
-   ...rows.map(x=>[x.tipo_folha,x.total_consumo.toFixed(2),x.total_servicos.toFixed(2),x.total_perda.toFixed(2),x.total_custos.toFixed(2),x.itens_estimados,x.itens_pendentes,x.margem_perda.toFixed(2)+'%'])
+   ['Tipo de Folha','Uso fora de serviço','Folhas em serviços','Perdas','Total de custos','Itens estimados','Itens sem origem identificada','Itens pendentes','Margem de perda'],
+   ...rows.map(x=>[x.tipo_folha,x.total_consumo.toFixed(2),x.total_servicos.toFixed(2),x.total_perda.toFixed(2),x.total_custos.toFixed(2),x.itens_estimados,x.itens_sem_origem,x.itens_pendentes,x.margem_perda.toFixed(2)+'%'])
   ];
   const csv=lines.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\r\n');
   const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
@@ -117,15 +124,15 @@ export default function RelatorioCustosPorTipo(){
  return(
   <div className="space-y-5">
    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-    <div><p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:CYAN}}>LM Impressões</p><h1 className="mt-1 text-2xl font-bold">Relatório de Custos por Tipo</h1><p className="text-sm text-muted-foreground">Custos de uso fora de serviços, folhas utilizadas em serviços e perdas.</p></div>
+    <div><p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:CYAN}}>LM Impressões</p><h1 className="mt-1 text-2xl font-bold">Relatório de Custos por Tipo</h1><p className="text-sm text-muted-foreground">Uso fora de serviços, folhas em serviços, perdas e situação da origem dos custos.</p></div>
     <Button variant="outline" onClick={exportar} disabled={loading||!rows.length}><Download className="mr-2 h-4 w-4"/>Exportar CSV</Button>
    </div>
 
-   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-    {[['Uso fora de serviço',totals.consumo,CYAN],['Folhas em serviços',totals.servicos,GREEN],['Perdas',totals.perda,RED],['Total de custos',totals.total,CYAN],['Custos estimados',totals.estimados,AMBER],['Custos pendentes',totals.pendentes,AMBER]].map(([label,value,color])=><Card key={label}><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-1 text-xl font-bold" style={{color}}>{label==='Custos pendentes'||label==='Custos estimados'?value:money(value)}</p></CardContent></Card>)}
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    {[['Uso fora de serviço',totals.consumo,CYAN],['Folhas em serviços',totals.servicos,GREEN],['Perdas',totals.perda,RED],['Total de custos',totals.total,CYAN],['Custos estimados',totals.estimados,AMBER],['Origem não identificada',totals.semOrigem,AMBER],['Custos pendentes',totals.pendentes,AMBER]].map(([label,value,color])=><Card key={label}><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-1 text-xl font-bold" style={{color}}>{['Custos pendentes','Custos estimados','Origem não identificada'].includes(label)?value:money(value)}</p></CardContent></Card>)}
    </div>
 
-   {totals.pendentes>0&&<Card className="border-amber-500/30 bg-amber-500/5"><CardContent className="flex gap-3 p-4"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400"/><div className="space-y-1 text-sm"><p className="font-semibold text-amber-400">Existem custos pendentes</p><p className="text-muted-foreground">{totals.pendentes} item(ns) sem custo confirmado. Eles não entram no total financeiro de custos até serem verificados.</p></div></CardContent></Card>}
+   {totals.pendentes>0&&<Card className="border-amber-500/30 bg-amber-500/5"><CardContent className="flex gap-3 p-4"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400"/><div className="space-y-1 text-sm"><p className="font-semibold text-amber-400">Existem custos pendentes</p><p className="text-muted-foreground">{totals.pendentes} item(ns) sem custo confirmado. Esses valores não entram nos custos calculados até serem verificados.</p></div></CardContent></Card>}
 
    <Card><CardContent className="p-4"><div className="grid gap-3 md:grid-cols-4">
     <div><Label>Data inicial</Label><Input type="date" value={start} onChange={e=>setStart(e.target.value)}/></div>
@@ -147,11 +154,11 @@ export default function RelatorioCustosPorTipo(){
    </CardContent></Card>
 
    <Card><CardContent className="p-0"><div className="overflow-x-auto"><Table>
-    <TableHeader className="bg-secondary/70"><TableRow><TableHead>Tipo de folha</TableHead><TableHead className="text-right">Uso fora de serviço</TableHead><TableHead className="text-right">Folhas em serviços</TableHead><TableHead className="text-right">Perdas</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Estimados</TableHead><TableHead className="text-right">Pendências</TableHead><TableHead className="text-right">Margem de perda</TableHead></TableRow></TableHeader>
+    <TableHeader className="bg-secondary/70"><TableRow><TableHead>Tipo de folha</TableHead><TableHead className="text-right">Uso fora de serviço</TableHead><TableHead className="text-right">Folhas em serviços</TableHead><TableHead className="text-right">Perdas</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Estimados</TableHead><TableHead className="text-right">Sem origem</TableHead><TableHead className="text-right">Pendências</TableHead><TableHead className="text-right">Margem de perda</TableHead></TableRow></TableHeader>
     <TableBody>
-     {loading?<TableRow><TableCell colSpan={8} className="py-12 text-center"><Loader2 className="mx-auto h-6 w-6"/></TableCell></TableRow>
-     :!rows.length?<TableRow><TableCell colSpan={8} className="py-12 text-center text-muted-foreground">Nenhum custo encontrado.</TableCell></TableRow>
-     :rows.map(x=><TableRow key={norm(x.tipo_folha)}><TableCell className="font-semibold">{x.tipo_folha}</TableCell><TableCell className="text-right" style={{color:CYAN}}>{money(x.total_consumo)}</TableCell><TableCell className="text-right" style={{color:GREEN}}>{money(x.total_servicos)}</TableCell><TableCell className="text-right text-red-400">{money(x.total_perda)}</TableCell><TableCell className="text-right font-bold">{money(x.total_custos)}</TableCell><TableCell className="text-right text-amber-400">{x.itens_estimados}</TableCell><TableCell className="text-right text-amber-400">{x.itens_pendentes}</TableCell><TableCell className={`text-right font-bold ${x.margem_perda>10?'text-red-400':'text-muted-foreground'}`}>{x.margem_perda.toFixed(2)}%</TableCell></TableRow>)}
+     {loading?<TableRow><TableCell colSpan={9} className="py-12 text-center"><Loader2 className="mx-auto h-6 w-6"/></TableCell></TableRow>
+     :!rows.length?<TableRow><TableCell colSpan={9} className="py-12 text-center text-muted-foreground">Nenhum custo encontrado.</TableCell></TableRow>
+     :rows.map(x=><TableRow key={norm(x.tipo_folha)}><TableCell className="font-semibold">{x.tipo_folha}</TableCell><TableCell className="text-right" style={{color:CYAN}}>{money(x.total_consumo)}</TableCell><TableCell className="text-right" style={{color:GREEN}}>{money(x.total_servicos)}</TableCell><TableCell className="text-right text-red-400">{money(x.total_perda)}</TableCell><TableCell className="text-right font-bold">{money(x.total_custos)}</TableCell><TableCell className="text-right text-amber-400">{x.itens_estimados}</TableCell><TableCell className="text-right text-amber-400">{x.itens_sem_origem}</TableCell><TableCell className="text-right text-amber-400">{x.itens_pendentes}</TableCell><TableCell className={`text-right font-bold ${x.margem_perda>10?'text-red-400':'text-muted-foreground'}`}>{x.margem_perda.toFixed(2)}%</TableCell></TableRow>)}
     </TableBody>
    </Table></div></CardContent></Card>
   </div>
