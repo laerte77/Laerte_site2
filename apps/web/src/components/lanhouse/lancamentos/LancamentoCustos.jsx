@@ -1,4 +1,4 @@
-import React,{useState,useEffect,useCallback,useMemo}from'react';
+import React,{useState,useEffect,useCallback,useMemo,useRef}from'react';
 import{motion}from'framer-motion';
 import{TrendingDown,Save,Trash2,Search,RotateCcw,Receipt,Loader2,Info,AlertTriangle}from'lucide-react';
 import{Button}from'@/components/ui/button';
@@ -23,18 +23,21 @@ const hoje=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{time
 const moeda=v=>BRL2.format(Number(v)||0);
 const unitarioBR=v=>BRL.format(Number(v)||0);
 const dataBR=v=>v?new Date(`${String(v).slice(0,10)}T12:00:00-03:00`).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—';
+
 const origemTexto=(origem,estimado,dataCompra)=>{
  if(origem==='compra')return`Compra de ${dataBR(dataCompra)}`;
  if(origem==='cadastro'||estimado)return'Custo estimado pelo cadastro';
  if(origem==='especial')return'Material especial sem custo automático';
- if(origem==='historico')return'Origem histórica não confirmada';
- return'Custo pendente';
+ if(origem==='historico')return'Origem histórica não identificada';
+ if(origem==='pendente')return'Custo pendente';
+ return'Origem não identificada';
 };
 
 export default function LancamentoCustos(){
  const{toast}=useToast(),{user}=useAuth();
  const[tiposFolha,setTiposFolha]=useState([]),[entries,setEntries]=useState([]);
- const[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[search,setSearch]=useState(''),[dialogOpen,setDialogOpen]=useState(false);
+ const[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[costLoading,setCostLoading]=useState(false),[search,setSearch]=useState(''),[dialogOpen,setDialogOpen]=useState(false);
+ const requestRef=useRef(0);
  const initial={tipo_folha:'',data_lancamento:hoje(),tipo:'Consumo',quantidade:'',custo_unitario:'0',custo_total:'0.00',custo_origem:'pendente',custo_estimado:false,custo_pendente:true,custo_data_compra:'',descricao:''};
  const[form,setForm]=useState(initial);
 
@@ -53,9 +56,8 @@ export default function LancamentoCustos(){
    }
    setTiposFolha(tipos||[]);
    setEntries(todos);
-  }catch(e){
-   toast({title:'Erro ao carregar',description:e.message||'Não foi possível carregar os lançamentos.',variant:'destructive'});
-  }finally{setLoading(false)}
+  }catch(e){toast({title:'Erro ao carregar',description:e.message||'Não foi possível carregar os lançamentos.',variant:'destructive'})}
+  finally{setLoading(false)}
  },[user,toast]);
 
  useEffect(()=>{load()},[load]);
@@ -65,25 +67,39 @@ export default function LancamentoCustos(){
  const isSpecial=!!selected?.is_special;
 
  const loadUnitCost=useCallback(async(tipo,dataReferencia)=>{
+  const seq=++requestRef.current;
   if(!user||!tipo){
+   setCostLoading(false);
    setForm(p=>({...p,custo_unitario:'0',custo_origem:'pendente',custo_estimado:false,custo_pendente:true,custo_data_compra:''}));
    return;
   }
+
+  setCostLoading(true);
   try{
-   const custo=await resolverCustoUnitarioMaterial({supabase,userId:user.id,tipoFolha:tipo,dataReferencia,tipoCadastro:tiposFolha.find(x=>x.tipo_folha===tipo)});
+   const custo=await resolverCustoUnitarioMaterial({
+    supabase,userId:user.id,tipoFolha:tipo,dataReferencia,
+    tipoCadastro:tiposFolha.find(x=>x.tipo_folha===tipo)
+   });
+   if(seq!==requestRef.current)return;
    setForm(p=>({...p,custo_unitario:String(custo.unitario||0),custo_origem:custo.origem,custo_estimado:!!custo.estimado,custo_pendente:!!custo.pendente,custo_data_compra:custo.dataCompra||''}));
    if(custo.pendente)toast({title:'Custo pendente',description:`Não encontrei compra anterior nem custo de referência para "${tipo}". O lançamento ficará marcado para conferência.`});
    else if(custo.estimado)toast({title:'Custo estimado',description:`"${tipo}" usará o custo de referência cadastrado, pois não há compra anterior válida.`});
   }catch(e){
    console.error('Erro ao buscar custo unitário:',e);
-   setForm(p=>({...p,custo_unitario:'0',custo_origem:'pendente',custo_estimado:false,custo_pendente:true,custo_data_compra:''}));
-   toast({title:'Custo pendente',description:'Não foi possível confirmar o custo. O lançamento poderá ser conferido depois.',variant:'destructive'});
-  }
+   if(seq===requestRef.current){
+    setForm(p=>({...p,custo_unitario:'0',custo_origem:'pendente',custo_estimado:false,custo_pendente:true,custo_data_compra:''}));
+    toast({title:'Custo pendente',description:'Não foi possível confirmar o custo. O lançamento poderá ser conferido depois.',variant:'destructive'});
+   }
+  }finally{if(seq===requestRef.current)setCostLoading(false)}
  },[user,tiposFolha,toast]);
 
  useEffect(()=>{
   if(form.tipo_folha)loadUnitCost(form.tipo_folha,form.data_lancamento);
-  else setForm(p=>({...p,custo_unitario:'0',custo_origem:'pendente',custo_estimado:false,custo_pendente:true,custo_data_compra:''}));
+  else{
+   requestRef.current++;
+   setCostLoading(false);
+   setForm(p=>({...p,custo_unitario:'0',custo_origem:'pendente',custo_estimado:false,custo_pendente:true,custo_data_compra:''}));
+  }
  },[form.tipo_folha,form.data_lancamento,loadUnitCost]);
 
  useEffect(()=>{
@@ -95,20 +111,23 @@ export default function LancamentoCustos(){
   const s=search.toLowerCase().trim();
   return s?entries.filter(x=>`${x.tipo_folha||''} ${x.tipo||''} ${x.descricao||''} ${x.custo_origem||''}`.toLowerCase().includes(s)):entries;
  },[entries,search]);
+
  const total=filtered.reduce((s,x)=>s+Number(x.custo_pendente===true?0:x.custo_total||0),0);
  const consumo=filtered.filter(x=>x.tipo==='Consumo'&&x.custo_pendente!==true).reduce((s,x)=>s+Number(x.custo_total||0),0);
  const perdas=filtered.filter(x=>x.tipo==='Perda'&&x.custo_pendente!==true).reduce((s,x)=>s+Number(x.custo_total||0),0);
  const pendentes=filtered.filter(x=>x.custo_pendente===true).length;
  const estimados=filtered.filter(x=>x.custo_estimado===true||x.custo_origem==='cadastro').length;
+ const semOrigem=filtered.filter(x=>x.custo_pendente!==true&&!x.custo_origem&&x.custo_estimado==null).length;
 
- const openDialog=()=>{setForm({...initial,data_lancamento:hoje()});setDialogOpen(true)};
- const closeDialog=()=>{if(!saving){setDialogOpen(false);setForm({...initial,data_lancamento:hoje()})}};
+ const openDialog=()=>{requestRef.current++;setForm({...initial,data_lancamento:hoje()});setDialogOpen(true)};
+ const closeDialog=()=>{if(!saving){requestRef.current++;setDialogOpen(false);setCostLoading(false);setForm({...initial,data_lancamento:hoje()})}};
 
  const save=async e=>{
   e?.preventDefault();
   if(!user||!form.tipo_folha||!form.quantidade||!form.data_lancamento){
    toast({title:'Campos obrigatórios',description:'Informe o tipo de folha, a data e a quantidade.',variant:'destructive'});return;
   }
+  if(costLoading){toast({title:'Aguarde',description:'O custo unitário ainda está sendo consultado.'});return}
   const quantidade=Number(form.quantidade),unitario=Number(form.custo_unitario)||0;
   if(!Number.isFinite(quantidade)||quantidade<=0){
    toast({title:'Quantidade inválida',description:'Informe uma quantidade maior que zero.',variant:'destructive'});return;
@@ -126,13 +145,12 @@ export default function LancamentoCustos(){
     data_lancamento:form.data_lancamento,descricao:form.descricao.trim()||null
    });
    if(error)throw error;
-   toast({title:'Registrado',description:form.custo_pendente?'Lançamento salvo com custo pendente.':form.custo_estimado?'Lançamento salvo com custo estimado.':form.tipo==='Consumo'?'Uso fora de serviço registrado.':'Perda de material registrada.'});
+   toast({title:'Registrado',description:form.custo_pendente&&!isSpecial?'Lançamento salvo com custo pendente.':form.custo_estimado?'Lançamento salvo com custo estimado.':form.tipo==='Consumo'?'Uso fora de serviço registrado.':'Perda de material registrada.'});
    setDialogOpen(false);
    setForm({...initial,data_lancamento:hoje()});
    await load();
-  }catch(e){
-   toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar.',variant:'destructive'});
-  }finally{setSaving(false)}
+  }catch(e){toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar.',variant:'destructive'})}
+  finally{setSaving(false)}
  };
 
  const remove=async id=>{
@@ -147,66 +165,42 @@ export default function LancamentoCustos(){
  return(
   <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="space-y-5">
    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-    <div>
-     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:C}}>LM Impressões</p>
-     <h1 className="mt-1 text-2xl font-bold">Uso de Materiais e Perdas</h1>
-     <p className="text-sm text-muted-foreground">Registre materiais usados fora de serviços ou materiais perdidos.</p>
-    </div>
+    <div><p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:C}}>LM Impressões</p><h1 className="mt-1 text-2xl font-bold">Uso de Materiais e Perdas</h1><p className="text-sm text-muted-foreground">Registre materiais usados fora de serviços ou materiais perdidos.</p></div>
     <Button onClick={openDialog} className="text-white" style={{background:C}}><TrendingDown className="mr-2 h-4 w-4"/>Registrar Uso ou Perda</Button>
    </div>
 
-   <Card className="border-cyan-500/30 bg-cyan-500/5"><CardContent className="flex gap-3 p-4">
-    <Info className="mt-0.5 h-5 w-5 shrink-0 text-cyan-400"/>
-    <div className="space-y-1 text-sm">
-     <p className="font-semibold">Quando usar esta tela</p>
-     <p className="text-muted-foreground">Registre aqui folhas usadas fora de um serviço cadastrado ou folhas desperdiçadas. Não registre novamente folhas já informadas em um serviço.</p>
-     <p className="text-muted-foreground">Este registro calcula o custo financeiro, mas não altera diretamente a quantidade física do estoque. Custos estimados e pendentes são identificados separadamente.</p>
-    </div>
-   </CardContent></Card>
+   <Card className="border-cyan-500/30 bg-cyan-500/5"><CardContent className="flex gap-3 p-4"><Info className="mt-0.5 h-5 w-5 shrink-0 text-cyan-400"/><div className="space-y-1 text-sm"><p className="font-semibold">Quando usar esta tela</p><p className="text-muted-foreground">Registre folhas usadas fora de um serviço cadastrado ou folhas desperdiçadas. Não registre novamente folhas já informadas em um serviço.</p><p className="text-muted-foreground">O registro financeiro não altera diretamente a quantidade física do estoque. Custos estimados, pendentes e sem origem identificada ficam separados.</p></div></CardContent></Card>
 
    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-    {[{l:'Lançamentos',v:filtered.length},{l:'Custo registrado',v:moeda(total)},{l:'Uso fora de serviço',v:moeda(consumo)},{l:'Perdas',v:moeda(perdas)},{l:'Custos estimados',v:estimados},{l:'Custos pendentes',v:pendentes}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:x.l.includes('pendentes')?'#f59e0b':C}}>{x.v}</p></CardContent></Card>)}
+    {[{l:'Lançamentos',v:filtered.length},{l:'Custo contabilizado',v:moeda(total)},{l:'Uso fora de serviço',v:moeda(consumo)},{l:'Perdas',v:moeda(perdas)},{l:'Custos estimados',v:estimados},{l:'Custos pendentes',v:pendentes},{l:'Sem origem identificada',v:semOrigem}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:x.l.includes('pendentes')||x.l.includes('identificada')?'#f59e0b':C}}>{x.v}</p></CardContent></Card>)}
    </div>
 
-   <Card className="border-border bg-card"><CardContent className="p-4">
-    <div className="flex gap-3">
-     <div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar folha ou observação..." className="h-10 pl-9"/></div>
-     <Button variant="outline" onClick={()=>setSearch('')}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button>
-    </div>
-   </CardContent></Card>
+   <Card className="border-border bg-card"><CardContent className="p-4"><div className="flex gap-3">
+    <div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar folha ou observação..." className="h-10 pl-9"/></div>
+    <Button variant="outline" onClick={()=>setSearch('')}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button>
+   </div></CardContent></Card>
 
-   <ModalLancamentoPadrao open={dialogOpen} onClose={closeDialog} title="Registrar Uso ou Perda" description="Use para consumo fora de serviços cadastrados ou para registrar desperdício." icon={TrendingDown} theme="blue" footer={<><Button variant="outline" onClick={closeDialog} disabled={saving}>Cancelar</Button><Button onClick={save} disabled={saving} className="text-white" style={{background:C}}>{saving?<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Salvando...</>:<><Save className="mr-2 h-4 w-4"/>Salvar Registro</>}</Button></>}>
+   <ModalLancamentoPadrao open={dialogOpen} onClose={closeDialog} title="Registrar Uso ou Perda" description="Use para consumo fora de serviços cadastrados ou para registrar desperdício." icon={TrendingDown} theme="blue" footer={<><Button variant="outline" onClick={closeDialog} disabled={saving}>Cancelar</Button><Button onClick={save} disabled={saving||costLoading} className="text-white" style={{background:C}}>{saving||costLoading?<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>{saving?'Salvando...':'Consultando custo...'}</>:<><Save className="mr-2 h-4 w-4"/>Salvar Registro</>}</Button></>}>
     <div className="space-y-5">
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <div className="space-y-2"><Label>Material / Tipo de folha *</Label>
-       <Select value={form.tipo_folha} onValueChange={v=>setForm(p=>({...p,tipo_folha:v}))}>
-        <SelectTrigger><SelectValue placeholder="Selecione o material"/></SelectTrigger><SelectContent>
-         {available.length?available.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}{t.is_special?' — Especial':''}</SelectItem>):<SelectItem value="none" disabled>Nenhum tipo cadastrado</SelectItem>}
-        </SelectContent>
-       </Select></div>
+      <div className="space-y-2"><Label>Material / Tipo de folha *</Label><Select value={form.tipo_folha} onValueChange={v=>setForm(p=>({...p,tipo_folha:v}))}><SelectTrigger><SelectValue placeholder="Selecione o material"/></SelectTrigger><SelectContent>{available.length?available.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}{t.is_special?' — Especial':''}</SelectItem>):<SelectItem value="none" disabled>Nenhum tipo cadastrado</SelectItem>}</SelectContent></Select></div>
       <div className="space-y-2"><Label>Data do uso ou perda *</Label><Input type="date" value={form.data_lancamento} onChange={e=>setForm(p=>({...p,data_lancamento:e.target.value}))}/></div>
      </div>
-     <div className="space-y-2"><Label>O que aconteceu? *</Label>
-      <RadioGroup value={form.tipo} onValueChange={v=>setForm(p=>({...p,tipo:v}))} className="flex flex-wrap gap-5">
-       <div className="flex items-center gap-2"><RadioGroupItem value="Consumo" id="custo-consumo"/><Label htmlFor="custo-consumo">Uso fora de serviço</Label></div>
-       <div className="flex items-center gap-2"><RadioGroupItem value="Perda" id="custo-perda"/><Label htmlFor="custo-perda">Perda / desperdício</Label></div>
-      </RadioGroup>
-     </div>
+     <div className="space-y-2"><Label>O que aconteceu? *</Label><RadioGroup value={form.tipo} onValueChange={v=>setForm(p=>({...p,tipo:v}))} className="flex flex-wrap gap-5"><div className="flex items-center gap-2"><RadioGroupItem value="Consumo" id="custo-consumo"/><Label htmlFor="custo-consumo">Uso fora de serviço</Label></div><div className="flex items-center gap-2"><RadioGroupItem value="Perda" id="custo-perda"/><Label htmlFor="custo-perda">Perda / desperdício</Label></div></RadioGroup></div>
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <div className="space-y-2"><Label>Quantidade *</Label><Input type="number" min="1" step="1" value={form.quantidade} onChange={e=>setForm(p=>({...p,quantidade:e.target.value}))} disabled={isSpecial}/></div>
-      <div className="space-y-2"><Label>Custo por unidade</Label><Input value={unitarioBR(form.custo_unitario)} readOnly disabled/><p className="text-xs text-muted-foreground">{origemTexto(form.custo_origem,form.custo_estimado,form.custo_data_compra)}</p></div>
-      <div className="space-y-2"><Label>Custo total (automático)</Label><Input value={moeda(form.custo_total)} readOnly disabled className="font-bold"/></div>
+      <div className="space-y-2"><Label>Quantidade *</Label><Input type="number" min="1" step="1" value={form.quantidade} onChange={e=>setForm(p=>({...p,quantidade:e.target.value}))}/></div>
+      <div className="space-y-2"><Label>Custo por unidade</Label><Input value={unitarioBR(form.custo_unitario)} readOnly disabled/><p className="text-xs text-muted-foreground">{costLoading?'Consultando custo...':origemTexto(form.custo_origem,form.custo_estimado,form.custo_data_compra)}</p></div>
+      <div className="space-y-2"><Label>Custo total</Label><Input value={moeda(form.custo_total)} readOnly disabled className="font-bold"/></div>
      </div>
-     {form.custo_estimado&&<div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-400"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/>Este valor é uma estimativa do cadastro, pois não foi encontrada compra válida anterior à data.</div>}
-     {form.custo_pendente&&<div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-400"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/>O registro poderá ser salvo, mas o custo ficará pendente e não será tratado como custo confirmado.</div>}
+     {form.custo_estimado&&<div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-400"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/>Este valor é uma estimativa do cadastro porque não foi encontrada compra válida anterior à data.</div>}
+     {form.custo_pendente&&!isSpecial&&<div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-400"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/>O custo ficará pendente de conferência e não entrará no total contabilizado.</div>}
+     {isSpecial&&<p className="text-sm text-muted-foreground">Material especial: a quantidade será registrada, mas o custo unitário automático é zero.</p>}
      <div className="space-y-2"><Label>Observação (opcional)</Label><textarea value={form.descricao} onChange={e=>setForm(p=>({...p,descricao:e.target.value}))} className="min-h-[90px] w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-foreground" placeholder="Ex.: folhas usadas em teste de impressão..."/></div>
     </div>
    </ModalLancamentoPadrao>
 
    <Card className="border-border bg-card"><CardContent className="p-0"><ScrollArea className="h-[520px]"><Table>
-    <TableHeader className="sticky top-0 z-10 bg-secondary/70"><TableRow>
-     <TableHead>Material</TableHead><TableHead>Data</TableHead><TableHead>Registro</TableHead><TableHead className="text-right">Quantidade</TableHead><TableHead className="text-right">Custo unitário</TableHead><TableHead className="text-right">Custo total</TableHead><TableHead>Origem / situação</TableHead><TableHead>Observação</TableHead><TableHead className="text-center">Ações</TableHead>
-    </TableRow></TableHeader>
+    <TableHeader className="sticky top-0 z-10 bg-secondary/70"><TableRow><TableHead>Material</TableHead><TableHead>Data</TableHead><TableHead>Registro</TableHead><TableHead className="text-right">Quantidade</TableHead><TableHead className="text-right">Custo unitário</TableHead><TableHead className="text-right">Custo total</TableHead><TableHead>Origem / situação</TableHead><TableHead>Observação</TableHead><TableHead className="text-center">Ações</TableHead></TableRow></TableHeader>
     <TableBody>
      {loading?<TableRow><TableCell colSpan={9} className="py-12 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin"/></TableCell></TableRow>
      :!filtered.length?<TableRow><TableCell colSpan={9} className="py-12 text-center text-muted-foreground"><Receipt className="mx-auto mb-2 h-8 w-8"/>{search?'Nenhum resultado para a pesquisa.':'Nenhum registro encontrado.'}</TableCell></TableRow>
@@ -223,4 +217,3 @@ export default function LancamentoCustos(){
   </motion.div>
  );
 }
-
