@@ -20,7 +20,7 @@ import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const TZ='America/Sao_Paulo';
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const CATEGORIAS=['Impressão','Materiais de produção','Digital','Infraestrutura','Manutenção','Outros'];
+const CATEGORIAS=['Impressão','Materiais de produção','Digital','Infraestrutura','Manutenção','Equipamentos e ferramentas','Transporte e deslocamento','Despesas financeiras e tarifas','Outros'];
 const RED='hsl(0 84% 60%)';
 const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2});
 const getSPDate=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return`${p.year}-${p.month}-${p.day}`};
