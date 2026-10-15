@@ -11,66 +11,75 @@ import{useAuth}from'@/contexts/SupabaseAuthContext';
 import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const C='hsl(var(--neon-lanhouse))';
+const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 
 export default function CadastroTiposFolhas(){
  const{user}=useAuth(),{toast}=useToast();
  const[data,setData]=useState([]),[loading,setLoading]=useState(true),[search,setSearch]=useState('');
- const[open,setOpen]=useState(false),[editId,setEditId]=useState(null),[nome,setNome]=useState('');
+ const[open,setOpen]=useState(false),[editId,setEditId]=useState(null),[nome,setNome]=useState(''),[preco,setPreco]=useState('');
 
  const load=useCallback(async()=>{
-  if(!user){setLoading(false);return}
+  if(!user){setData([]);setLoading(false);return}
   setLoading(true);
-  const{data,error}=await supabase.from('lm_tipos_folha').select('*').eq('user_id',user.id).order('tipo_folha');
-  if(error)toast({title:'Erro ao carregar tipos de folha',description:error.message,variant:'destructive'});
-  else setData(data||[]);
-  setLoading(false);
+  try{
+   const{data:rows,error}=await supabase.from('lm_tipos_folha').select('*').eq('user_id',user.id).order('tipo_folha');
+   if(error)throw error;
+   setData(rows||[]);
+  }catch(e){toast({title:'Erro ao carregar tipos de folha',description:e.message,variant:'destructive'})}
+  finally{setLoading(false)}
  },[user,toast]);
 
  useEffect(()=>{load()},[load]);
-
  useEffect(()=>{
   if(!user)return;
   const ch=supabase.channel(`lm_tipos_folha_changes_${user.id}`).on('postgres_changes',{event:'*',schema:'public',table:'lm_tipos_folha',filter:`user_id=eq.${user.id}`},load).subscribe();
   return()=>supabase.removeChannel(ch);
  },[user,load]);
 
- const reset=()=>{setNome('');setEditId(null)};
+ const reset=()=>{setNome('');setPreco('');setEditId(null)};
  const closeForm=()=>{setOpen(false);reset()};
- const openForm=x=>{setEditId(x?.id||null);setNome(x?.tipo_folha||'');setOpen(true)};
+ const openForm=x=>{
+  setEditId(x?.id||null);
+  setNome(x?.tipo_folha||'');
+  setPreco(Number(x?.preco)>0?String(x.preco):'');
+  setOpen(true);
+ };
 
  const save=async e=>{
   e.preventDefault();
   if(!user)return;
   if(!nome.trim())return toast({title:'Campo obrigatório',description:'Informe o tipo de folha.',variant:'destructive'});
-  const payload={tipo_folha:nome.trim(),user_id:user.id};
-  const q=editId
-   ?await supabase.from('lm_tipos_folha').update(payload).eq('id',editId).eq('user_id',user.id)
-   :await supabase.from('lm_tipos_folha').insert(payload);
-  if(q.error)return toast({title:'Erro ao salvar',description:q.error.message,variant:'destructive'});
-  toast({title:'Sucesso',description:editId?'Tipo atualizado.':'Tipo cadastrado.'});
-  closeForm();
-  await load();
+  const custo=preco.trim()===''?0:Number(preco);
+  if(!Number.isFinite(custo)||custo<0)return toast({title:'Custo inválido',description:'Informe um custo igual ou maior que zero.',variant:'destructive'});
+  try{
+   const payload={tipo_folha:nome.trim(),preco:custo,user_id:user.id};
+   const q=editId
+    ?await supabase.from('lm_tipos_folha').update(payload).eq('id',editId).eq('user_id',user.id)
+    :await supabase.from('lm_tipos_folha').insert(payload);
+   if(q.error)throw q.error;
+   toast({title:'Sucesso',description:editId?'Tipo e custo de referência atualizados.':'Tipo e custo de referência cadastrados.'});
+   closeForm();
+   await load();
+  }catch(e){toast({title:'Erro ao salvar',description:e.message,variant:'destructive'})}
  };
 
  const remove=async id=>{
-  const{error}=await supabase.from('lm_tipos_folha').delete().eq('id',id).eq('user_id',user.id);
-  if(error)toast({title:'Erro ao excluir',description:error.message,variant:'destructive'});
-  else{toast({title:'Sucesso',description:'Tipo de folha excluído.'});await load()}
+  try{
+   const{error}=await supabase.from('lm_tipos_folha').delete().eq('id',id).eq('user_id',user.id);
+   if(error)throw error;
+   toast({title:'Sucesso',description:'Tipo de folha excluído.'});
+   await load();
+  }catch(e){toast({title:'Erro ao excluir',description:e.message,variant:'destructive'})}
  };
 
- const list=data.filter(x=>String(x.tipo_folha||'').toLowerCase().includes(search.trim().toLowerCase())).sort((a,b)=>String(a.tipo_folha||'').localeCompare(String(b.tipo_folha||''),'pt-BR',{sensitivity:'base',numeric:true}));
+ const list=data.filter(x=>String(x.tipo_folha||'').toLowerCase().includes(search.trim().toLowerCase()))
+  .sort((a,b)=>String(a.tipo_folha||'').localeCompare(String(b.tipo_folha||''),'pt-BR',{sensitivity:'base',numeric:true}));
 
  return <div className="dark-lm-impressoes space-y-4">
   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
    <div className="flex items-center gap-3">
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-lanhouse)/.2)] bg-[hsl(var(--neon-lanhouse)/.08)]">
-     <FileStack className="h-5 w-5" style={{color:C}}/>
-    </div>
-    <div>
-     <p className="text-[11px] font-semibold uppercase tracking-[.2em]" style={{color:C}}>Cadastros</p>
-     <h1 className="text-2xl font-bold tracking-tight">Tipos de Folha</h1>
-     <p className="text-sm text-muted-foreground">Cadastre e organize os tipos de folhas utilizados.</p>
-    </div>
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-lanhouse)/.2)] bg-[hsl(var(--neon-lanhouse)/.08)]"><FileStack className="h-5 w-5" style={{color:C}}/></div>
+    <div><p className="text-[11px] font-semibold uppercase tracking-[.2em]" style={{color:C}}>Cadastros</p><h1 className="text-2xl font-bold tracking-tight">Tipos de Folha</h1><p className="text-sm text-muted-foreground">Cadastre materiais e seus custos unitários de referência.</p></div>
    </div>
    <div className="flex flex-wrap gap-2">
     <Button variant="outline" onClick={load}><RefreshCw className="mr-2 h-4 w-4"/>Atualizar</Button>
@@ -78,68 +87,43 @@ export default function CadastroTiposFolhas(){
    </div>
   </div>
 
-  <Card className="border-border bg-card/80">
-   <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-    <div className="relative w-full max-w-md">
-     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-     <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar tipo de folha..." className="h-11 rounded-xl bg-input pl-9"/>
-    </div>
-    <span className="text-sm text-muted-foreground">{list.length} tipo(s)</span>
-   </CardContent>
-  </Card>
+  <Card className="border-border bg-card/80"><CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+   <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar tipo de folha..." className="h-11 rounded-xl bg-input pl-9"/></div>
+   <span className="text-sm text-muted-foreground">{list.length} tipo(s)</span>
+  </CardContent></Card>
 
   <div className="grid gap-4 sm:grid-cols-2">
-   <Card className="border-border bg-card">
-    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tipos cadastrados</CardTitle></CardHeader>
-    <CardContent><p className="text-2xl font-bold" style={{color:C}}>{data.length}</p></CardContent>
-   </Card>
-   <Card className="border-border bg-card">
-    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Resultado da pesquisa</CardTitle></CardHeader>
-    <CardContent><p className="text-2xl font-bold">{list.length}</p></CardContent>
-   </Card>
+   <Card className="border-border bg-card"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tipos cadastrados</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold" style={{color:C}}>{data.length}</p></CardContent></Card>
+   <Card className="border-border bg-card"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Resultado da pesquisa</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{list.length}</p></CardContent></Card>
   </div>
 
-  <ModalLancamentoPadrao open={open} onClose={closeForm} title={editId?'Editar Tipo de Folha':'Novo Tipo de Folha'} description="Informe o nome do tipo de folha." icon={FileStack} theme="cyan" footer={<><Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button><Button type="submit" form="f-folha" className="text-slate-950 hover:opacity-90" style={{background:C}}>{editId?'Salvar Alterações':'Salvar Tipo'}</Button></>}>
+  <ModalLancamentoPadrao open={open} onClose={closeForm} title={editId?'Editar Tipo de Folha':'Novo Tipo de Folha'} description="O custo de referência só será usado quando não houver compra válida anterior à data do uso." icon={FileStack} theme="cyan" footer={<><Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button><Button type="submit" form="f-folha" className="text-slate-950 hover:opacity-90" style={{background:C}}>{editId?'Salvar Alterações':'Salvar Tipo'}</Button></>}>
    <form id="f-folha" onSubmit={save} className="space-y-5">
-    <div className="space-y-2">
-     <Label htmlFor="nome-folha">Nome do Tipo de Folha</Label>
-     <Input id="nome-folha" value={nome} onChange={e=>setNome(e.target.value)} placeholder="Ex.: A4 75g" className="h-11 rounded-xl bg-input" required/>
-    </div>
+    <div className="space-y-2"><Label htmlFor="nome-folha">Nome do Tipo de Folha *</Label><Input id="nome-folha" value={nome} onChange={e=>setNome(e.target.value)} placeholder="Ex.: A4 75g" className="h-11 rounded-xl bg-input" required/></div>
+    <div className="space-y-2"><Label htmlFor="preco-folha">Custo unitário de referência (R$)</Label><Input id="preco-folha" type="number" min="0" step="0.000001" value={preco} onChange={e=>setPreco(e.target.value)} placeholder="0,00" className="h-11 rounded-xl bg-input"/><p className="text-xs text-muted-foreground">Estimativa de reserva: uma compra válida anterior à data do uso sempre terá prioridade.</p></div>
    </form>
   </ModalLancamentoPadrao>
 
   <Card className="overflow-hidden border-border bg-card">
    <CardHeader className="pb-3"><CardTitle className="text-lg" style={{color:C}}>Tipos de folha cadastrados</CardTitle></CardHeader>
-   <CardContent className="p-0">
-    <div className="overflow-x-auto">
-     <table className="w-full min-w-[440px]">
-      <thead><tr className="border-b border-border bg-muted/30">
-       <th className="p-4 text-left text-sm font-semibold text-muted-foreground">Tipo de Folha</th>
-       <th className="w-28 p-4 text-right text-sm font-semibold text-muted-foreground">Ações</th>
-      </tr></thead>
-      <tbody>
-       {loading?<tr><td colSpan={2} className="p-10 text-center text-muted-foreground">Carregando...</td></tr>
-       :!list.length?<tr><td colSpan={2} className="p-10 text-center text-muted-foreground"><FileStack className="mx-auto mb-2 h-10 w-10 opacity-40"/><p>{data.length?'Nenhum resultado encontrado.':'Nenhum tipo cadastrado.'}</p></td></tr>
-       :list.map(x=><tr key={x.id} className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-lanhouse)/.04)]">
-        <td className="p-4 font-medium">{x.tipo_folha}</td>
-        <td className="p-4 text-right">
-         <div className="flex justify-end gap-1">
-          <Button type="button" variant="ghost" size="icon" onClick={()=>openForm(x)} className="text-blue-400 hover:bg-blue-500/10" title="Editar" aria-label={`Editar ${x.tipo_folha}`}><Edit className="h-4 w-4"/></Button>
-          <AlertDialog>
-           <AlertDialogTrigger asChild><Button type="button" variant="ghost" size="icon" className="text-red-400 hover:bg-red-500/10" title="Excluir" aria-label={`Excluir ${x.tipo_folha}`}><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
-           <AlertDialogContent className="dark-lm-impressoes border-border bg-card">
-            <AlertDialogHeader><AlertDialogTitle>Excluir tipo de folha?</AlertDialogTitle><AlertDialogDescription>Deseja excluir <strong>{x.tipo_folha}</strong>? Essa ação não poderá ser desfeita.</AlertDialogDescription></AlertDialogHeader>
-            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600 text-white hover:bg-red-700">Excluir</AlertDialogAction></AlertDialogFooter>
-           </AlertDialogContent>
-          </AlertDialog>
-         </div>
-        </td>
-       </tr>)}
-      </tbody>
-     </table>
-    </div>
-   </CardContent>
+   <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[560px]">
+    <thead><tr className="border-b border-border bg-muted/30"><th className="p-4 text-left text-sm font-semibold text-muted-foreground">Tipo de Folha</th><th className="p-4 text-right text-sm font-semibold text-muted-foreground">Custo de referência</th><th className="w-28 p-4 text-right text-sm font-semibold text-muted-foreground">Ações</th></tr></thead>
+    <tbody>
+     {loading?<tr><td colSpan={3} className="p-10 text-center text-muted-foreground">Carregando...</td></tr>
+     :!list.length?<tr><td colSpan={3} className="p-10 text-center text-muted-foreground"><FileStack className="mx-auto mb-2 h-10 w-10 opacity-40"/><p>{data.length?'Nenhum resultado encontrado.':'Nenhum tipo cadastrado.'}</p></td></tr>
+     :list.map(x=><tr key={x.id} className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-lanhouse)/.04)]">
+      <td className="p-4 font-medium">{x.tipo_folha}</td><td className="p-4 text-right font-mono">{Number(x.preco)>0?BRL.format(Number(x.preco)):'—'}</td>
+      <td className="p-4 text-right"><div className="flex justify-end gap-1">
+       <Button type="button" variant="ghost" size="icon" onClick={()=>openForm(x)} className="text-blue-400 hover:bg-blue-500/10" title="Editar" aria-label={`Editar ${x.tipo_folha}`}><Edit className="h-4 w-4"/></Button>
+       <AlertDialog><AlertDialogTrigger asChild><Button type="button" variant="ghost" size="icon" className="text-red-400 hover:bg-red-500/10" title="Excluir" aria-label={`Excluir ${x.tipo_folha}`}><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
+        <AlertDialogContent className="dark-lm-impressoes border-border bg-card"><AlertDialogHeader><AlertDialogTitle>Excluir tipo de folha?</AlertDialogTitle><AlertDialogDescription>Deseja excluir <strong>{x.tipo_folha}</strong>? Essa ação não poderá ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600 text-white hover:bg-red-700">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+       </AlertDialog>
+      </div></td>
+     </tr>)}
+    </tbody>
+   </table></div></CardContent>
   </Card>
  </div>;
 }
+
 
