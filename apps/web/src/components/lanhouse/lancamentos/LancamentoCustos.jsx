@@ -13,47 +13,39 @@ import{Badge}from'@/components/ui/badge';
 import{useToast}from'@/components/ui/use-toast';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
+import{useEstoqueCalculation}from'@/hooks/useEstoqueCalculation';
 import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
 const CYAN='hsl(190 90% 50%)';
 const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const hoje=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return`${p.year}-${p.month}-${p.day}`};
 const moeda=v=>BRL.format(Number(v)||0);
+const qtd=v=>Number(v||0).toLocaleString('pt-BR',{maximumFractionDigits:3});
 const dataBR=v=>v?new Date(`${v}T12:00:00-03:00`).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'}):'—';
+const normalizar=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
 
 export default function LancamentoCustos(){
  const{toast}=useToast(),{user}=useAuth();
- const[tiposFolha,setTiposFolha]=useState([]),[estoqueInicial,setEstoqueInicial]=useState({}),[entries,setEntries]=useState([]);
+ const{stockData,loading:stockLoading,error:stockError}=useEstoqueCalculation();
+ const[tiposFolha,setTiposFolha]=useState([]),[entries,setEntries]=useState([]);
  const[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[search,setSearch]=useState(''),[dialogOpen,setDialogOpen]=useState(false);
  const initial={tipo_folha:'',data_lancamento:hoje(),tipo:'Consumo',quantidade:'',custo_unitario:'',custo_total:'0.00',descricao:''};
  const[form,setForm]=useState(initial);
 
  const load=useCallback(async()=>{
-  if(!user){setTiposFolha([]);setEstoqueInicial({});setEntries([]);setLoading(false);return}
+  if(!user){setTiposFolha([]);setEntries([]);setLoading(false);return}
   setLoading(true);
   try{
-   const[a,b]=await Promise.all([
-    supabase.from('lm_tipos_folha').select('*').eq('user_id',user.id).order('tipo_folha',{ascending:true}),
-    supabase.from('lm_estoques_inicial').select('produto,quantidade_inicial').eq('user_id',user.id)
-   ]);
-   if(a.error)throw a.error;
-   if(b.error)throw b.error;
-
+   const{data:tipos,error}=await supabase.from('lm_tipos_folha').select('*').eq('user_id',user.id).order('tipo_folha',{ascending:true});
+   if(error)throw error;
    const todosCustos=[],TAMANHO_PAGINA=1000;
    for(let inicio=0;;inicio+=TAMANHO_PAGINA){
-    const{data,error}=await supabase.from('lm_lanc_custos')
-     .select('*').eq('user_id',user.id)
-     .order('created_at',{ascending:false}).order('id',{ascending:false})
-     .range(inicio,inicio+TAMANHO_PAGINA-1);
+    const{data,error}=await supabase.from('lm_lanc_custos').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).range(inicio,inicio+TAMANHO_PAGINA-1);
     if(error)throw error;
     todosCustos.push(...(data||[]));
     if(!data||data.length<TAMANHO_PAGINA)break;
    }
-
-   setTiposFolha(a.data||[]);
-   const mapa={};
-   (b.data||[]).forEach(x=>{mapa[String(x.produto||'').toUpperCase().trim()]=x.quantidade_inicial});
-   setEstoqueInicial(mapa);
+   setTiposFolha(tipos||[]);
    setEntries(todosCustos);
   }catch(e){
    toast({title:'Erro',description:e.message||'Não foi possível carregar os custos.',variant:'destructive'});
@@ -62,7 +54,34 @@ export default function LancamentoCustos(){
 
  useEffect(()=>{load()},[load]);
 
- const available=useMemo(()=>tiposFolha.filter(t=>t.is_special||Number(estoqueInicial[String(t.tipo_folha||'').toUpperCase().trim()]||0)>0),[tiposFolha,estoqueInicial]);
+ const estoqueDoTipo=useCallback(t=>{
+  if(!t)return null;
+  const lista=Object.values(stockData);
+  const direto=stockData[String(t.tipo_folha||'').toUpperCase().trim()];
+  if(direto)return direto;
+  if(t.insumo_id){
+   const ligado=lista.find(x=>String(x.insumo_id||'')===String(t.insumo_id));
+   if(ligado)return ligado;
+  }
+  const nome=normalizar(t.tipo_folha);
+  return lista.find(x=>normalizar(x.tipo_folha)===nome||normalizar(x.nomeInsumo)===nome)||null;
+ },[stockData]);
+
+ const saldoDoTipo=t=>{
+  if(t?.is_special)return'Especial';
+  if(stockLoading)return'Calculando estoque…';
+  const item=estoqueDoTipo(t);
+  if(!item)return'Verifique vínculo';
+  const saldo=Number(item.estoqueAtual)||0;
+  return saldo>0?`Disponível: ${qtd(saldo)} ${item.unidade||'unidade'}`:`Sem estoque: ${qtd(saldo)} ${item.unidade||'unidade'}`;
+ };
+
+ const available=useMemo(()=>[...tiposFolha].sort((a,b)=>{
+  const saldoA=a.is_special?-1:Number(estoqueDoTipo(a)?.estoqueAtual)||0;
+  const saldoB=b.is_special?-1:Number(estoqueDoTipo(b)?.estoqueAtual)||0;
+  return Number(saldoB>0)-Number(saldoA>0)||saldoB-saldoA||String(a.tipo_folha||'').localeCompare(String(b.tipo_folha||''),'pt-BR',{sensitivity:'base',numeric:true});
+ }),[tiposFolha,estoqueDoTipo]);
+
  const selected=useMemo(()=>tiposFolha.find(x=>x.tipo_folha===form.tipo_folha),[tiposFolha,form.tipo_folha]);
  const isSpecial=!!selected?.is_special;
 
@@ -73,10 +92,7 @@ export default function LancamentoCustos(){
   try{
    const a=await supabase.from('lm_tipos_folha').select('preco').eq('user_id',user.id).eq('tipo_folha',tipo).single();
    if(!a.error&&Number(a.data?.preco)>0){setForm(p=>({...p,custo_unitario:Number(a.data.preco).toFixed(2)}));return}
-   const{data,error}=await supabase.from('lm_lanc_despesas').select('valor,quantidade')
-    .eq('user_id',user.id).eq('tipo_lancamento','Estoque')
-    .eq('tipo_folha',tipo).not('quantidade','is',null).gt('quantidade',0)
-    .order('data',{ascending:false}).limit(1);
+   const{data,error}=await supabase.from('lm_lanc_despesas').select('valor,quantidade').eq('user_id',user.id).eq('tipo_lancamento','Estoque').eq('tipo_folha',tipo).not('quantidade','is',null).gt('quantidade',0).order('data',{ascending:false}).limit(1);
    if(error)throw error;
    if(data?.length)setForm(p=>({...p,custo_unitario:(Number(data[0].valor)/Number(data[0].quantidade)).toFixed(2)}));
    else{setForm(p=>({...p,custo_unitario:'0.00'}));toast({title:'Aviso',description:`Nenhum custo encontrado para "${tipo}".`})}
@@ -113,18 +129,13 @@ export default function LancamentoCustos(){
   const custoTotal=Math.round(quantidade*unitario*100)/100;
   setSaving(true);
   try{
-   const{error}=await supabase.from('lm_lanc_custos').insert({
-    user_id:user.id,tipo_folha:form.tipo_folha,tipo:form.tipo,
-    quantidade,custo_unitario:unitario,custo_total:custoTotal,
-    data_lancamento:form.data_lancamento,descricao:form.descricao.trim()||null
-   });
+   const{error}=await supabase.from('lm_lanc_custos').insert({user_id:user.id,tipo_folha:form.tipo_folha,tipo:form.tipo,quantidade,custo_unitario:unitario,custo_total:custoTotal,data_lancamento:form.data_lancamento,descricao:form.descricao.trim()||null});
    if(error)throw error;
    toast({title:'Sucesso',description:`Custo de ${form.tipo.toLowerCase()} registrado.`});
    setDialogOpen(false);setForm({...initial,data_lancamento:hoje()});
    await load();
-  }catch(e){
-   toast({title:'Erro ao salvar',description:e.message||'Falha ao salvar.',variant:'destructive'});
-  }finally{setSaving(false)}
+  }catch(e){toast({title:'Erro ao salvar',description:e.message||'Falha ao salvar.',variant:'destructive'})}
+  finally{setSaving(false)}
  };
 
  const remove=async id=>{
@@ -152,10 +163,16 @@ export default function LancamentoCustos(){
     <Button variant="outline" onClick={()=>setSearch('')}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button>
    </div></CardContent></Card>
 
+   {stockError&&<Card className="border-amber-500/30 bg-amber-500/5"><CardContent className="p-3 text-sm text-amber-400">Não foi possível atualizar o saldo do estoque. Confira a tela de Estoque antes de interpretar as quantidades exibidas.</CardContent></Card>}
+
    <ModalLancamentoPadrao open={dialogOpen} onClose={closeDialog} title="Novo Lançamento de Custo" description="Preencha os dados do consumo ou perda." icon={TrendingDown} theme="blue" footer={<><Button variant="outline" onClick={closeDialog} disabled={saving}>Cancelar</Button><Button onClick={save} disabled={saving} className="text-white" style={{background:CYAN}}>{saving?<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Salvando...</>:<><Save className="mr-2 h-4 w-4"/>Salvar Lançamento</>}</Button></>}>
     <div className="space-y-5">
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <div className="space-y-2"><Label>Tipo de Folha *</Label><Select value={form.tipo_folha} onValueChange={v=>setForm(p=>({...p,tipo_folha:v}))}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{available.length?available.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}{t.is_special?' — Especial':''}</SelectItem>):<SelectItem value="none" disabled>Nenhum tipo disponível</SelectItem>}</SelectContent></Select>{isSpecial&&<p className="text-xs text-yellow-500">⚠️ {selected.description}</p>}</div>
+      <div className="space-y-2"><Label>Tipo de Folha *</Label><Select value={form.tipo_folha} onValueChange={v=>setForm(p=>({...p,tipo_folha:v}))}><SelectTrigger><SelectValue placeholder="Selecione"/></SelectTrigger><SelectContent>{available.length?available.map(t=><SelectItem key={t.id} value={t.tipo_folha}>{t.tipo_folha}{t.is_special?' — Especial':` • ${saldoDoTipo(t)}`}</SelectItem>):<SelectItem value="none" disabled>Nenhum tipo cadastrado</SelectItem>}</SelectContent></Select>
+       {selected&&<p className="text-xs text-muted-foreground">{saldoDoTipo(selected)}{isSpecial&&selected.description?` • ${selected.description}`:''}</p>}
+       {stockLoading&&<p className="text-xs text-muted-foreground">Atualizando saldos do estoque…</p>}
+       <p className="text-xs text-muted-foreground">Os saldos são informativos. Este lançamento registra o custo e não movimenta o estoque físico.</p>
+      </div>
       <div className="space-y-2"><Label>Data *</Label><Input type="date" value={form.data_lancamento} onChange={e=>setForm(p=>({...p,data_lancamento:e.target.value}))}/></div>
      </div>
      <div className="space-y-2"><Label>Tipo de Lançamento *</Label><RadioGroup value={form.tipo} onValueChange={v=>setForm(p=>({...p,tipo:v}))} className="flex gap-6"><div className="flex items-center gap-2"><RadioGroupItem value="Consumo" id="custo-consumo"/><Label htmlFor="custo-consumo">Consumo</Label></div><div className="flex items-center gap-2"><RadioGroupItem value="Perda" id="custo-perda"/><Label htmlFor="custo-perda">Perda</Label></div></RadioGroup></div>
