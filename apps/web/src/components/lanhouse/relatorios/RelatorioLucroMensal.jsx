@@ -220,4 +220,22 @@ export default function RelatorioLucroMensal(){
        <TableRow><TableCell className="pl-8">Itens com custo pendente</TableCell><TableCell className="text-right text-amber-400">{monthlyData.itens_custos_pendentes}</TableCell></TableRow>
        <TableRow className="bg-secondary/40 font-bold"><TableCell>Total de Despesas Consideradas no Lucro</TableCell><TableCell className="text-right text-red-400">{formatCurrency(monthlyData.total_despesas)}</TableCell></TableRow>
        <TableRow><TableCell className={`font-bold ${monthlyData.lucro_liquido>=0?'text-cyan-400':'text-red-400'}`}>LUCRO LÍQUIDO</TableCell><TableCell className={`text-right text-xl font-bold ${monthlyData.lucro_liquido>=0?'text-cyan-400':'text-red-400'}`}>{formatCurrency(monthlyData.lucro_liquido)}</TableCell></TableRow>
-       <TableRow><TableCell className="font-semibold">Margem de Lucro</Table
+              <TableRow><TableCell className="font-semibold">Margem de Lucro</TableCell><TableCell className={`text-right font-bold ${monthlyData.margem_lucro>=0?'text-cyan-400':'text-red-400'}`}>{formatPercent(monthlyData.margem_lucro)}</TableCell></TableRow>
+      </TableBody>
+     </Table></div></CardContent>
+    </Card>
+
+    <div className="grid gap-5 lg:grid-cols-2">
+     <Card><CardHeader><CardTitle className="text-base">Evolução do Lucro</CardTitle><CardDescription>Seis meses até {monthLabel(selectedMonth)}</CardDescription></CardHeader><CardContent>
+      {!profitEvolution.length?<div className="flex h-64 items-center justify-center text-muted-foreground">Nenhum dado disponível.</div>:<ResponsiveContainer width="100%" height={300}><LineChart data={profitEvolution}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="mes"/><YAxis/><Tooltip formatter={v=>formatCurrency(v)}/><Legend/><Line type="monotone" dataKey="lucro" stroke={CYAN} strokeWidth={2} name="Lucro Líquido"/></LineChart></ResponsiveContainer>}
+     </CardContent></Card>
+     <Card><CardHeader><CardTitle className="text-base">Distribuição de Despesas</CardTitle><CardDescription>Compras de estoque e movimentações não operacionais ficam fora do cálculo do lucro.</CardDescription></CardHeader><CardContent>
+      {!expenseDistribution.length?<div className="flex h-64 items-center justify-center text-muted-foreground">Nenhuma despesa registrada no período.</div>:<ResponsiveContainer width="100%" height={300}><PieChart><Pie data={expenseDistribution} cx="50%" cy="50%" labelLine={false} label={({name,percent})=>`${name}: ${(percent*100).toFixed(1)}%`} outerRadius={100} dataKey="value">{expenseDistribution.map((x,i)=><Cell key={`cell-${i}`} fill={x.fill||COLORS[i%COLORS.length]}/>)}</Pie><Tooltip formatter={v=>formatCurrency(v)}/><Legend/></PieChart></ResponsiveContainer>}
+     </CardContent></Card>
+    </div>
+   </>}
+
+   {loading&&<div className="flex items-center justify-center py-10"><Loader2 className="h-10 w-10 animate-spin" style={{color:CYAN}}/></div>}
+  </motion.div>
+ );
+}
