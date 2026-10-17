@@ -33,10 +33,10 @@ const FolhasTable = ({ folhas, setFolhas, tiposFolha, estoqueAtual }) => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Label className="text-base font-semibold text-foreground">Consumo de Folhas</Label>
-        <Button 
+        <Button
           type="button"
-          onClick={addRow} 
-          size="sm" 
+          onClick={addRow}
+          size="sm"
           className="bg-cyan-500 hover:bg-cyan-600 text-white"
         >
           <Plus className="w-4 h-4 mr-1" />
@@ -53,9 +53,9 @@ const FolhasTable = ({ folhas, setFolhas, tiposFolha, estoqueAtual }) => {
         </Alert>
       ) : (
         <div className="folhas-table-container border border-border rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="max-h-[280px] overflow-auto">
             <table className="folhas-table w-full text-sm">
-              <thead className="bg-muted/30">
+              <thead className="sticky top-0 z-10 bg-muted/95">
                 <tr>
                   <th className="p-3 text-left font-semibold text-muted-foreground min-w-[250px]">Tipo de Folha</th>
                   <th className="p-3 text-center font-semibold text-muted-foreground min-w-[120px]">Estoque</th>
@@ -71,15 +71,15 @@ const FolhasTable = ({ folhas, setFolhas, tiposFolha, estoqueAtual }) => {
                   const insuficiente = estoqueDisponivel !== null && quantidadeGasta > estoqueDisponivel && !folha.e_rascunho;
 
                   return (
-                    <tr 
-                      key={index} 
+                    <tr
+                      key={index}
                       className={`border-b border-border last:border-b-0 folhas-table-row ${
                         insuficiente ? 'bg-red-500/5' : 'hover:bg-accent/5'
                       }`}
                     >
                       <td className="p-3">
-                        <Select 
-                          value={folha.tipo_folha} 
+                        <Select
+                          value={folha.tipo_folha}
                           onValueChange={(val) => updateRow(index, 'tipo_folha', val)}
                         >
                           <SelectTrigger className="bg-background text-foreground border-border">
@@ -97,7 +97,7 @@ const FolhasTable = ({ folhas, setFolhas, tiposFolha, estoqueAtual }) => {
                       <td className="p-3 text-center">
                         {folha.tipo_folha ? (
                           estoqueDisponivel !== null ? (
-                            <Badge 
+                            <Badge
                               variant={estoqueDisponivel > 10 ? "default" : estoqueDisponivel > 0 ? "secondary" : "destructive"}
                               className="font-semibold"
                             >
@@ -132,8 +132,8 @@ const FolhasTable = ({ folhas, setFolhas, tiposFolha, estoqueAtual }) => {
                             onCheckedChange={(checked) => updateRow(index, 'e_rascunho', checked)}
                             id={`rascunho-${index}`}
                           />
-                          <Label 
-                            htmlFor={`rascunho-${index}`} 
+                          <Label
+                            htmlFor={`rascunho-${index}`}
                             className="ml-2 text-sm cursor-pointer text-muted-foreground"
                           >
                             {folha.e_rascunho ? 'Sim' : 'Não'}
