@@ -115,34 +115,46 @@ const CartaoLancamentos=()=>{
   if(!user||!metaReady)return;
   setLoading(true);
 
-  const mes=parseInt(selectedMonth,10);
-  const ano=parseInt(selectedYear,10);
-  const startDate=format(new Date(ano,mes,1),'yyyy-MM-dd');
-  const endDate=format(new Date(ano,mes+1,0),'yyyy-MM-dd');
+  try{
+   const mes=parseInt(selectedMonth,10);
+   const ano=parseInt(selectedYear,10);
 
-  let q=supabase.from('pessoal_cartao_lancamentos').select('*').eq('user_id',user.id).gte('data',startDate).lte('data',endDate);
+   // Busca o mês anterior para incluir compras que pertencem
+   // à competência selecionada conforme o fechamento do cartão.
+   const startDate=format(new Date(ano,mes-1,1),'yyyy-MM-dd');
+   const endDate=format(new Date(ano,mes+1,0),'yyyy-MM-dd');
 
-  if(selectedCartao!=='todos')q=q.eq('cartao_id',selectedCartao);
-  if(selectedResponsavel!=='todos'){
-   q=selectedResponsavel==='sem'?q.is('responsavel_id',null):q.eq('responsavel_id',selectedResponsavel);
-  }
+   let q=supabase.from('pessoal_cartao_lancamentos').select('*').eq('user_id',user.id).gte('data',startDate).lte('data',endDate);
 
-  const{data,error}=await q.order('data',{ascending:false});
-  if(!mounted.current)return;
+   if(selectedCartao!=='todos')q=q.eq('cartao_id',selectedCartao);
+   if(selectedResponsavel!=='todos'){
+    q=selectedResponsavel==='sem'?q.is('responsavel_id',null):q.eq('responsavel_id',selectedResponsavel);
+   }
 
-  if(error){
-   toastRef.current?.({title:'Erro',description:'Não foi possível carregar os lançamentos.',variant:'destructive'});
+   const{data,error}=await q.order('data',{ascending:false});
+   if(!mounted.current)return;
+
+   if(error){
+    console.error('Erro ao carregar lançamentos do cartão:',error);
+    toastRef.current?.({title:'Erro ao carregar lançamentos',description:error.message||'Não foi possível carregar os lançamentos.',variant:'destructive'});
+    setLancamentos([]);
+   }else{
+    const cards=cartoesRef.current;
+    setLancamentos((data||[]).filter(l=>{
+     const card=cards.find(c=>c.id===l.cartao_id);
+     return pertenceCompetencia(l.data,card?.dia_fechamento||1,mes,ano);
+    }));
+   }
+
+   setCurrentPage(1);
+  }catch(error){
+   console.error('Falha ao consultar lançamentos do cartão:',error);
+   if(!mounted.current)return;
+   toastRef.current?.({title:'Erro',description:error?.message||'Falha ao carregar os lançamentos.',variant:'destructive'});
    setLancamentos([]);
-  }else{
-   const cards=cartoesRef.current;
-   setLancamentos((data||[]).filter(l=>{
-    const card=cards.find(c=>c.id===l.cartao_id);
-    return pertenceCompetencia(l.data,card?.dia_fechamento||1,mes,ano);
-   }));
+  }finally{
+   if(mounted.current)setLoading(false);
   }
-
-  setCurrentPage(1);
-  setLoading(false);
  },[user,metaReady,selectedMonth,selectedYear,selectedCartao,selectedResponsavel]);
 
  useEffect(()=>{fetchLancamentos();},[fetchLancamentos]);
@@ -257,8 +269,9 @@ const CartaoLancamentos=()=>{
 
    closeModal();
    fetchLancamentos();
-  }catch{
-   toast({title:'Erro',description:'Falha ao salvar lançamento.',variant:'destructive'});
+  }catch(error){
+   console.error('Erro ao salvar lançamento:',error);
+   toast({title:'Erro',description:error?.message||'Falha ao salvar lançamento.',variant:'destructive'});
   }
  };
 
@@ -270,7 +283,7 @@ const CartaoLancamentos=()=>{
   const{error}=await q;
 
   if(error){
-   toast({title:'Erro',description:'Falha ao remover lançamento.',variant:'destructive'});
+   toast({title:'Erro',description:error.message||'Falha ao remover lançamento.',variant:'destructive'});
   }else{
    toast({title:'Sucesso',description:item.parcelas>1?'Compra removida (todas as parcelas).':'Lançamento removido.'});
    fetchLancamentos();
