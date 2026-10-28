@@ -52,7 +52,7 @@ export default function LancamentoServicos(){
  const initial={data:todaySP(),servico_id:'',cliente_id:'',valor:'',forma_pagamento:''};
  const[formData,setFormData]=useState(initial);
 
- const normalize=useCallback(v=>v?v.toString().toUpperCase().trim():'',[]);
+ const normalize=useCallback(v=>normalizar(v),[]);
  const folhasText=useCallback(v=>!Array.isArray(v)||!v.length?'-':v.filter(x=>!x.e_rascunho&&x.tipo_folha&&x.quantidade).map(x=>`${x.tipo_folha} - ${x.quantidade} un`).join(', ')||'-',[]);
  const filtered=useMemo(()=>!searchTerm.trim()?servicosLancados:servicosLancados.filter(i=>(i.lm_servicos?.servico||'').toLowerCase().includes(searchTerm.toLowerCase())||(i.lm_clientes?.nome||i.cliente||'').toLowerCase().includes(searchTerm.toLowerCase())),[searchTerm,servicosLancados]);
  const total=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
@@ -81,26 +81,43 @@ export default function LancamentoServicos(){
   setEditingId(null);setFormData({...initial,data:todaySP()});setFolhasConsumo([]);setOriginalFolhas([]);
  };
 
+ // Em edições históricas, valida os campos e quantidades, mas não bloqueia
+ // a atualização por falta de estoque calculado no presente.
  const validate=()=>{
   if(!selectedServico?.usa_folha)return{ok:true};
   if(!folhasConsumo.length)return{ok:false,msg:'Este serviço requer pelo menos uma folha.'};
-  const stock={};
-  Object.keys(stockData).forEach(k=>stock[k]=stockData[k].estoqueAtual);
-  originalFolhas.forEach(f=>{
-   if(!f.e_rascunho&&f.tipo_folha&&Number(f.quantidade)>0){
-    const k=normalize(f.tipo_folha);stock[k]=(stock[k]||0)+Number(f.quantidade);
-   }
-  });
+
   for(const f of folhasConsumo){
    if(!f.tipo_folha)return{ok:false,msg:'Selecione o tipo de folha.'};
-   if(!Number.isFinite(Number(f.quantidade))||Number(f.quantidade)<=0)return{ok:false,msg:'A quantidade de folhas deve ser maior que zero.'};
-   if(!f.e_rascunho&&Number(f.quantidade)>(stock[normalize(f.tipo_folha)]||0))return{ok:false,msg:`Estoque insuficiente para ${f.tipo_folha}.`};
+   if(!Number.isFinite(Number(f.quantidade))||Number(f.quantidade)<=0)
+    return{ok:false,msg:'A quantidade de folhas deve ser maior que zero.'};
+  }
+
+  if(editingId)return{ok:true};
+
+  const stock={};
+  Object.values(stockData).forEach(x=>{
+   const nome=normalize(x.tipo_folha||x.nomeInsumo);
+   if(nome)stock[nome]=Number(x.estoqueAtual)||0;
+  });
+
+  const solicitadas={};
+  for(const f of folhasConsumo){
+   if(f.e_rascunho)continue;
+   const nome=normalize(f.tipo_folha);
+   solicitadas[nome]=(solicitadas[nome]||0)+Number(f.quantidade);
+  }
+
+  for(const[nome,qtd]of Object.entries(solicitadas)){
+   const disponivel=stock[nome]||0;
+   if(qtd>disponivel)return{ok:false,msg:`Estoque insuficiente para ${nome}. Disponível: ${disponivel} folha(s).`};
   }
   return{ok:true};
  };
 
  const prepararCustosFolhas=async(lista,originais=[],emEdicao=false,dataServico=todaySP())=>{
   const filasOriginais=new Map(),pendentes=new Set(),tiposCache=new Map();
+
   if(emEdicao)(originais||[]).forEach(f=>{
    if(!f?.tipo_folha||f.e_rascunho||Number(f.quantidade)<=0)return;
    const k=normalizar(f.tipo_folha);
@@ -151,12 +168,14 @@ export default function LancamentoServicos(){
   e.preventDefault();
   if(!user){toast({title:'Sessão inválida',description:'Entre novamente no sistema.',variant:'destructive'});return}
   const valorNumerico=moneyNumber(formData.valor);
+
   if(!formData.data||!formData.servico_id||!formData.cliente_id||!formData.valor||!formData.forma_pagamento){
    toast({title:'Atenção',description:'Preencha todos os campos obrigatórios.',variant:'destructive'});return;
   }
   if(!Number.isFinite(valorNumerico)||valorNumerico<=0){
    toast({title:'Valor inválido',description:'Informe um valor maior que zero.',variant:'destructive'});return;
   }
+
   const v=validate();
   if(!v.ok){toast({title:'Aviso de Estoque',description:v.msg,variant:'destructive'});return}
 
@@ -181,7 +200,16 @@ export default function LancamentoServicos(){
     }
    }
 
-   const payload={user_id:user.id,data:formData.data,servico_id:formData.servico_id,cliente_id:formData.cliente_id,cliente:clientesOpcoes.find(c=>c.id===formData.cliente_id)?.nome||null,valor:valorNumerico,forma_pagamento:formData.forma_pagamento,folhas_gastas:folhasParaSalvar};
+   const payload={
+    user_id:user.id,
+    data:formData.data,
+    servico_id:formData.servico_id,
+    cliente_id:formData.cliente_id,
+    cliente:clientesOpcoes.find(c=>c.id===formData.cliente_id)?.nome||null,
+    valor:valorNumerico,
+    forma_pagamento:formData.forma_pagamento,
+    folhas_gastas:folhasParaSalvar
+   };
 
    if(!isOnline&&!editingId){
     await saveOfflineData('lm_servicos',payload);
@@ -189,15 +217,21 @@ export default function LancamentoServicos(){
     checkPending();
    }else{
     if(!isOnline){toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});return}
-    const q=editingId?supabase.from('lm_lanc_servicos').update(payload).eq('id',editingId).eq('user_id',user.id):supabase.from('lm_lanc_servicos').insert(payload);
+    const q=editingId
+     ?supabase.from('lm_lanc_servicos').update(payload).eq('id',editingId).eq('user_id',user.id)
+     :supabase.from('lm_lanc_servicos').insert(payload);
     const{error}=await q;
     if(error)throw error;
-    toast(custosPendentes.length?{title:'Serviço registrado com custo pendente',description:`Confira o cadastro ou as compras destas folhas: ${custosPendentes.join(', ')}.`,variant:'destructive'}:{title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
+
+    toast(custosPendentes.length
+     ?{title:'Serviço registrado com custo pendente',description:`Confira o cadastro ou as compras destas folhas: ${custosPendentes.join(', ')}.`,variant:'destructive'}
+     :{title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
     await refresh();
    }
    resetAfterSave();
-  }catch(e){toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar o serviço.',variant:'destructive'})}
-  finally{setSaving(false)}
+  }catch(e){
+   toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar o serviço.',variant:'destructive'});
+  }finally{setSaving(false)}
  };
 
  const remove=async id=>{
@@ -205,7 +239,8 @@ export default function LancamentoServicos(){
   try{
    const{error}=await supabase.from('lm_lanc_servicos').delete().eq('id',id).eq('user_id',user.id);
    if(error)throw error;
-   toast({title:'Removido',description:'Serviço excluído.'});await refresh();
+   toast({title:'Removido',description:'Serviço excluído.'});
+   await refresh();
   }catch(e){toast({title:'Erro',description:e.message,variant:'destructive'})}
  };
 
@@ -258,3 +293,4 @@ export default function LancamentoServicos(){
   </motion.div>
  );
 }
+
