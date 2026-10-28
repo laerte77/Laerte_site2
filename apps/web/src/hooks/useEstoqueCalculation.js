@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 
-const norm = v => String(v || '').normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+const norm = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
 
 export function useEstoqueCalculation() {
   const { user } = useAuth();
@@ -25,9 +24,9 @@ export function useEstoqueCalculation() {
     setError(null);
 
     try {
-      const [d, s, c, i, t] = await Promise.all([
+      const [d, s, c, i, t, m] = await Promise.all([
         supabase.from('lm_lanc_despesas')
-          .select('data,tipo_lancamento,tipo_folha,quantidade,insumo_id,lm_despesas(despesa)')
+          .select('data,tipo_lancamento,tipo_folha,quantidade,insumo_id')
           .eq('user_id', user.id)
           .eq('tipo_lancamento', 'Estoque')
           .not('quantidade', 'is', null),
@@ -47,10 +46,14 @@ export function useEstoqueCalculation() {
 
         supabase.from('lm_tipos_folha')
           .select('tipo_folha,insumo_id')
+          .eq('user_id', user.id),
+
+        supabase.from('lm_folhas')
+          .select('data,insumo_id,tipo_folha,tipo_movimento,quantidade')
           .eq('user_id', user.id)
       ]);
 
-      for (const r of [d, s, c, i, t]) {
+      for (const r of [d, s, c, i, t, m]) {
         if (r.error) throw r.error;
       }
 
@@ -59,6 +62,7 @@ export function useEstoqueCalculation() {
       const custos = c.data || [];
       const insumos = i.data || [];
       const tipos = t.data || [];
+      const movimentos = m.data || [];
 
       const porId = new Map(insumos.map(x => [String(x.id), x]));
       const porNome = new Map(insumos.map(x => [norm(x.nome), String(x.id)]));
@@ -98,7 +102,6 @@ export function useEstoqueCalculation() {
             nomeInsumo: display,
             unidade: ins?.unidade || unidade || 'unidade',
             estoque_minimo: ins?.estoque_minimo ?? null,
-            baseline: 0,
             reposicoes: 0,
             entradas: 0,
             saidas: 0,
@@ -114,7 +117,6 @@ export function useEstoqueCalculation() {
         return rows[key];
       };
 
-      // Todos os materiais cadastrados começam com saldo zero.
       insumos.forEach(x => ensure(x.id, x.nome, x.unidade));
 
       let latest = null;
@@ -122,7 +124,7 @@ export function useEstoqueCalculation() {
         if (date && (!latest || String(date) > String(latest))) latest = date;
       };
 
-      // 1. Reposições: despesas classificadas como Estoque.
+      // 1. Reposições lançadas em Despesas -> Estoque.
       despesas.forEach(x => {
         const quantidade = Number(x.quantidade);
         if (!Number.isFinite(quantidade) || quantidade <= 0) return;
@@ -131,7 +133,6 @@ export function useEstoqueCalculation() {
           ? porId.get(String(x.insumo_id))?.nome
           : x.tipo_folha;
 
-        // Não atribuir despesa a material não identificado.
         if (!x.insumo_id && !norm(nome)) return;
 
         const row = ensure(x.insumo_id, nome);
@@ -141,7 +142,7 @@ export function useEstoqueCalculation() {
         track(x.data);
       });
 
-      // 2. Consumo em serviços. Rascunhos não movimentam estoque.
+      // 2. Consumo dos serviços. Rascunhos não descontam estoque.
       servicos.forEach(x => {
         if (!Array.isArray(x.folhas_gastas)) return;
 
@@ -158,7 +159,7 @@ export function useEstoqueCalculation() {
         });
       });
 
-      // 3. Uso fora de serviço e perdas: lm_lanc_custos.
+      // 3. Consumos e perdas registrados em Custos.
       custos.forEach(x => {
         const quantidade = Number(x.quantidade);
         const tipo = norm(x.tipo);
@@ -177,16 +178,41 @@ export function useEstoqueCalculation() {
         track(x.data_lancamento);
       });
 
+      // 4. Movimentações manuais da tela Lançamento de Folhas.
+      movimentos.forEach(x => {
+        const quantidade = Number(x.quantidade);
+        const tipo = norm(x.tipo_movimento);
+
+        if (!Number.isFinite(quantidade) || quantidade <= 0) return;
+        if (!['ENTRADA', 'SAIDA', 'PERDA'].includes(tipo)) return;
+
+        const nome = x.insumo_id
+          ? porId.get(String(x.insumo_id))?.nome
+          : x.tipo_folha;
+
+        if (!x.insumo_id && !norm(nome)) return;
+
+        const row = ensure(x.insumo_id, nome);
+        if (!row) return;
+
+        if (tipo === 'ENTRADA') row.entradas += quantidade;
+        if (tipo === 'SAIDA') row.saidas += quantidade;
+        if (tipo === 'PERDA') row.perdas += quantidade;
+
+        track(x.data);
+      });
+
       Object.values(rows).forEach(x => {
-        x.estoqueAtual = x.reposicoes - x.folhasGastas
+        x.estoqueAtual = x.reposicoes + x.entradas
+          - x.folhasGastas - x.saidas
           - x.consumoCustos - x.perdas;
+
         x.variacao = x.estoqueAtual;
         x.auditoria = x.estoqueAtual < 0;
       });
 
       const output = {};
       Object.values(rows).forEach(x => {
-        // ID evita sobrescrever materiais com nomes iguais.
         const key = x.insumo_id || norm(x.nomeInsumo);
         output[key] = x;
       });
@@ -197,7 +223,9 @@ export function useEstoqueCalculation() {
       setLastMovement(latest);
     } catch (e) {
       console.error('Erro ao calcular estoque:', e);
-      if (mounted.current) setError(e.message || 'Não foi possível calcular o estoque.');
+      if (mounted.current) {
+        setError(e.message || 'Não foi possível calcular o estoque.');
+      }
     } finally {
       if (mounted.current) setLoading(false);
     }
@@ -207,7 +235,9 @@ export function useEstoqueCalculation() {
     mounted.current = true;
     fetchAllData();
 
-    if (!user) return () => { mounted.current = false; };
+    if (!user) {
+      return () => { mounted.current = false; };
+    }
 
     const channel = supabase.channel(`stock-updates-${user.id}`);
 
@@ -215,6 +245,7 @@ export function useEstoqueCalculation() {
       'lm_lanc_despesas',
       'lm_lanc_servicos',
       'lm_lanc_custos',
+      'lm_folhas',
       'lm_tipos_folha',
       'lm_insumos'
     ].forEach(table => {
@@ -235,8 +266,13 @@ export function useEstoqueCalculation() {
   }, [user, fetchAllData]);
 
   return {
-    stockData, loading, isLoading: loading, error,
-    refresh: fetchAllData, lastUpdate, lastMovement
+    stockData,
+    loading,
+    isLoading: loading,
+    error,
+    refresh: fetchAllData,
+    lastUpdate,
+    lastMovement
   };
 }
 
