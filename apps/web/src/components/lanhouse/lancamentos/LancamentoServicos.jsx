@@ -52,7 +52,6 @@ export default function LancamentoServicos(){
  const initial={data:todaySP(),servico_id:'',cliente_id:'',valor:'',forma_pagamento:''};
  const[formData,setFormData]=useState(initial);
 
- const normalize=useCallback(v=>normalizar(v),[]);
  const folhasText=useCallback(v=>!Array.isArray(v)||!v.length?'-':v.filter(x=>!x.e_rascunho&&x.tipo_folha&&x.quantidade).map(x=>`${x.tipo_folha} - ${x.quantidade} un`).join(', ')||'-',[]);
  const filtered=useMemo(()=>!searchTerm.trim()?servicosLancados:servicosLancados.filter(i=>(i.lm_servicos?.servico||'').toLowerCase().includes(searchTerm.toLowerCase())||(i.lm_clientes?.nome||i.cliente||'').toLowerCase().includes(searchTerm.toLowerCase())),[searchTerm,servicosLancados]);
  const total=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
@@ -82,14 +81,13 @@ export default function LancamentoServicos(){
   setEditingId(null);setFormData({...initial,data:todaySP()});setFolhasConsumo([]);setOriginalFolhas([]);
  };
 
- // Valida os campos das folhas, mas não bloqueia o lançamento por falta de estoque.
+ // Não bloqueia o lançamento por falta de estoque.
  const validate=()=>{
   if(!selectedServico?.usa_folha)return{ok:true};
   if(!folhasConsumo.length)return{ok:false,msg:'Este serviço requer pelo menos uma folha.'};
   for(const f of folhasConsumo){
    if(!f.tipo_folha)return{ok:false,msg:'Selecione o tipo de folha.'};
-   if(!Number.isFinite(Number(f.quantidade))||Number(f.quantidade)<=0)
-    return{ok:false,msg:'A quantidade de folhas deve ser maior que zero.'};
+   if(!Number.isFinite(Number(f.quantidade))||Number(f.quantidade)<=0)return{ok:false,msg:'A quantidade de folhas deve ser maior que zero.'};
   }
   return{ok:true};
  };
@@ -104,10 +102,10 @@ export default function LancamentoServicos(){
   });
   const tiposRes=await supabase.from('lm_tipos_folha').select('tipo_folha,preco,is_special,insumo_id').eq('user_id',user.id);
   (tiposRes.data||[]).forEach(t=>tiposCache.set(normalizar(t.tipo_folha),t));
-  if(tiposRes.error)console.error('Não foi possível consultar os tipos de folha:',tiposRes.error);
+  if(tiposRes.error)console.error('Erro ao consultar tipos de folha:',tiposRes.error);
   const resolverCusto=async nome=>{
    try{return await resolverCustoUnitarioMaterial({supabase,userId:user.id,tipoFolha:nome,dataReferencia:dataServico,tipoCadastro:tiposCache.get(normalizar(nome))});}
-   catch(e){console.error(`Não foi possível buscar o custo de ${nome}:`,e);return{ok:false,unitario:0,origem:'pendente',estimado:false,pendente:true,dataCompra:null};}
+   catch(e){console.error(`Erro ao buscar custo de ${nome}:`,e);return{ok:false,unitario:0,origem:'pendente',estimado:false,pendente:true,dataCompra:null};}
   };
   const folhas=await Promise.all((lista||[]).map(async f=>{
    if(f.e_rascunho||!f.tipo_folha||Number(f.quantidade)<=0)return f;
@@ -131,7 +129,8 @@ export default function LancamentoServicos(){
  };
 
  const save=async e=>{
-  e.preventDefault();
+  e?.preventDefault?.();
+  if(saving)return;
   if(!user){toast({title:'Sessão inválida',description:'Entre novamente no sistema.',variant:'destructive'});return}
   const valorNumerico=moneyNumber(formData.valor);
   if(!formData.data||!formData.servico_id||!formData.cliente_id||!formData.valor||!formData.forma_pagamento){
@@ -170,7 +169,7 @@ export default function LancamentoServicos(){
    };
    if(!isOnline&&!editingId){
     await saveOfflineData('lm_servicos',payload);
-    toast({title:'Serviço salvo localmente',description:custosPendentes.length?`Custo pendente para: ${custosPendentes.join(', ')}.`:'Serviço guardado no dispositivo para sincronização.'});
+    toast({title:'Serviço salvo localmente',description: custosPendentes.length?`Custo pendente para: ${custosPendentes.join(', ')}.`:'Serviço guardado no dispositivo para sincronização.'});
     checkPending();
    }else{
     if(!isOnline){toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});return}
@@ -185,7 +184,9 @@ export default function LancamentoServicos(){
     await refresh();
    }
    resetAfterSave();
+   setAddOpen(false);
   }catch(e){
+   console.error('Falha ao salvar lançamento de serviço:',e);
    toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar o serviço.',variant:'destructive'});
   }finally{setSaving(false)}
  };
@@ -220,10 +221,10 @@ export default function LancamentoServicos(){
    <Card className="border-border bg-card"><CardContent className="p-4"><div className="flex flex-col gap-3 xl:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Buscar serviço ou cliente..." className="h-10 pl-9"/></div><div className="flex flex-wrap gap-2"><Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[140px]"><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select><Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[110px]"><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select><Button variant="outline" onClick={()=>setSearchTerm('')}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button></div></div></CardContent></Card>
    <Dialog open={stockOpen} onOpenChange={setStockOpen}><DialogContent className="bg-card border-border sm:max-w-[800px]"><DialogHeader><DialogTitle><PackageSearch className="mr-2 inline h-5 w-5" style={{color:CYAN}}/>Estoque Atual</DialogTitle><DialogDescription>Disponibilidade atual de folhas e materiais.</DialogDescription></DialogHeader><ScrollArea className="max-h-[60vh]"><div className="grid gap-4 py-4 sm:grid-cols-2 lg:grid-cols-3">{isStockLoading?<Loader2 className="mx-auto h-8 w-8 animate-spin"/>:Object.values(stockData).map(i=><EstoqueAtualCard key={i.tipo_folha} item={i} lastUpdate={lastUpdate}/>)}</div></ScrollArea><DialogFooter><Button variant="outline" onClick={()=>setStockOpen(false)}>Fechar</Button></DialogFooter></DialogContent></Dialog>
    <Dialog open={exportOpen} onOpenChange={setExportOpen}><DialogContent className="bg-card border-border sm:max-w-[430px]"><DialogHeader><DialogTitle>Exportar Serviços</DialogTitle><DialogDescription>Selecione o período.</DialogDescription></DialogHeader><div className="grid grid-cols-2 gap-4 py-4"><div><Label>Mês</Label><Select value={String(exportFilters.month)} onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select></div><div><Label>Ano</Label><Select value={String(exportFilters.year)} onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select></div></div><DialogFooter><Button variant="outline" onClick={()=>setExportOpen(false)}>Cancelar</Button><Button onClick={exportar} style={{background:CYAN}} className="text-white">Exportar</Button></DialogFooter></DialogContent></Dialog>
-   <ModalLancamentoPadrao open={addOpen} onClose={closeDialog} title={editingId?'Editar Serviço':'Novo Serviço'} description={editingId?'Atualize os dados do serviço.':'Registre um novo serviço prestado.'} icon={Receipt} theme="cyan" footer={<><Button type="button" variant="outline" onClick={closeDialog} disabled={saving} className="h-11 rounded-xl border-border px-5">Cancelar</Button><Button type="submit" form="form-servico" disabled={saving} className="h-11 rounded-xl px-6 font-semibold text-white" style={{background:CYAN}}>{saving&&<Loader2 className="mr-2 h-4 w-4 animate-spin"/>}{editingId?'Atualizar':'Salvar'}</Button></>}>
+   <ModalLancamentoPadrao open={addOpen} onClose={closeDialog} title={editingId?'Editar Serviço':'Novo Serviço'} description={editingId?'Atualize os dados do serviço.':'Registre um novo serviço prestado.'} icon={Receipt} theme="cyan" footer={<><Button type="button" variant="outline" onClick={closeDialog} disabled={saving} className="h-11 rounded-xl border-border px-5">Cancelar</Button><Button type="button" onClick={save} disabled={saving} className="h-11 rounded-xl px-6 font-semibold text-white" style={{background:CYAN}}>{saving?<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Salvando...</>:editingId?'Atualizar':'Salvar'}</Button></>}>
     <form id="form-servico" onSubmit={save} noValidate className="max-h-[calc(100vh-300px)] space-y-5 overflow-y-auto overflow-x-hidden pr-1">
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))} required disabled={saving} className="h-11 rounded-xl bg-input"/></div><div className="space-y-2"><Label>Valor (R$) *</Label><Input type="text" inputMode="numeric" autoComplete="off" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:moneyInput(e.target.value)}))} required disabled={saving} placeholder="R$ 0,00" className="h-11 rounded-xl bg-input tabular-nums"/></div></div>
-     <div className="space-y-2"><Label>Tipo do Serviço *</Label><Select value={formData.servico_id} onValueChange={v=>setFormData(p=>({...p,servico_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o serviço"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{servicosOpcoes.map(s=><SelectItem key={s.id} value={s.id}>{s.servico}{s.usa_folha?' 📄':''}</SelectItem>)}</ScrollArea></SelectContent></Select>{selectedServico?.usa_folha&&<Alert className="border-cyan-500/30 bg-cyan-500/10"><AlertTriangle className="h-4 w-4"/><AlertDescription>As folhas utilizadas serão verificadas no estoque e terão o custo salvo junto ao serviço.</AlertDescription></Alert>}</div>
+     <div className="space-y-2"><Label>Tipo do Serviço *</Label><Select value={formData.servico_id} onValueChange={v=>setFormData(p=>({...p,servico_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o serviço"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{servicosOpcoes.map(s=><SelectItem key={s.id} value={s.id}>{s.servico}{s.usa_folha?' 📄':''}</SelectItem>)}</ScrollArea></SelectContent></Select>{selectedServico?.usa_folha&&<Alert className="border-cyan-500/30 bg-cyan-500/10"><AlertTriangle className="h-4 w-4"/><AlertDescription>As folhas utilizadas serão registradas junto ao serviço. A falta de estoque não impede o lançamento.</AlertDescription></Alert>}</div>
      <div className="space-y-2"><Label>Cliente *</Label><Select value={formData.cliente_id} onValueChange={v=>setFormData(p=>({...p,cliente_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o cliente"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{clientesOpcoes.map(c=><SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
      <div className="space-y-2"><Label>Forma de Pagamento *</Label><Select value={formData.forma_pagamento} onValueChange={v=>setFormData(p=>({...p,forma_pagamento:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o pagamento"/></SelectTrigger><SelectContent>{['Dinheiro','PIX','Cartão de Crédito','Cartão de Débito'].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div>
      {selectedServico?.usa_folha&&<div className="space-y-2 border-t border-border pt-4"><FolhasTable folhas={folhasConsumo} setFolhas={setFolhasConsumo} tiposFolha={tiposFolha} estoqueAtual={estoqueAtual} disabled={saving}/></div>}
