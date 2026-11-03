@@ -43,13 +43,16 @@ const custoTotal=(q,u)=>Math.round((Number(q)||0)*(Number(u)||0)*100)/100;
 export default function LancamentoServicos(){
  const{user}=useAuth(),{toast}=useToast(),{isOnline,checkPending}=useOnlineStatus();
  const now=currentSP();
- const[searchTerm,setSearchTerm]=useState(''),[selectedMonth,setSelectedMonth]=useState(String(now.month)),[selectedYear,setSelectedYear]=useState(String(now.year));
- const[addOpen,setAddOpen]=useState(false),[exportOpen,setExportOpen]=useState(false),[stockOpen,setStockOpen]=useState(false),[editingId,setEditingId]=useState(null),[folhasConsumo,setFolhasConsumo]=useState([]),[originalFolhas,setOriginalFolhas]=useState([]),[saving,setSaving]=useState(false);
+ const[searchTerm,setSearchTerm]=useState('');
+ const[selectedMonth,setSelectedMonth]=useState(String(now.month));
+ const[selectedYear,setSelectedYear]=useState(String(now.year));
+ const[addOpen,setAddOpen]=useState(false),[exportOpen,setExportOpen]=useState(false),[stockOpen,setStockOpen]=useState(false);
+ const[editingId,setEditingId]=useState(null),[folhasConsumo,setFolhasConsumo]=useState([]),[originalFolhas,setOriginalFolhas]=useState([]),[saving,setSaving]=useState(false);
  const[exportFilters,setExportFilters]=useState({month:now.month,year:now.year});
  const{servicos:servicosOpcoes,clientes:clientesOpcoes,tiposFolha}=useServiceCache();
  const{data:servicosLancados,loading,refresh}=useOptimizedServiceData({month:selectedMonth,year:selectedYear});
  const{stockData,isLoading:isStockLoading,lastUpdate}=useEstoqueCalculation();
- const initial={data:todaySP(),servico_id:'',cliente_id:'',valor:'',forma_pagamento:''};
+ const initial={data:todaySP(),servico_id:'',cliente_id:'',valor:'',status_financeiro:'PAGO',forma_pagamento:''};
  const[formData,setFormData]=useState(initial);
 
  const folhasText=useCallback(v=>!Array.isArray(v)||!v.length?'-':v.filter(x=>!x.e_rascunho&&x.tipo_folha&&x.quantidade).map(x=>`${x.tipo_folha} - ${x.quantidade} un`).join(', ')||'-',[]);
@@ -63,7 +66,7 @@ export default function LancamentoServicos(){
    const cid=item.cliente_id||clientesOpcoes.find(c=>c.nome===item.cliente)?.id||'';
    const folhas=Array.isArray(item.folhas_gastas)?JSON.parse(JSON.stringify(item.folhas_gastas)):[];
    setEditingId(item.id);
-   setFormData({data:String(item.data||'').slice(0,10),servico_id:item.servico_id,cliente_id:cid,valor:moneyInput(Math.round(Number(item.valor||0)*100)),forma_pagamento:item.forma_pagamento||''});
+   setFormData({data:String(item.data||'').slice(0,10),servico_id:item.servico_id,cliente_id:cid,valor:moneyInput(Math.round(Number(item.valor||0)*100)),status_financeiro:item.status_financeiro||'PAGO',forma_pagamento:item.forma_pagamento||''});
    setOriginalFolhas(JSON.parse(JSON.stringify(folhas)));
    setFolhasConsumo(folhas);
   }else{
@@ -81,7 +84,6 @@ export default function LancamentoServicos(){
   setEditingId(null);setFormData({...initial,data:todaySP()});setFolhasConsumo([]);setOriginalFolhas([]);
  };
 
- // Não bloqueia o lançamento por falta de estoque.
  const validate=()=>{
   if(!selectedServico?.usa_folha)return{ok:true};
   if(!folhasConsumo.length)return{ok:false,msg:'Este serviço requer pelo menos uma folha.'};
@@ -133,8 +135,11 @@ export default function LancamentoServicos(){
   if(saving)return;
   if(!user){toast({title:'Sessão inválida',description:'Entre novamente no sistema.',variant:'destructive'});return}
   const valorNumerico=moneyNumber(formData.valor);
-  if(!formData.data||!formData.servico_id||!formData.cliente_id||!formData.valor||!formData.forma_pagamento){
+  if(!formData.data||!formData.servico_id||!formData.cliente_id||!formData.valor||!formData.status_financeiro){
    toast({title:'Atenção',description:'Preencha todos os campos obrigatórios.',variant:'destructive'});return;
+  }
+  if(formData.status_financeiro==='PAGO'&&!formData.forma_pagamento){
+   toast({title:'Forma de pagamento obrigatória',description:'Selecione a forma de pagamento para um serviço pago.',variant:'destructive'});return;
   }
   if(!Number.isFinite(valorNumerico)||valorNumerico<=0){
    toast({title:'Valor inválido',description:'Informe um valor maior que zero.',variant:'destructive'});return;
@@ -143,6 +148,14 @@ export default function LancamentoServicos(){
   if(!v.ok){toast({title:'Atenção',description:v.msg,variant:'destructive'});return}
   setSaving(true);
   try{
+   if(editingId&&isOnline){
+    const{data:recebidos,error:recError}=await supabase.from('lm_recebimentos').select('valor').eq('lanc_servico_id',editingId).eq('user_id',user.id);
+    if(recError)throw recError;
+    const totalRecebido=(recebidos||[]).reduce((s,r)=>s+Number(r.valor||0),0);
+    if(totalRecebido>0&&valorNumerico!==Number(servicosLancados.find(x=>x.id===editingId)?.valor||0)){
+     throw new Error('Este serviço já possui recebimentos. O valor original não pode ser alterado.');
+    }
+   }
    const usaFolhas=!!selectedServico?.usa_folha;
    let folhasParaSalvar=usaFolhas&&folhasConsumo.length?folhasConsumo:null;
    let custosPendentes=[];
@@ -164,7 +177,9 @@ export default function LancamentoServicos(){
     user_id:user.id,data:formData.data,servico_id:formData.servico_id,
     cliente_id:formData.cliente_id,
     cliente:clientesOpcoes.find(c=>c.id===formData.cliente_id)?.nome||null,
-    valor:valorNumerico,forma_pagamento:formData.forma_pagamento,
+    valor:valorNumerico,
+    status_financeiro:formData.status_financeiro,
+    forma_pagamento:formData.status_financeiro==='PAGO'?formData.forma_pagamento:null,
     folhas_gastas:folhasParaSalvar
    };
    if(!isOnline&&!editingId){
@@ -183,8 +198,7 @@ export default function LancamentoServicos(){
      :{title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
     await refresh();
    }
-   resetAfterSave();
-   setAddOpen(false);
+   resetAfterSave();setAddOpen(false);
   }catch(e){
    console.error('Falha ao salvar lançamento de serviço:',e);
    toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar o serviço.',variant:'destructive'});
@@ -196,14 +210,14 @@ export default function LancamentoServicos(){
   try{
    const{error}=await supabase.from('lm_lanc_servicos').delete().eq('id',id).eq('user_id',user.id);
    if(error)throw error;
-   toast({title:'Removido',description:'Serviço excluído.'});
-   await refresh();
-  }catch(e){toast({title:'Erro',description:e.message,variant:'destructive'})}
+   toast({title:'Removido',description:'Serviço excluído.'});await refresh();
+  }catch(e){toast({title:'Erro',description:e.message,variant:'destructive')}
+  }
  };
 
  const exportar=()=>{
   if(!filtered.length){toast({title:'Aviso',description:'Nenhum dado para exportar.',variant:'destructive'});return}
-  const data=filtered.map(i=>({DATA:dateBR(i.data),SERVIÇO:i.lm_servicos?.servico||'N/A',CLIENTE:i.lm_clientes?.nome||i.cliente||'-','FOLHAS GASTAS':folhasText(i.folhas_gastas),PAGAMENTO:i.forma_pagamento||'-',VALOR:Number(i.valor||0)}));
+  const data=filtered.map(i=>({DATA:dateBR(i.data),SERVIÇO:i.lm_servicos?.servico||'N/A',CLIENTE:i.lm_clientes?.nome||i.cliente||'-','FOLHAS GASTAS':folhasText(i.folhas_gastas),STATUS:i.status_financeiro||'PAGO',PAGAMENTO:i.forma_pagamento||'-',VALOR:Number(i.valor||0)}));
   const ws=XLSX.utils.json_to_sheet(data),wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Serviços');
   XLSX.writeFile(wb,`Servicos_LM_${meses[exportFilters.month]}_${exportFilters.year}.xlsx`);
@@ -225,12 +239,13 @@ export default function LancamentoServicos(){
     <form id="form-servico" onSubmit={save} noValidate className="max-h-[calc(100vh-300px)] space-y-5 overflow-y-auto overflow-x-hidden pr-1">
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))} required disabled={saving} className="h-11 rounded-xl bg-input"/></div><div className="space-y-2"><Label>Valor (R$) *</Label><Input type="text" inputMode="numeric" autoComplete="off" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:moneyInput(e.target.value)}))} required disabled={saving} placeholder="R$ 0,00" className="h-11 rounded-xl bg-input tabular-nums"/></div></div>
      <div className="space-y-2"><Label>Tipo do Serviço *</Label><Select value={formData.servico_id} onValueChange={v=>setFormData(p=>({...p,servico_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o serviço"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{servicosOpcoes.map(s=><SelectItem key={s.id} value={s.id}>{s.servico}{s.usa_folha?' 📄':''}</SelectItem>)}</ScrollArea></SelectContent></Select>{selectedServico?.usa_folha&&<Alert className="border-cyan-500/30 bg-cyan-500/10"><AlertTriangle className="h-4 w-4"/><AlertDescription>As folhas utilizadas serão registradas junto ao serviço. A falta de estoque não impede o lançamento.</AlertDescription></Alert>}</div>
-     <div className="space-y-2"><Label>Cliente *</Label><Select value={formData.cliente_id} onValueChange={v=>setFormData(p=>({...p,cliente_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o cliente"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{clientesOpcoes.map(c=><SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
-     <div className="space-y-2"><Label>Forma de Pagamento *</Label><Select value={formData.forma_pagamento} onValueChange={v=>setFormData(p=>({...p,forma_pagamento:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o pagamento"/></SelectTrigger><SelectContent>{['Dinheiro','PIX','Cartão de Crédito','Cartão de Débito'].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div>
+     <div className="space-y-2"><Label>Cliente *</Label><Select value={formData.cliente_id} onValueChange={v=>setFormData(p=>({...p,cliente_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o cliente"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{clientesOpcoes.map(c=><SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</ScrollArea></Select></div>
+     <div className="space-y-2"><Label>Status do pagamento *</Label><Select value={formData.status_financeiro} onValueChange={v=>setFormData(p=>({...p,status_financeiro:v,forma_pagamento:v==='DEVENDO'?'':p.forma_pagamento}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o status"/></SelectTrigger><SelectContent><SelectItem value="PAGO">Pago</SelectItem><SelectItem value="DEVENDO">Devendo</SelectItem></SelectContent></Select></div>
+     {formData.status_financeiro==='PAGO'&&<div className="space-y-2"><Label>Forma de Pagamento *</Label><Select value={formData.forma_pagamento} onValueChange={v=>setFormData(p=>({...p,forma_pagamento:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o pagamento"/></SelectTrigger><SelectContent>{['Dinheiro','PIX','Cartão de Crédito','Cartão de Débito'].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div>}
      {selectedServico?.usa_folha&&<div className="space-y-2 border-t border-border pt-4"><FolhasTable folhas={folhasConsumo} setFolhas={setFolhasConsumo} tiposFolha={tiposFolha} estoqueAtual={estoqueAtual} disabled={saving}/></div>}
     </form>
    </ModalLancamentoPadrao>
-   <Card className="border-border bg-card"><CardContent className="p-0"><ScrollArea className="h-[560px]"><Table><TableHeader className="sticky top-0 z-10 bg-secondary/70"><TableRow><TableHead>Data</TableHead><TableHead>Serviço</TableHead><TableHead>Cliente</TableHead><TableHead>Folhas</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-center">Ações</TableHead></TableRow></TableHeader><TableBody>{loading?<TableRow><TableCell colSpan={6} className="py-12 text-center">Carregando...</TableCell></TableRow>:!filtered.length?<TableRow><TableCell colSpan={6} className="py-12 text-center text-muted-foreground">Nenhum serviço encontrado.</TableCell></TableRow>:filtered.map(x=><TableRow key={x.id} className="hover:bg-muted/40"><TableCell>{dateBR(x.data)}</TableCell><TableCell className="font-semibold">{x.lm_servicos?.servico||'N/A'}<div className="text-xs text-muted-foreground">{x.forma_pagamento||''}</div></TableCell><TableCell>{x.lm_clientes?.nome||x.cliente||'-'}</TableCell><TableCell>{folhasText(x.folhas_gastas)}</TableCell><TableCell className="text-right font-bold" style={{color:CYAN}}>{BRL.format(Number(x.valor)||0)}</TableCell><TableCell><div className="flex justify-center gap-1"><Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço"><Edit className="h-4 w-4"/></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></TableCell></TableRow>)}</TableBody></Table></ScrollArea></CardContent></Card>
+   <Card className="border-border bg-card"><CardContent className="p-0"><ScrollArea className="h-[560px]"><Table><TableHeader className="sticky top-0 z-10 bg-secondary/70"><TableRow><TableHead>Data</TableHead><TableHead>Serviço</TableHead><TableHead>Cliente</TableHead><TableHead>Folhas</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-center">Ações</TableHead></TableRow></TableHeader><TableBody>{loading?<TableRow><TableCell colSpan={7} className="py-12 text-center">Carregando...</TableCell></TableRow>:!filtered.length?<TableRow><TableCell colSpan={7} className="py-12 text-center text-muted-foreground">Nenhum serviço encontrado.</TableCell></TableRow>:filtered.map(x=><TableRow key={x.id} className="hover:bg-muted/40"><TableCell>{dateBR(x.data)}</TableCell><TableCell className="font-semibold">{x.lm_servicos?.servico||'N/A'}<div className="text-xs text-muted-foreground">{x.forma_pagamento||''}</div></TableCell><TableCell>{x.lm_clientes?.nome||x.cliente||'-'}</TableCell><TableCell>{folhasText(x.folhas_gastas)}</TableCell><TableCell>{x.status_financeiro||'PAGO'}</TableCell><TableCell className="text-right font-bold" style={{color:CYAN}}>{BRL.format(Number(x.valor)||0)}</TableCell><TableCell><div className="flex justify-center gap-1"><Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço"><Edit className="h-4 w-4"/></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita. Registros com recebimentos vinculados não poderão ser excluídos.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></TableCell></TableRow>)}</TableBody></Table></ScrollArea></CardContent></Card>
   </motion.div>
  );
 }
