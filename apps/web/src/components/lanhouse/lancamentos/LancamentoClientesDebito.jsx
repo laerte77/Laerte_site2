@@ -18,6 +18,7 @@ import{useToast}from'@/components/ui/use-toast';
 
 const C='hsl(var(--neon-lanhouse))';
 const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
+const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const hoje=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(new Date());
 const dataBR=v=>v?format(new Date(`${String(v).slice(0,10)}T00:00:00`),'dd/MM/yyyy'):'—';
 const vazio={data:hoje(),cliente:'',servico:'',valor:''};
@@ -45,13 +46,17 @@ export default function LancamentoClientesDebito(){
     supabase.from('lm_clientes').select('nome').eq('user_id',user.id).order('nome'),
     supabase.from('lm_servicos').select('servico').eq('user_id',user.id).order('servico')
    ]);
-   if(a.error)throw a.error;if(b.error)throw b.error;if(c.error)throw c.error;if(d.error)throw d.error;if(e.error)throw e.error;
-
+   if(a.error)throw a.error;
+   if(b.error)throw b.error;
+   if(c.error)throw c.error;
+   if(d.error)throw d.error;
+   if(e.error)throw e.error;
    const manuais=(a.data||[]).map(x=>({...x,origem:'debito',origem_id:x.id,nome_servico:x.servico}));
    const lancamentos=(b.data||[]).map(x=>({...x,origem:'servico',origem_id:x.id,nome_cliente:x.lm_clientes?.nome||x.cliente,nome_servico:x.lm_servicos?.servico||'Serviço'}));
    setItems([...manuais,...lancamentos]);
    setRecebimentos(c.data||[]);
-   setClientes(d.data||[]);setServicos(e.data||[]);
+   setClientes(d.data||[]);
+   setServicos(e.data||[]);
   }catch(e){
    console.error(e);
    toast({title:'Erro ao carregar',description:e.message||'Não foi possível carregar os débitos.',variant:'destructive'});
@@ -99,18 +104,24 @@ export default function LancamentoClientesDebito(){
    toast({title:'Campos obrigatórios',description:'Preencha os dados e informe um valor válido.',variant:'destructive'});return;
   }
   try{
+   if(current&&totalRecebido(current)>0&&Number(form.valor)!==Number(current.valor)){
+    toast({title:'Valor bloqueado',description:'Este débito já possui recebimentos. Não é permitido alterar seu valor.',variant:'destructive'});return;
+   }
    const payload={data:form.data,cliente:form.cliente,servico:form.servico,valor:Number(form.valor),user_id:user.id};
    const q=current
     ?supabase.from('lm_clientes_debito').update(payload).eq('id',current.id).eq('user_id',user.id)
     :supabase.from('lm_clientes_debito').insert({...payload,status:'DEVENDO'});
-   const{error}=await q;if(error)throw error;
+   const{error}=await q;
+   if(error)throw error;
    toast({title:'Sucesso',description:current?'Débito atualizado.':'Débito registrado.'});
    setFormOpen(false);setCurrent(null);await fetchData();
   }catch(e){toast({title:'Erro',description:e.message,variant:'destructive'})}
  };
 
  const abrirPagamento=item=>{
-  setCurrent(item);setPayment({data:hoje(),valor:saldo(item).toFixed(2),forma_pagamento:'PIX'});setPaymentOpen(true);
+  setCurrent(item);
+  setPayment({data:hoje(),valor:saldo(item).toFixed(2),forma_pagamento:'PIX'});
+  setPaymentOpen(true);
  };
 
  const salvarPagamento=async()=>{
@@ -147,7 +158,9 @@ export default function LancamentoClientesDebito(){
    const tabela=deleteItem.origem==='servico'?'lm_lanc_servicos':'lm_clientes_debito';
    const{error}=await supabase.from(tabela).delete().eq('id',deleteItem.id).eq('user_id',user.id);
    if(error)throw error;
-   toast({title:'Registro excluído'});setDeleteItem(null);await fetchData();
+   toast({title:'Registro excluído'});
+   setDeleteItem(null);
+   await fetchData();
   }catch(e){toast({title:'Não foi possível excluir',description:e.message,variant:'destructive'})}
  };
 
@@ -220,8 +233,17 @@ export default function LancamentoClientesDebito(){
    <DialogFooter><Button variant="outline" onClick={()=>setHistoryOpen(false)}>Fechar</Button></DialogFooter>
   </DialogContent></Dialog>
 
-  <AlertDialog open={!!deleteItem} onOpenChange={v=>{if(!v)setDeleteItem(null)}}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir registro?</AlertDialogTitle><AlertDialogDescription>Se houver recebimentos vinculados, o banco impedirá a exclusão.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={remover} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialog>
+  <AlertDialog open={!!deleteItem} onOpenChange={v=>{if(!v)setDeleteItem(null)}}>
+   <AlertDialogContent>
+    <AlertDialogHeader>
+     <AlertDialogTitle>Excluir registro?</AlertDialogTitle>
+     <AlertDialogDescription>Se houver recebimentos vinculados, o banco impedirá a exclusão.</AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+     <AlertDialogCancel>Cancelar</AlertDialogCancel>
+     <AlertDialogAction onClick={remover} className="bg-red-600">Excluir</AlertDialogAction>
+    </AlertDialogFooter>
+   </AlertDialogContent>
+  </AlertDialog>
  </motion.div>;
 }
-
-const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
