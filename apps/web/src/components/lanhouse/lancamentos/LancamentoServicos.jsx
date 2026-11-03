@@ -206,12 +206,17 @@ export default function LancamentoServicos(){
  };
 
  const remove=async id=>{
-  if(!isOnline){toast({title:'Offline',description:'Exclusão offline não permitida.',variant:'destructive'});return}
+  if(!isOnline){
+   toast({title:'Offline',description:'Exclusão offline não permitida.',variant:'destructive'});
+   return;
+  }
   try{
    const{error}=await supabase.from('lm_lanc_servicos').delete().eq('id',id).eq('user_id',user.id);
    if(error)throw error;
-   toast({title:'Removido',description:'Serviço excluído.'});await refresh();
-  }catch(e){toast({title:'Erro',description:e.message,variant:'destructive')}
+   toast({title:'Removido',description:'Serviço excluído.'});
+   await refresh();
+  }catch(e){
+   toast({title:'Erro',description:e.message,variant:'destructive'});
   }
  };
 
@@ -238,8 +243,8 @@ export default function LancamentoServicos(){
    <ModalLancamentoPadrao open={addOpen} onClose={closeDialog} title={editingId?'Editar Serviço':'Novo Serviço'} description={editingId?'Atualize os dados do serviço.':'Registre um novo serviço prestado.'} icon={Receipt} theme="cyan" footer={<><Button type="button" variant="outline" onClick={closeDialog} disabled={saving} className="h-11 rounded-xl border-border px-5">Cancelar</Button><Button type="button" onClick={save} disabled={saving} className="h-11 rounded-xl px-6 font-semibold text-white" style={{background:CYAN}}>{saving?<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Salvando...</>:editingId?'Atualizar':'Salvar'}</Button></>}>
     <form id="form-servico" onSubmit={save} noValidate className="max-h-[calc(100vh-300px)] space-y-5 overflow-y-auto overflow-x-hidden pr-1">
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))} required disabled={saving} className="h-11 rounded-xl bg-input"/></div><div className="space-y-2"><Label>Valor (R$) *</Label><Input type="text" inputMode="numeric" autoComplete="off" value={formData.valor} onChange={e=>setFormData(p=>({...p,valor:moneyInput(e.target.value)}))} required disabled={saving} placeholder="R$ 0,00" className="h-11 rounded-xl bg-input tabular-nums"/></div></div>
-     <div className="space-y-2"><Label>Tipo do Serviço *</Label><Select value={formData.servico_id} onValueChange={v=>setFormData(p=>({...p,servico_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o serviço"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{servicosOpcoes.map(s=><SelectItem key={s.id} value={s.id}>{s.servico}{s.usa_folha?' 📄':''}</SelectItem>)}</ScrollArea></SelectContent></Select>{selectedServico?.usa_folha&&<Alert className="border-cyan-500/30 bg-cyan-500/10"><AlertTriangle className="h-4 w-4"/><AlertDescription>As folhas utilizadas serão registradas junto ao serviço. A falta de estoque não impede o lançamento.</AlertDescription></Alert>}</div>
-     <div className="space-y-2"><Label>Cliente *</Label><Select value={formData.cliente_id} onValueChange={v=>setFormData(p=>({...p,cliente_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o cliente"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{clientesOpcoes.map(c=><SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</ScrollArea></Select></div>
+     <div className="space-y-2"><Label>Tipo do Serviço *</Label><Select value={formData.servico_id} onValueChange={v=>setFormData(p=>({...p,servico_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o serviço"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{servicosOpcoes.map(s=><SelectItem key={s.id} value={s.id}>{s.servico}{s.usa_folha?' 📄':''}</SelectItem>)}</ScrollArea></Select>{selectedServico?.usa_folha&&<Alert className="border-cyan-500/30 bg-cyan-500/10"><AlertTriangle className="h-4 w-4"/><AlertDescription>As folhas utilizadas serão registradas junto ao serviço. A falta de estoque não impede o lançamento.</AlertDescription></Alert>}</div>
+     <div className="space-y-2"><Label>Cliente *</Label><Select value={formData.cliente_id} onValueChange={v=>setFormData(p=>({...p,cliente_id:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o cliente"/></SelectTrigger><SelectContent><ScrollArea className="h-48">{clientesOpcoes.map(c=><SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</ScrollArea></SelectContent></Select></div>
      <div className="space-y-2"><Label>Status do pagamento *</Label><Select value={formData.status_financeiro} onValueChange={v=>setFormData(p=>({...p,status_financeiro:v,forma_pagamento:v==='DEVENDO'?'':p.forma_pagamento}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o status"/></SelectTrigger><SelectContent><SelectItem value="PAGO">Pago</SelectItem><SelectItem value="DEVENDO">Devendo</SelectItem></SelectContent></Select></div>
      {formData.status_financeiro==='PAGO'&&<div className="space-y-2"><Label>Forma de Pagamento *</Label><Select value={formData.forma_pagamento} onValueChange={v=>setFormData(p=>({...p,forma_pagamento:v}))} disabled={saving}><SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Selecione o pagamento"/></SelectTrigger><SelectContent>{['Dinheiro','PIX','Cartão de Crédito','Cartão de Débito'].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}</SelectContent></Select></div>}
      {selectedServico?.usa_folha&&<div className="space-y-2 border-t border-border pt-4"><FolhasTable folhas={folhasConsumo} setFolhas={setFolhasConsumo} tiposFolha={tiposFolha} estoqueAtual={estoqueAtual} disabled={saving}/></div>}
