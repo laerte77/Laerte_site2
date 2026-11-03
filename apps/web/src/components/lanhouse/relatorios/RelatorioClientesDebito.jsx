@@ -13,14 +13,11 @@ import{useToast}from'@/components/ui/use-toast';
 import{supabase}from'@/lib/customSupabaseClient';
 import{useAuth}from'@/contexts/SupabaseAuthContext';
 
-const CYAN='#06b6d4';
-const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase();
 const dateKey=v=>String(v||'').slice(0,10);
 const collator=new Intl.Collator('pt-BR',{sensitivity:'base'});
 const money=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:2});
 const dateBR=v=>{const d=dateKey(v);if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return'—';const[y,m,day]=d.split('-');return`${day}/${m}/${y}`};
 const todaySP=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return`${p.year}-${p.month}-${p.day}`};
-const calculateDays=value=>{const date=dateKey(value);if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return 0;const[a,b,c]=date.split('-').map(Number);const[y,m,d]=todaySP().split('-').map(Number);return Math.max(0,Math.floor((Date.UTC(y,m-1,d)-Date.UTC(a,b-1,c))/86400000))};
 const csvCell=v=>`"${String(v??'').replace(/"/g,'""')}"`;
 
 export default function RelatorioClientesDebito(){
@@ -196,11 +193,11 @@ export default function RelatorioClientesDebito(){
          <TableCell className="whitespace-nowrap text-right text-emerald-400">{money(d.recebido)}</TableCell>
          <TableCell className="whitespace-nowrap text-right font-semibold text-cyan-400">{money(d.saldo)}</TableCell>
         </TableRow>)}
-       </Table>
-      </div>
+       </TableBody>
+      </Table>
+     </div>
     </ScrollArea>
    </CardContent>
   </Card>
  </motion.div>;
 }
-
