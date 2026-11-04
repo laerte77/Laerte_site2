@@ -1,4 +1,4 @@
-import React,{useState,useMemo,useCallback}from'react';
+import React,{useState,useMemo,useCallback,useEffect}from'react';
 import{motion}from'framer-motion';
 import{Plus,Trash2,Search,Download,Edit,Loader2,AlertTriangle,PackageSearch,RotateCcw,Receipt}from'lucide-react';
 import{supabase}from'@/lib/customSupabaseClient';
@@ -54,10 +54,29 @@ export default function LancamentoServicos(){
  const{stockData,isLoading:isStockLoading,lastUpdate}=useEstoqueCalculation();
  const initial={data:todaySP(),servico_id:'',cliente_id:'',valor:'',status_financeiro:'PAGO',forma_pagamento:''};
  const[formData,setFormData]=useState(initial);
+ const[recebimentos,setRecebimentos]=useState([]);
+ const idsLancados=useMemo(()=>servicosLancados.map(x=>x.id).filter(Boolean),[servicosLancados]);
+
+ useEffect(()=>{
+  let ativo=true;
+  const carregar=async()=>{
+   if(!isOnline||!user?.id||!idsLancados.length){if(ativo)setRecebimentos([]);return;}
+   const{data,error}=await supabase.from('lm_recebimentos').select('id,lanc_servico_id,valor,data,forma_pagamento').eq('user_id',user.id).in('lanc_servico_id',idsLancados);
+   if(error){console.error('Erro ao carregar recebimentos:',error);if(ativo)setRecebimentos([]);return;}
+   if(ativo)setRecebimentos(data||[]);
+  };
+  carregar();
+  return()=>{ativo=false};
+ },[idsLancados,isOnline,user?.id]);
 
  const folhasText=useCallback(v=>!Array.isArray(v)||!v.length?'-':v.filter(x=>!x.e_rascunho&&x.tipo_folha&&x.quantidade).map(x=>`${x.tipo_folha} - ${x.quantidade} un`).join(', ')||'-',[]);
  const filtered=useMemo(()=>!searchTerm.trim()?servicosLancados:servicosLancados.filter(i=>(i.lm_servicos?.servico||'').toLowerCase().includes(searchTerm.toLowerCase())||(i.lm_clientes?.nome||i.cliente||'').toLowerCase().includes(searchTerm.toLowerCase())),[searchTerm,servicosLancados]);
- const total=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
+
+ // Indicadores financeiros do período e da busca atual.
+ const subtotal=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
+ const recebidosPorServico=useMemo(()=>recebimentos.reduce((acc,r)=>{acc[r.lanc_servico_id]=(acc[r.lanc_servico_id]||0)+Number(r.valor||0);return acc;},{}),[recebimentos]);
+ const totalRecebido=filtered.reduce((s,x)=>s+(recebidosPorServico[x.id]||0),0);
+ const totalPendente=filtered.reduce((s,x)=>s+(['DEVENDO','PARCIAL'].includes(x.status_financeiro)?Math.max(0,Number(x.valor||0)-(recebidosPorServico[x.id]||0)):0),0);
  const selectedServico=servicosOpcoes.find(s=>s.id===formData.servico_id);
  const estoqueAtual=Object.fromEntries(Object.entries(stockData).map(([k,v])=>[k,v.estoqueAtual]));
 
@@ -143,15 +162,13 @@ export default function LancamentoServicos(){
   setSaving(true);
   try{
    const servicoAtual=editingId?servicosLancados.find(x=>x.id===editingId):null;
-   let totalRecebido=0;
-
+   let totalRecebidoEdicao=0;
    if(editingId&&isOnline){
     const{data:recebidos,error:recError}=await supabase.from('lm_recebimentos').select('valor').eq('lanc_servico_id',editingId).eq('user_id',user.id);
     if(recError)throw recError;
-    totalRecebido=(recebidos||[]).reduce((s,r)=>s+Number(r.valor||0),0);
-
-    if(totalRecebido>0&&valorNumerico!==Number(servicoAtual?.valor||0))throw new Error('Este serviço já possui recebimentos. O valor original não pode ser alterado.');
-    if(totalRecebido>0&&formData.status_financeiro==='DEVENDO')throw new Error('Este serviço já possui recebimentos e não pode voltar para DEVENDO.');
+    totalRecebidoEdicao=(recebidos||[]).reduce((s,r)=>s+Number(r.valor||0),0);
+    if(totalRecebidoEdicao>0&&valorNumerico!==Number(servicoAtual?.valor||0))throw new Error('Este serviço já possui recebimentos. O valor original não pode ser alterado.');
+    if(totalRecebidoEdicao>0&&formData.status_financeiro==='DEVENDO')throw new Error('Este serviço já possui recebimentos. Continue o controle do saldo pela tela Consulta de Clientes em Débito.');
     if(servicoAtual?.status_financeiro==='PAGO'&&formData.status_financeiro==='DEVENDO')throw new Error('Um serviço já marcado como PAGO não pode voltar para DEVENDO.');
    }
 
@@ -190,76 +207,46 @@ export default function LancamentoServicos(){
     checkPending();
    }else{
     if(!isOnline)throw new Error('Edição offline não permitida.');
-
     if(editingId){
      const{error}=await supabase.from('lm_lanc_servicos').update(payload).eq('id',editingId).eq('user_id',user.id);
      if(error)throw error;
-
      const mudouParaPago=servicoAtual?.status_financeiro==='DEVENDO'&&formData.status_financeiro==='PAGO';
-
-     if(mudouParaPago&&totalRecebido===0){
-      const{error:recebimentoError}=await supabase.from('lm_recebimentos').insert({
-       user_id:user.id,
-       lanc_servico_id:editingId,
-       data:formData.data,
-       valor:valorNumerico,
-       forma_pagamento:formData.forma_pagamento
-      });
-
-      if(recebimentoError){
+     if(mudouParaPago&&totalRecebidoEdicao===0){
+      const{error:recError}=await supabase.from('lm_recebimentos').insert({user_id:user.id,lanc_servico_id:editingId,data:formData.data,valor:valorNumerico,forma_pagamento:formData.forma_pagamento});
+      if(recError){
        await supabase.from('lm_lanc_servicos').update({status_financeiro:'DEVENDO',forma_pagamento:null}).eq('id',editingId).eq('user_id',user.id);
-       throw recebimentoError;
+       throw recError;
       }
      }
     }else{
-     const{data:novo,error}=await supabase.from('lm_lanc_servicos').insert(payload).select('id').single();
+     const{data:novoServico,error}=await supabase.from('lm_lanc_servicos').insert(payload).select('id').single();
      if(error)throw error;
-
      if(formData.status_financeiro==='PAGO'){
-      const{error:recebimentoError}=await supabase.from('lm_recebimentos').insert({
-       user_id:user.id,
-       lanc_servico_id:novo.id,
-       data:formData.data,
-       valor:valorNumerico,
-       forma_pagamento:formData.forma_pagamento
-      });
-
-      if(recebimentoError){
-       await supabase.from('lm_lanc_servicos').delete().eq('id',novo.id).eq('user_id',user.id);
-       throw recebimentoError;
+      const{error:recError}=await supabase.from('lm_recebimentos').insert({user_id:user.id,lanc_servico_id:novoServico.id,data:formData.data,valor:valorNumerico,forma_pagamento:formData.forma_pagamento});
+      if(recError){
+       await supabase.from('lm_lanc_servicos').delete().eq('id',novoServico.id).eq('user_id',user.id);
+       throw recError;
       }
      }
     }
-
-    toast(custosPendentes.length
-     ?{title:'Serviço registrado com custo pendente',description:`Confira o cadastro ou as compras destas folhas: ${custosPendentes.join(', ')}.`,variant:'destructive'}
-     :{title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
-
+    toast(custosPendentes.length?{title:'Serviço registrado com custo pendente',description:`Confira o cadastro ou as compras destas folhas: ${custosPendentes.join(', ')}.`,variant:'destructive'}:{title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
     await refresh();
    }
-
    resetAfterSave();setAddOpen(false);
   }catch(e){
    console.error('Falha ao salvar lançamento de serviço:',e);
    toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar o serviço.',variant:'destructive'});
-  }finally{
-   setSaving(false);
-  }
+  }finally{setSaving(false)}
  };
 
  const remove=async id=>{
-  if(!isOnline){
-   toast({title:'Offline',description:'Exclusão offline não permitida.',variant:'destructive'});
-   return;
-  }
+  if(!isOnline){toast({title:'Offline',description:'Exclusão offline não permitida.',variant:'destructive'});return}
   try{
    const{error}=await supabase.from('lm_lanc_servicos').delete().eq('id',id).eq('user_id',user.id);
    if(error)throw error;
    toast({title:'Removido',description:'Serviço excluído.'});
    await refresh();
-  }catch(e){
-   toast({title:'Erro',description:e.message,variant:'destructive'});
-  }
+  }catch(e){toast({title:'Erro',description:e.message,variant:'destructive'})}
  };
 
  const exportar=()=>{
@@ -279,8 +266,8 @@ export default function LancamentoServicos(){
     <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>setStockOpen(true)}><PackageSearch className="mr-2 h-4 w-4"/>Estoque</Button><Button variant="outline" onClick={()=>setExportOpen(true)}><Download className="mr-2 h-4 w-4"/>Exportar</Button><Button onClick={()=>openDialog()} className="text-white" style={{background:CYAN}}><Plus className="mr-2 h-4 w-4"/>Novo Serviço</Button></div>
    </div>
 
-   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-    {[{l:'Registros',v:filtered.length},{l:'Total',v:BRL.format(total)},{l:'Com Folhas',v:filtered.filter(x=>Array.isArray(x.folhas_gastas)&&x.folhas_gastas.some(f=>!f.e_rascunho)).length},{l:'Clientes',v:new Set(filtered.map(x=>x.cliente_id||x.cliente)).size}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{x.v}</p></CardContent></Card>)}
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+    {[{l:'Registros',v:filtered.length},{l:'Subtotal',v:BRL.format(subtotal)},{l:'Total recebido',v:BRL.format(totalRecebido)},{l:'Total pendente',v:BRL.format(totalPendente)},{l:'Com Folhas',v:filtered.filter(x=>Array.isArray(x.folhas_gastas)&&x.folhas_gastas.some(f=>!f.e_rascunho)).length},{l:'Clientes',v:new Set(filtered.map(x=>x.cliente_id||x.cliente)).size}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{x.v}</p></CardContent></Card>)}
    </div>
 
    <Card className="border-border bg-card">
@@ -351,18 +338,16 @@ export default function LancamentoServicos(){
          <TableCell>{folhasText(x.folhas_gastas)}</TableCell>
          <TableCell>{x.status_financeiro||'PAGO'}</TableCell>
          <TableCell className="text-right font-bold" style={{color:CYAN}}>{BRL.format(Number(x.valor)||0)}</TableCell>
-         <TableCell>
-          <div className="flex justify-center gap-1">
-           <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço"><Edit className="h-4 w-4"/></Button>
-           <AlertDialog>
-            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
-            <AlertDialogContent>
-             <AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita. Registros com recebimentos vinculados não poderão ser excluídos.</AlertDialogDescription></AlertDialogHeader>
-             <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter>
-            </AlertDialogContent>
-           </AlertDialog>
-          </div>
-         </TableCell>
+         <TableCell><div className="flex justify-center gap-1">
+          <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço"><Edit className="h-4 w-4"/></Button>
+          <AlertDialog>
+           <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
+           <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita. Registros com recebimentos vinculados não poderão ser excluídos.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter>
+           </AlertDialogContent>
+          </AlertDialog>
+         </div></TableCell>
         </TableRow>)}
        </TableBody>
       </Table>
