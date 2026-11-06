@@ -2,16 +2,24 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 
-const getLocalDate = value => {
+const dateOnly = value => {
   if (!value) return null;
-  const [year, month, day] = String(value).slice(0, 10).split('-').map(Number);
-  return new Date(year, month - 1, day);
+  const [y, m, d] = String(value).slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d);
 };
 
-const getDaysDifference = (dueDate, today) => {
-  const due = getLocalDate(dueDate);
-  if (!due) return null;
-  return Math.round((due - today) / 86400000);
+const dateKey = value => String(value || '').slice(0, 10);
+
+const normalize = value =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+const daysBetween = (due, today) => {
+  const date = dateOnly(due);
+  return date ? Math.round((date - today) / 86400000) : null;
 };
 
 export function useLmNotifications() {
@@ -28,66 +36,94 @@ export function useLmNotifications() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from('lm_despesas_previstas')
-        .select('id,descricao,data_vencimento,valor,status,forma_pagamento,parcelas')
-        .eq('user_id', user.id)
-        .order('data_vencimento', { ascending: true });
+      const [accountsRes, launchesRes] = await Promise.all([
+        supabase
+          .from('lm_despesas_previstas')
+          .select('*')
+          .eq('user_id', user.id),
 
-      if (error) throw error;
+        supabase
+          .from('lm_lanc_despesas')
+          .select('data,valor,lm_despesas(despesa)')
+          .eq('user_id', user.id)
+      ]);
+
+      if (accountsRes.error) throw accountsRes.error;
+      if (launchesRes.error) throw launchesRes.error;
+
+      const accounts = accountsRes.data || [];
+      const launches = launchesRes.data || [];
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       const alerts = [];
 
-      (data || []).forEach(account => {
-        const isInstallment =
+      accounts.forEach(account => {
+        const installments =
           account.forma_pagamento === 'CARTÃO DE CRÉDITO' &&
           Number(account.parcelas) > 1;
 
-        const installments = [];
+        const items = [];
 
-        if (isInstallment) {
+        if (installments) {
           const statuses =
             account.status && typeof account.status === 'object'
               ? account.status
               : {};
 
-          const installmentValue =
-            Number(account.valor || 0) / Number(account.parcelas);
-
           for (let i = 0; i < Number(account.parcelas); i++) {
-            const dueDate = getLocalDate(account.data_vencimento);
-            dueDate.setMonth(dueDate.getMonth() + i);
+            const due = dateOnly(account.data_vencimento);
+            if (!due) continue;
 
-            const year = dueDate.getFullYear();
-            const month = String(dueDate.getMonth() + 1).padStart(2, '0');
-            const day = String(dueDate.getDate()).padStart(2, '0');
+            due.setMonth(due.getMonth() + i);
 
-            installments.push({
+            const y = due.getFullYear();
+            const m = String(due.getMonth() + 1).padStart(2, '0');
+            const d = String(due.getDate()).padStart(2, '0');
+
+            items.push({
               id: `${account.id}-${i + 1}`,
-              description: `${account.descricao || 'Conta'} (${i + 1}/${account.parcelas})`,
-              dueDate: `${year}-${month}-${day}`,
-              value: installmentValue,
-              status: statuses[i + 1] || 'PENDENTE'
+              description: `${account.descricao} (${i + 1}/${account.parcelas})`,
+              dueDate: `${y}-${m}-${d}`,
+              value: Number(account.valor || 0) / Number(account.parcelas),
+              status: statuses[i + 1] || 'PENDENTE',
+              checkReal: false
             });
           }
         } else {
-          installments.push({
+          items.push({
             id: String(account.id),
             description: account.descricao || 'Conta prevista',
             dueDate: account.data_vencimento,
             value: Number(account.valor || 0),
-            status: account.status === 'PAGO' ? 'PAGO' : 'PENDENTE'
+            status: account.status,
+            checkReal: true
           });
         }
 
-        installments.forEach(item => {
-          // Não gerar alertas para parcelas já pagas.
-          if (item.status === 'PAGO') return;
+        items.forEach(item => {
+          const savedStatus = normalize(item.status);
 
-          const days = getDaysDifference(item.dueDate, today);
+          // Status explicitamente pago.
+          if (savedStatus === 'pago') return;
+
+          // Para contas comuns, replica a regra de Contas do Mês:
+          // lançamento real com valor igual ou superior ao previsto = pago.
+          if (item.checkReal) {
+            const description = normalize(account.descricao);
+
+            const real = launches
+              .filter(launch =>
+                normalize(launch.lm_despesas?.despesa) === description &&
+                dateKey(launch.data).slice(0, 7) === item.dueDate?.slice(0, 7)
+              )
+              .reduce((sum, launch) => sum + (Number(launch.valor) || 0), 0);
+
+            if (Number(item.value) > 0 && real >= Number(item.value)) return;
+          }
+
+          const days = daysBetween(item.dueDate, today);
           if (days === null) return;
 
           let title = '';
@@ -104,18 +140,18 @@ export function useLmNotifications() {
             message = `Vence em ${days} dia(s).`;
           }
 
-          if (!title) return;
-
-          alerts.push({
-            id: `conta-${item.id}`,
-            type: 'conta',
-            title,
-            description: item.description,
-            message,
-            value: item.value,
-            dueDate: item.dueDate,
-            route: '/lm-impressoes/dashboard/relatorios/despesas-previstas'
-          });
+          if (title) {
+            alerts.push({
+              id: `conta-${item.id}`,
+              type: 'conta',
+              title,
+              description: item.description,
+              message,
+              value: item.value,
+              dueDate: item.dueDate,
+              route: '/lm-impressoes/dashboard/relatorios/despesas-previstas'
+            });
+          }
         });
       });
 
@@ -144,11 +180,19 @@ export function useLmNotifications() {
         },
         refresh
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lm_lanc_despesas',
+          filter: `user_id=eq.${user.id}`
+        },
+        refresh
+      )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   }, [user?.id, refresh]);
 
   return {
