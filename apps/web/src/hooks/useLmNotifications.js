@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { useEstoqueCalculation } from '@/hooks/useEstoqueCalculation';
 
 const dateOnly = value => {
   if (!value) return null;
@@ -15,15 +16,17 @@ const normalize = value =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
-    .toLowerCase();
+    .toUpperCase();
 
-const daysBetween = (due, today) => {
-  const date = dateOnly(due);
-  return date ? Math.round((date - today) / 86400000) : null;
+const daysBetween = (date, today) => {
+  const parsed = dateOnly(date);
+  return parsed ? Math.round((parsed - today) / 86400000) : null;
 };
 
 export function useLmNotifications() {
   const { user } = useAuth();
+  const { stockData, loading: stockLoading } = useEstoqueCalculation();
+
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -36,7 +39,14 @@ export function useLmNotifications() {
     setLoading(true);
 
     try {
-      const [accountsRes, launchesRes] = await Promise.all([
+      const [
+        accountsRes,
+        launchesRes,
+        manualDebtsRes,
+        serviceDebtsRes,
+        receiptsRes,
+        ordersRes
+      ] = await Promise.all([
         supabase
           .from('lm_despesas_previstas')
           .select('*')
@@ -45,28 +55,62 @@ export function useLmNotifications() {
         supabase
           .from('lm_lanc_despesas')
           .select('data,valor,lm_despesas(despesa)')
+          .eq('user_id', user.id),
+
+        supabase
+          .from('lm_clientes_debito')
+          .select('id,cliente,servico,data,valor')
+          .eq('user_id', user.id),
+
+        supabase
+          .from('lm_lanc_servicos')
+          .select('id,data,cliente,cliente_id,valor,status_financeiro,lm_clientes(nome),lm_servicos(servico)')
+          .eq('user_id', user.id)
+          .in('status_financeiro', ['DEVENDO', 'PARCIAL']),
+
+        supabase
+          .from('lm_recebimentos')
+          .select('id,debito_id,lanc_servico_id,valor,data')
+          .eq('user_id', user.id),
+
+        supabase
+          .from('lm_pedidos')
+          .select('id,status,data_entrega,sem_data_prevista,lm_clientes(nome)')
           .eq('user_id', user.id)
       ]);
 
-      if (accountsRes.error) throw accountsRes.error;
-      if (launchesRes.error) throw launchesRes.error;
+      for (const result of [
+        accountsRes,
+        launchesRes,
+        manualDebtsRes,
+        serviceDebtsRes,
+        receiptsRes,
+        ordersRes
+      ]) {
+        if (result.error) throw result.error;
+      }
 
       const accounts = accountsRes.data || [];
       const launches = launchesRes.data || [];
+      const manualDebts = manualDebtsRes.data || [];
+      const serviceDebts = serviceDebtsRes.data || [];
+      const receipts = receiptsRes.data || [];
+      const orders = ordersRes.data || [];
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       const alerts = [];
 
+      // 1. CONTAS PREVISTAS
       accounts.forEach(account => {
-        const installments =
+        const isInstallment =
           account.forma_pagamento === 'CARTÃO DE CRÉDITO' &&
           Number(account.parcelas) > 1;
 
         const items = [];
 
-        if (installments) {
+        if (isInstallment) {
           const statuses =
             account.status && typeof account.status === 'object'
               ? account.status
@@ -103,13 +147,9 @@ export function useLmNotifications() {
         }
 
         items.forEach(item => {
-          const savedStatus = normalize(item.status);
+          if (normalize(item.status) === 'PAGO') return;
 
-          // Status explicitamente pago.
-          if (savedStatus === 'pago') return;
-
-          // Para contas comuns, replica a regra de Contas do Mês:
-          // lançamento real com valor igual ou superior ao previsto = pago.
+          // Reproduz a regra de pagamento real usada em Contas do Mês.
           if (item.checkReal) {
             const description = normalize(account.descricao);
 
@@ -120,7 +160,7 @@ export function useLmNotifications() {
               )
               .reduce((sum, launch) => sum + (Number(launch.valor) || 0), 0);
 
-            if (Number(item.value) > 0 && real >= Number(item.value)) return;
+            if (item.value > 0 && real >= item.value) return;
           }
 
           const days = daysBetween(item.dueDate, today);
@@ -149,11 +189,129 @@ export function useLmNotifications() {
               message,
               value: item.value,
               dueDate: item.dueDate,
+              priority: days <= 0 ? 'alta' : 'media',
               route: '/lm-impressoes/dashboard/relatorios/despesas-previstas'
             });
           }
         });
       });
+
+      // 2. DÉBITOS DE CLIENTES
+      const allDebts = [
+        ...manualDebts.map(item => ({
+          ...item,
+          origin: 'manual',
+          clientName: item.cliente,
+          serviceName: item.servico,
+          originId: item.id
+        })),
+        ...serviceDebts.map(item => ({
+          ...item,
+          origin: 'service',
+          clientName: item.lm_clientes?.nome || item.cliente || 'Cliente',
+          serviceName: item.lm_servicos?.servico || 'Serviço',
+          originId: item.id
+        }))
+      ];
+
+      allDebts.forEach(debt => {
+        const received = receipts
+          .filter(receipt =>
+            debt.origin === 'service'
+              ? receipt.lanc_servico_id === debt.originId
+              : receipt.debito_id === debt.originId
+          )
+          .reduce((sum, receipt) => sum + Number(receipt.valor || 0), 0);
+
+        const total = Number(debt.valor || 0);
+        const balance = Math.max(0, total - received);
+
+        if (balance <= 0.009) return;
+
+        const days = daysBetween(debt.data, today);
+
+        alerts.push({
+          id: `debito-${debt.origin}-${debt.originId}`,
+          type: 'debito',
+          title: received > 0 ? 'Cliente com pagamento parcial' : 'Cliente com débito',
+          description: debt.clientName,
+          message: `${debt.serviceName} • Saldo pendente${days !== null && days > 0 ? ` • ${days} dia(s)` : ''}`,
+          value: balance,
+          priority: 'media',
+          route: '/lm-impressoes/dashboard/lancamentos/clientes-debito'
+        });
+      });
+
+      // 3. PEDIDOS
+      orders.forEach(order => {
+        const status = normalize(order.status);
+
+        if (status === 'ENTREGUE' || order.sem_data_prevista) return;
+
+        const days = daysBetween(order.data_entrega, today);
+        if (days === null) return;
+
+        let title = '';
+        let message = '';
+
+        if (status === 'ATRASADO' || days < 0) {
+          title = 'Pedido atrasado';
+          message = days < 0
+            ? `Entrega vencida há ${Math.abs(days)} dia(s).`
+            : 'Pedido marcado como atrasado.';
+        } else if (days === 0) {
+          title = 'Pedido com entrega hoje';
+          message = 'A entrega está prevista para hoje.';
+        } else if (days <= 3) {
+          title = 'Pedido próximo da entrega';
+          message = `Entrega prevista em ${days} dia(s).`;
+        }
+
+        if (title) {
+          alerts.push({
+            id: `pedido-${order.id}`,
+            type: 'pedido',
+            title,
+            description: order.lm_clientes?.nome || `Pedido ${String(order.id).slice(0, 8)}`,
+            message,
+            priority: days <= 0 ? 'alta' : 'media',
+            route: '/lm-impressoes/dashboard/pedidos/consulta'
+          });
+        }
+      });
+
+      // 4. ESTOQUE
+      Object.values(stockData || {}).forEach(item => {
+        const minimum = Number(item.estoque_minimo);
+        const current = Number(item.estoqueAtual);
+
+        if (
+          item.estoque_minimo === null ||
+          item.estoque_minimo === undefined ||
+          !Number.isFinite(minimum) ||
+          !Number.isFinite(current) ||
+          current > minimum
+        ) return;
+
+        const zero = current <= 0;
+
+        alerts.push({
+          id: `estoque-${item.insumo_id || item.nomeInsumo}`,
+          type: 'estoque',
+          title: zero ? 'Estoque zerado' : 'Estoque abaixo do mínimo',
+          description: item.nomeInsumo,
+          message: `Atual: ${current} ${item.unidade || ''} • Mínimo: ${minimum}`,
+          value: current,
+          priority: zero ? 'alta' : 'media',
+          route: '/lm-impressoes/dashboard/estoques/controle'
+        });
+      });
+
+      const priorityOrder = { alta: 0, media: 1, baixa: 2 };
+
+      alerts.sort((a, b) =>
+        (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2)
+      );
 
       setNotifications(alerts);
     } catch (error) {
@@ -161,35 +319,58 @@ export function useLmNotifications() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, stockData]);
 
   useEffect(() => {
-    refresh();
+    if (!user?.id) {
+      setNotifications([]);
+      return;
+    }
 
+    if (!stockLoading) refresh();
+  }, [user?.id, stockLoading, refresh]);
+
+  useEffect(() => {
     if (!user?.id) return;
 
     const channel = supabase
       .channel(`lm-notifications-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'lm_despesas_previstas',
-          filter: `user_id=eq.${user.id}`
-        },
-        refresh
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'lm_lanc_despesas',
-          filter: `user_id=eq.${user.id}`
-        },
-        refresh
-      )
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'lm_despesas_previstas',
+        filter: `user_id=eq.${user.id}`
+      }, refresh)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'lm_lanc_despesas',
+        filter: `user_id=eq.${user.id}`
+      }, refresh)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'lm_clientes_debito',
+        filter: `user_id=eq.${user.id}`
+      }, refresh)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'lm_lanc_servicos',
+        filter: `user_id=eq.${user.id}`
+      }, refresh)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'lm_recebimentos',
+        filter: `user_id=eq.${user.id}`
+      }, refresh)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'lm_pedidos',
+        filter: `user_id=eq.${user.id}`
+      }, refresh)
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -197,9 +378,8 @@ export function useLmNotifications() {
 
   return {
     notifications,
-    loading,
+    loading: loading || stockLoading,
     count: notifications.length,
     refresh
   };
 }
-
