@@ -251,7 +251,10 @@ export default function LancamentoServicos(){
  };
 
  const exportar=()=>{
-  if(!filtered.length){toast({title:'Aviso',description:'Nenhum dado para exportar.',variant:'destructive');return}
+  if(!filtered.length){
+   toast({title:'Aviso',description:'Nenhum dado para exportar.',variant:'destructive'});
+   return;
+  }
   const data=filtered.map(i=>({DATA:dateBR(i.data),SERVIÇO:i.lm_servicos?.servico||'N/A',CLIENTE:i.lm_clientes?.nome||i.cliente||'-','FOLHAS GASTAS':folhasText(i.folhas_gastas),STATUS:i.status_financeiro||'PAGO',PAGAMENTO:i.forma_pagamento||'-',VALOR:Number(i.valor||0)}));
   const ws=XLSX.utils.json_to_sheet(data),wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Serviços');
@@ -306,39 +309,26 @@ export default function LancamentoServicos(){
         </TableRow>
        </TableHeader>
        <TableBody>
-        {loading ? (
-         <TableRow><TableCell colSpan={7} className="py-12 text-center">Carregando...</TableCell></TableRow>
-        ) : !filtered.length ? (
-         <TableRow><TableCell colSpan={7} className="py-12 text-center text-muted-foreground">Nenhum serviço encontrado.</TableCell></TableRow>
-        ) : filtered.map(x => {
-         const materiais = folhasText(x.folhas_gastas);
-         return (
+        {loading?<TableRow><TableCell colSpan={7} className="py-12 text-center">Carregando...</TableCell></TableRow>:!filtered.length?<TableRow><TableCell colSpan={7} className="py-12 text-center text-muted-foreground">Nenhum serviço encontrado.</TableCell></TableRow>:filtered.map(x=>{
+         const materiais=folhasText(x.folhas_gastas);
+         return(
           <TableRow key={x.id} className="h-14 hover:bg-muted/40">
            <TableCell className="overflow-hidden whitespace-nowrap">{dateBR(x.data)}</TableCell>
-           <TableCell className="overflow-hidden">
-            <div className="truncate font-semibold" title={x.lm_servicos?.servico || 'N/A'}>{x.lm_servicos?.servico || 'N/A'}</div>
-            <div className="truncate text-xs text-muted-foreground" title={x.forma_pagamento || ''}>{x.forma_pagamento || ''}</div>
-           </TableCell>
-           <TableCell className="overflow-hidden">
-            <div className="truncate" title={x.lm_clientes?.nome || x.cliente || '-'}>{x.lm_clientes?.nome || x.cliente || '-'}</div>
-           </TableCell>
-           <TableCell className="overflow-hidden">
-            <div className="w-full min-w-0 truncate whitespace-nowrap" title={materiais}>{materiais}</div>
-           </TableCell>
-           <TableCell className="overflow-hidden whitespace-nowrap">{x.status_financeiro || 'PAGO'}</TableCell>
+           <TableCell className="overflow-hidden"><div className="truncate font-semibold" title={x.lm_servicos?.servico||'N/A'}>{x.lm_servicos?.servico||'N/A'}</div><div className="truncate text-xs text-muted-foreground" title={x.forma_pagamento||''}>{x.forma_pagamento||''}</div></TableCell>
+           <TableCell className="overflow-hidden"><div className="truncate" title={x.lm_clientes?.nome||x.cliente||'-'}>{x.lm_clientes?.nome||x.cliente||'-'}</div></TableCell>
+           <TableCell className="overflow-hidden"><div className="w-full min-w-0 truncate whitespace-nowrap" title={materiais}>{materiais}</div></TableCell>
+           <TableCell className="overflow-hidden whitespace-nowrap">{x.status_financeiro||'PAGO'}</TableCell>
            <TableCell className="overflow-hidden whitespace-nowrap text-right font-bold" style={{color:CYAN}}>{BRL.format(Number(x.valor)||0)}</TableCell>
-           <TableCell className="whitespace-nowrap">
-            <div className="flex items-center justify-center gap-1">
-             <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço" className="h-8 w-8 shrink-0"><Edit className="h-4 w-4"/></Button>
-             <AlertDialog>
-              <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
-              <AlertDialogContent>
-               <AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita. Registros com recebimentos vinculados não poderão ser excluídos.</AlertDialogDescription></AlertDialogHeader>
-               <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter>
-              </AlertDialogContent>
-             </AlertDialog>
-            </div>
-           </TableCell>
+           <TableCell className="whitespace-nowrap"><div className="flex items-center justify-center gap-1">
+            <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço" className="h-8 w-8 shrink-0"><Edit className="h-4 w-4"/></Button>
+            <AlertDialog>
+             <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
+             <AlertDialogContent>
+              <AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita. Registros com recebimentos vinculados não poderão ser excluídos.</AlertDialogDescription></AlertDialogHeader>
+              <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter>
+             </AlertDialogContent>
+            </AlertDialog>
+           </div></TableCell>
           </TableRow>
          );
         })}
