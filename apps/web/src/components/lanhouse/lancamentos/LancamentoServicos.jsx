@@ -72,7 +72,6 @@ export default function LancamentoServicos(){
  const folhasText=useCallback(v=>!Array.isArray(v)||!v.length?'-':v.filter(x=>!x.e_rascunho&&x.tipo_folha&&x.quantidade).map(x=>`${x.tipo_folha} - ${x.quantidade} un`).join(', ')||'-',[]);
  const filtered=useMemo(()=>!searchTerm.trim()?servicosLancados:servicosLancados.filter(i=>(i.lm_servicos?.servico||'').toLowerCase().includes(searchTerm.toLowerCase())||(i.lm_clientes?.nome||i.cliente||'').toLowerCase().includes(searchTerm.toLowerCase())),[searchTerm,servicosLancados]);
 
- // Indicadores financeiros do período e da busca atual.
  const subtotal=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
  const recebidosPorServico=useMemo(()=>recebimentos.reduce((acc,r)=>{acc[r.lanc_servico_id]=(acc[r.lanc_servico_id]||0)+Number(r.valor||0);return acc;},{}),[recebimentos]);
  const totalRecebido=filtered.reduce((s,x)=>s+(recebidosPorServico[x.id]||0),0);
@@ -113,39 +112,66 @@ export default function LancamentoServicos(){
   return{ok:true};
  };
 
+ // Resolve custos preservando valores válidos e reconsultando compras quando o custo antigo está incompleto.
  const prepararCustosFolhas=async(lista,originais=[],emEdicao=false,dataServico=todaySP())=>{
   const filasOriginais=new Map(),pendentes=new Set(),tiposCache=new Map();
+
   if(emEdicao)(originais||[]).forEach(f=>{
    if(!f?.tipo_folha||f.e_rascunho||Number(f.quantidade)<=0)return;
    const k=normalizar(f.tipo_folha);
    if(!filasOriginais.has(k))filasOriginais.set(k,[]);
    filasOriginais.get(k).push(f);
   });
+
   const tiposRes=await supabase.from('lm_tipos_folha').select('tipo_folha,preco,is_special,insumo_id').eq('user_id',user.id);
-  (tiposRes.data||[]).forEach(t=>tiposCache.set(normalizar(t.tipo_folha),t));
   if(tiposRes.error)console.error('Erro ao consultar tipos de folha:',tiposRes.error);
+  (tiposRes.data||[]).forEach(t=>tiposCache.set(normalizar(t.tipo_folha),t));
+
   const resolverCusto=async nome=>{
-   try{return await resolverCustoUnitarioMaterial({supabase,userId:user.id,tipoFolha:nome,dataReferencia:dataServico,tipoCadastro:tiposCache.get(normalizar(nome))});}
-   catch(e){console.error(`Erro ao buscar custo de ${nome}:`,e);return{ok:false,unitario:0,origem:'pendente',estimado:false,pendente:true,dataCompra:null};}
+   try{
+    return await resolverCustoUnitarioMaterial({
+     supabase,
+     userId:user.id,
+     tipoFolha:nome,
+     dataReferencia:dataServico,
+     tipoCadastro:tiposCache.get(normalizar(nome))
+    });
+   }catch(e){
+    console.error(`Erro ao buscar custo de ${nome}:`,e);
+    return{ok:false,unitario:0,origem:'pendente',estimado:false,pendente:true,dataCompra:null};
+   }
   };
+
   const folhas=await Promise.all((lista||[]).map(async f=>{
    if(f.e_rascunho||!f.tipo_folha||Number(f.quantidade)<=0)return f;
+
    const k=normalizar(f.tipo_folha),fila=filasOriginais.get(k),original=fila?.shift();
-   if(original?.custo_automatico===true&&Number.isFinite(Number(original.custo_unitario))){
-    const unitario=Number(original.custo_unitario);
+   const valorOriginal=original?.custo_unitario;
+   const temCustoOriginal=valorOriginal!==null&&valorOriginal!==undefined&&String(valorOriginal).trim()!==''&&Number.isFinite(Number(valorOriginal))&&Number(valorOriginal)>=0;
+
+   // Mantém custos automáticos já confirmados.
+   if(original?.custo_automatico===true&&temCustoOriginal&&original.custo_pendente!==true){
+    const unitario=Number(valorOriginal);
     return{...f,custo_automatico:true,custo_pendente:false,custo_unitario:unitario,custo_total:custoTotal(f.quantidade,unitario),custo_origem:original.custo_origem||'historico',custo_estimado:original.custo_estimado===true,custo_data_compra:original.custo_data_compra||null};
    }
-   if(original&&!original.custo_pendente){
-    pendentes.add(f.tipo_folha);
-    return{...f,custo_automatico:false,custo_pendente:true,custo_origem:'pendente',custo_estimado:false};
+
+   // Mantém custos manuais válidos.
+   if(original&&original.custo_automatico!==true&&original.custo_pendente!==true&&original.custo_origem!=='pendente'&&temCustoOriginal){
+    const unitario=Number(valorOriginal);
+    return{...f,custo_automatico:false,custo_pendente:false,custo_unitario:unitario,custo_total:custoTotal(f.quantidade,unitario),custo_origem:original.custo_origem||'manual',custo_estimado:original.custo_estimado===true,custo_data_compra:original.custo_data_compra||null};
    }
+
+   // Se o custo antigo estiver ausente ou incompleto, procura novamente a compra.
    const custo=await resolverCusto(f.tipo_folha);
+
    if(!custo.ok){
     pendentes.add(f.tipo_folha);
     return{...f,custo_automatico:false,custo_pendente:true,custo_origem:'pendente',custo_estimado:false};
    }
+
    return{...f,custo_automatico:true,custo_pendente:false,custo_unitario:custo.unitario,custo_total:custoTotal(f.quantidade,custo.unitario),custo_origem:custo.origem,custo_estimado:custo.estimado,custo_data_compra:custo.dataCompra||null};
   }));
+
   return{folhas,semCusto:[...pendentes]};
  };
 
@@ -163,6 +189,7 @@ export default function LancamentoServicos(){
   try{
    const servicoAtual=editingId?servicosLancados.find(x=>x.id===editingId):null;
    let totalRecebidoEdicao=0;
+
    if(editingId&&isOnline){
     const{data:recebidos,error:recError}=await supabase.from('lm_recebimentos').select('valor').eq('lanc_servico_id',editingId).eq('user_id',user.id);
     if(recError)throw recError;
@@ -179,11 +206,12 @@ export default function LancamentoServicos(){
    if(usaFolhas&&folhasConsumo.length){
     if(isOnline){
      const resultado=await prepararCustosFolhas(folhasConsumo,originalFolhas,!!editingId,formData.data);
-     folhasParaSalvar=resultado.folhas;custosPendentes=resultado.semCusto;
+     folhasParaSalvar=resultado.folhas;
+     custosPendentes=resultado.semCusto;
     }else{
      folhasParaSalvar=folhasConsumo.map(f=>{
       if(f.e_rascunho||!f.tipo_folha||Number(f.quantidade)<=0)return f;
-      if(f.custo_automatico===true&&Number.isFinite(Number(f.custo_unitario)))return f;
+      if(f.custo_automatico===true&&f.custo_unitario!==null&&f.custo_unitario!==undefined&&String(f.custo_unitario).trim()!==''&&Number.isFinite(Number(f.custo_unitario)))return f;
       custosPendentes.push(f.tipo_folha);
       return{...f,custo_automatico:false,custo_pendente:true,custo_origem:'pendente',custo_estimado:false};
      });
@@ -232,6 +260,7 @@ export default function LancamentoServicos(){
     toast(custosPendentes.length?{title:'Serviço registrado com custo pendente',description:`Confira o cadastro ou as compras destas folhas: ${custosPendentes.join(', ')}.`,variant:'destructive'}:{title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
     await refresh();
    }
+
    resetAfterSave();setAddOpen(false);
   }catch(e){
    console.error('Falha ao salvar lançamento de serviço:',e);
