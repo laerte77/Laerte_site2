@@ -1,4 +1,4 @@
-import React,{useState,useMemo,useCallback,useEffect}from'react';
+import React,{useState,useMemo,useCallback}from'react';
 import{motion}from'framer-motion';
 import{Plus,Trash2,Search,Download,Edit,Loader2,AlertTriangle,PackageSearch,RotateCcw,Receipt}from'lucide-react';
 import{supabase}from'@/lib/customSupabaseClient';
@@ -54,28 +54,10 @@ export default function LancamentoServicos(){
  const{stockData,isLoading:isStockLoading,lastUpdate}=useEstoqueCalculation();
  const initial={data:todaySP(),servico_id:'',cliente_id:'',valor:'',status_financeiro:'PAGO',forma_pagamento:''};
  const[formData,setFormData]=useState(initial);
- const[recebimentos,setRecebimentos]=useState([]);
- const idsLancados=useMemo(()=>servicosLancados.map(x=>x.id).filter(Boolean),[servicosLancados]);
-
- useEffect(()=>{
-  let ativo=true;
-  const carregar=async()=>{
-   if(!isOnline||!user?.id||!idsLancados.length){if(ativo)setRecebimentos([]);return;}
-   const{data,error}=await supabase.from('lm_recebimentos').select('id,lanc_servico_id,valor,data,forma_pagamento').eq('user_id',user.id).in('lanc_servico_id',idsLancados);
-   if(error){console.error('Erro ao carregar recebimentos:',error);if(ativo)setRecebimentos([]);return;}
-   if(ativo)setRecebimentos(data||[]);
-  };
-  carregar();
-  return()=>{ativo=false};
- },[idsLancados,isOnline,user?.id]);
 
  const folhasText=useCallback(v=>!Array.isArray(v)||!v.length?'-':v.filter(x=>!x.e_rascunho&&x.tipo_folha&&x.quantidade).map(x=>`${x.tipo_folha} - ${x.quantidade} un`).join(', ')||'-',[]);
  const filtered=useMemo(()=>!searchTerm.trim()?servicosLancados:servicosLancados.filter(i=>(i.lm_servicos?.servico||'').toLowerCase().includes(searchTerm.toLowerCase())||(i.lm_clientes?.nome||i.cliente||'').toLowerCase().includes(searchTerm.toLowerCase())),[searchTerm,servicosLancados]);
-
- const subtotal=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
- const recebidosPorServico=useMemo(()=>recebimentos.reduce((acc,r)=>{acc[r.lanc_servico_id]=(acc[r.lanc_servico_id]||0)+Number(r.valor||0);return acc;},{}),[recebimentos]);
- const totalRecebido=filtered.reduce((s,x)=>s+(recebidosPorServico[x.id]||0),0);
- const totalPendente=filtered.reduce((s,x)=>s+(['DEVENDO','PARCIAL'].includes(x.status_financeiro)?Math.max(0,Number(x.valor||0)-(recebidosPorServico[x.id]||0)):0),0);
+ const total=filtered.reduce((s,x)=>s+Number(x.valor||0),0);
  const selectedServico=servicosOpcoes.find(s=>s.id===formData.servico_id);
  const estoqueAtual=Object.fromEntries(Object.entries(stockData).map(([k,v])=>[k,v.estoqueAtual]));
 
@@ -112,66 +94,39 @@ export default function LancamentoServicos(){
   return{ok:true};
  };
 
- // Resolve custos preservando valores válidos e reconsultando compras quando o custo antigo está incompleto.
  const prepararCustosFolhas=async(lista,originais=[],emEdicao=false,dataServico=todaySP())=>{
   const filasOriginais=new Map(),pendentes=new Set(),tiposCache=new Map();
-
   if(emEdicao)(originais||[]).forEach(f=>{
    if(!f?.tipo_folha||f.e_rascunho||Number(f.quantidade)<=0)return;
    const k=normalizar(f.tipo_folha);
    if(!filasOriginais.has(k))filasOriginais.set(k,[]);
    filasOriginais.get(k).push(f);
   });
-
   const tiposRes=await supabase.from('lm_tipos_folha').select('tipo_folha,preco,is_special,insumo_id').eq('user_id',user.id);
-  if(tiposRes.error)console.error('Erro ao consultar tipos de folha:',tiposRes.error);
   (tiposRes.data||[]).forEach(t=>tiposCache.set(normalizar(t.tipo_folha),t));
-
+  if(tiposRes.error)console.error('Erro ao consultar tipos de folha:',tiposRes.error);
   const resolverCusto=async nome=>{
-   try{
-    return await resolverCustoUnitarioMaterial({
-     supabase,
-     userId:user.id,
-     tipoFolha:nome,
-     dataReferencia:dataServico,
-     tipoCadastro:tiposCache.get(normalizar(nome))
-    });
-   }catch(e){
-    console.error(`Erro ao buscar custo de ${nome}:`,e);
-    return{ok:false,unitario:0,origem:'pendente',estimado:false,pendente:true,dataCompra:null};
-   }
+   try{return await resolverCustoUnitarioMaterial({supabase,userId:user.id,tipoFolha:nome,dataReferencia:dataServico,tipoCadastro:tiposCache.get(normalizar(nome))});}
+   catch(e){console.error(`Erro ao buscar custo de ${nome}:`,e);return{ok:false,unitario:0,origem:'pendente',estimado:false,pendente:true,dataCompra:null};}
   };
-
   const folhas=await Promise.all((lista||[]).map(async f=>{
    if(f.e_rascunho||!f.tipo_folha||Number(f.quantidade)<=0)return f;
-
    const k=normalizar(f.tipo_folha),fila=filasOriginais.get(k),original=fila?.shift();
-   const valorOriginal=original?.custo_unitario;
-   const temCustoOriginal=valorOriginal!==null&&valorOriginal!==undefined&&String(valorOriginal).trim()!==''&&Number.isFinite(Number(valorOriginal))&&Number(valorOriginal)>=0;
-
-   // Mantém custos automáticos já confirmados.
-   if(original?.custo_automatico===true&&temCustoOriginal&&original.custo_pendente!==true){
-    const unitario=Number(valorOriginal);
+   if(original?.custo_automatico===true&&Number.isFinite(Number(original.custo_unitario))){
+    const unitario=Number(original.custo_unitario);
     return{...f,custo_automatico:true,custo_pendente:false,custo_unitario:unitario,custo_total:custoTotal(f.quantidade,unitario),custo_origem:original.custo_origem||'historico',custo_estimado:original.custo_estimado===true,custo_data_compra:original.custo_data_compra||null};
    }
-
-   // Mantém custos manuais válidos.
-   if(original&&original.custo_automatico!==true&&original.custo_pendente!==true&&original.custo_origem!=='pendente'&&temCustoOriginal){
-    const unitario=Number(valorOriginal);
-    return{...f,custo_automatico:false,custo_pendente:false,custo_unitario:unitario,custo_total:custoTotal(f.quantidade,unitario),custo_origem:original.custo_origem||'manual',custo_estimado:original.custo_estimado===true,custo_data_compra:original.custo_data_compra||null};
+   if(original&&!original.custo_pendente){
+    pendentes.add(f.tipo_folha);
+    return{...f,custo_automatico:false,custo_pendente:true,custo_origem:'pendente',custo_estimado:false};
    }
-
-   // Se o custo antigo estiver ausente ou incompleto, procura novamente a compra.
    const custo=await resolverCusto(f.tipo_folha);
-
    if(!custo.ok){
     pendentes.add(f.tipo_folha);
     return{...f,custo_automatico:false,custo_pendente:true,custo_origem:'pendente',custo_estimado:false};
    }
-
    return{...f,custo_automatico:true,custo_pendente:false,custo_unitario:custo.unitario,custo_total:custoTotal(f.quantidade,custo.unitario),custo_origem:custo.origem,custo_estimado:custo.estimado,custo_data_compra:custo.dataCompra||null};
   }));
-
   return{folhas,semCusto:[...pendentes]};
  };
 
@@ -180,45 +135,50 @@ export default function LancamentoServicos(){
   if(saving)return;
   if(!user){toast({title:'Sessão inválida',description:'Entre novamente no sistema.',variant:'destructive'});return}
   const valorNumerico=moneyNumber(formData.valor);
-  if(!formData.data||!formData.servico_id||!formData.cliente_id||!formData.valor||!formData.status_financeiro){toast({title:'Atenção',description:'Preencha todos os campos obrigatórios.',variant:'destructive'});return}
-  if(formData.status_financeiro==='PAGO'&&!formData.forma_pagamento){toast({title:'Forma de pagamento obrigatória',description:'Selecione a forma de pagamento para um serviço pago.',variant:'destructive'});return}
-  if(!Number.isFinite(valorNumerico)||valorNumerico<=0){toast({title:'Valor inválido',description:'Informe um valor maior que zero.',variant:'destructive'});return}
+  if(!formData.data||!formData.servico_id||!formData.cliente_id||!formData.valor||!formData.status_financeiro){
+   toast({title:'Atenção',description:'Preencha todos os campos obrigatórios.',variant:'destructive'});return;
+  }
+  if(formData.status_financeiro==='PAGO'&&!formData.forma_pagamento){
+   toast({title:'Forma de pagamento obrigatória',description:'Selecione a forma de pagamento para um serviço pago.',variant:'destructive'});return;
+  }
+  if(!Number.isFinite(valorNumerico)||valorNumerico<=0){
+   toast({title:'Valor inválido',description:'Informe um valor maior que zero.',variant:'destructive'});return;
+  }
   const v=validate();
   if(!v.ok){toast({title:'Atenção',description:v.msg,variant:'destructive'});return}
   setSaving(true);
   try{
-   const servicoAtual=editingId?servicosLancados.find(x=>x.id===editingId):null;
-   let totalRecebidoEdicao=0;
-
+   let registrarRecebimentoNaEdicao=false;
    if(editingId&&isOnline){
     const{data:recebidos,error:recError}=await supabase.from('lm_recebimentos').select('valor').eq('lanc_servico_id',editingId).eq('user_id',user.id);
     if(recError)throw recError;
-    totalRecebidoEdicao=(recebidos||[]).reduce((s,r)=>s+Number(r.valor||0),0);
-    if(totalRecebidoEdicao>0&&valorNumerico!==Number(servicoAtual?.valor||0))throw new Error('Este serviço já possui recebimentos. O valor original não pode ser alterado.');
-    if(totalRecebidoEdicao>0&&formData.status_financeiro==='DEVENDO')throw new Error('Este serviço já possui recebimentos. Continue o controle do saldo pela tela Consulta de Clientes em Débito.');
-    if(servicoAtual?.status_financeiro==='PAGO'&&formData.status_financeiro==='DEVENDO')throw new Error('Um serviço já marcado como PAGO não pode voltar para DEVENDO.');
+    const totalRecebido=(recebidos||[]).reduce((s,r)=>s+Number(r.valor||0),0);
+    const servicoAtual=servicosLancados.find(x=>x.id===editingId);
+    if(servicoAtual?.status_financeiro!=='PAGO'&&formData.status_financeiro==='PAGO'&&totalRecebido===0)registrarRecebimentoNaEdicao=true;
+    if(totalRecebido>0&&valorNumerico!==Number(servicoAtual?.valor||0)){
+     throw new Error('Este serviço já possui recebimentos. O valor original não pode ser alterado.');
+    }
+    if(totalRecebido>0&&formData.status_financeiro==='DEVENDO'){
+     throw new Error('Este serviço já possui recebimentos. Continue o controle do saldo pela tela Consulta de Clientes em Débito.');
+    }
    }
-
    const usaFolhas=!!selectedServico?.usa_folha;
    let folhasParaSalvar=usaFolhas&&folhasConsumo.length?folhasConsumo:null;
    let custosPendentes=[];
-
    if(usaFolhas&&folhasConsumo.length){
     if(isOnline){
      const resultado=await prepararCustosFolhas(folhasConsumo,originalFolhas,!!editingId,formData.data);
-     folhasParaSalvar=resultado.folhas;
-     custosPendentes=resultado.semCusto;
+     folhasParaSalvar=resultado.folhas;custosPendentes=resultado.semCusto;
     }else{
      folhasParaSalvar=folhasConsumo.map(f=>{
       if(f.e_rascunho||!f.tipo_folha||Number(f.quantidade)<=0)return f;
-      if(f.custo_automatico===true&&f.custo_unitario!==null&&f.custo_unitario!==undefined&&String(f.custo_unitario).trim()!==''&&Number.isFinite(Number(f.custo_unitario)))return f;
+      if(f.custo_automatico===true&&Number.isFinite(Number(f.custo_unitario)))return f;
       custosPendentes.push(f.tipo_folha);
       return{...f,custo_automatico:false,custo_pendente:true,custo_origem:'pendente',custo_estimado:false};
      });
      custosPendentes=[...new Set(custosPendentes)];
     }
    }
-
    const payload={
     user_id:user.id,data:formData.data,servico_id:formData.servico_id,
     cliente_id:formData.cliente_id,
@@ -228,21 +188,24 @@ export default function LancamentoServicos(){
     forma_pagamento:formData.status_financeiro==='PAGO'?formData.forma_pagamento:null,
     folhas_gastas:folhasParaSalvar
    };
-
    if(!isOnline&&!editingId){
     await saveOfflineData('lm_servicos',payload);
     toast({title:'Serviço salvo localmente',description: custosPendentes.length?`Custo pendente para: ${custosPendentes.join(', ')}.`:'Serviço guardado no dispositivo para sincronização.'});
     checkPending();
    }else{
-    if(!isOnline)throw new Error('Edição offline não permitida.');
+    if(!isOnline){toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});return}
     if(editingId){
+     const servicoAnterior=servicosLancados.find(x=>x.id===editingId);
      const{error}=await supabase.from('lm_lanc_servicos').update(payload).eq('id',editingId).eq('user_id',user.id);
      if(error)throw error;
-     const mudouParaPago=servicoAtual?.status_financeiro==='DEVENDO'&&formData.status_financeiro==='PAGO';
-     if(mudouParaPago&&totalRecebidoEdicao===0){
+     if(registrarRecebimentoNaEdicao){
       const{error:recError}=await supabase.from('lm_recebimentos').insert({user_id:user.id,lanc_servico_id:editingId,data:formData.data,valor:valorNumerico,forma_pagamento:formData.forma_pagamento});
       if(recError){
-       await supabase.from('lm_lanc_servicos').update({status_financeiro:'DEVENDO',forma_pagamento:null}).eq('id',editingId).eq('user_id',user.id);
+       await supabase.from('lm_lanc_servicos').update({
+        data:servicoAnterior.data,servico_id:servicoAnterior.servico_id,cliente_id:servicoAnterior.cliente_id,
+        cliente:servicoAnterior.cliente,valor:servicoAnterior.valor,status_financeiro:servicoAnterior.status_financeiro,
+        forma_pagamento:servicoAnterior.forma_pagamento,folhas_gastas:servicoAnterior.folhas_gastas
+       }).eq('id',editingId).eq('user_id',user.id);
        throw recError;
       }
      }
@@ -250,17 +213,21 @@ export default function LancamentoServicos(){
      const{data:novoServico,error}=await supabase.from('lm_lanc_servicos').insert(payload).select('id').single();
      if(error)throw error;
      if(formData.status_financeiro==='PAGO'){
-      const{error:recError}=await supabase.from('lm_recebimentos').insert({user_id:user.id,lanc_servico_id:novoServico.id,data:formData.data,valor:valorNumerico,forma_pagamento:formData.forma_pagamento});
+      const{error:recError}=await supabase.from('lm_recebimentos').insert({
+       user_id:user.id,lanc_servico_id:novoServico.id,data:formData.data,
+       valor:valorNumerico,forma_pagamento:formData.forma_pagamento
+      });
       if(recError){
        await supabase.from('lm_lanc_servicos').delete().eq('id',novoServico.id).eq('user_id',user.id);
        throw recError;
       }
      }
     }
-    toast(custosPendentes.length?{title:'Serviço registrado com custo pendente',description:`Confira o cadastro ou as compras destas folhas: ${custosPendentes.join(', ')}.`,variant:'destructive'}:{title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
+    toast(custosPendentes.length
+     ?{title:'Serviço registrado com custo pendente',description:`Confira o cadastro ou as compras destas folhas: ${custosPendentes.join(', ')}.`,variant:'destructive'}
+     :{title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
     await refresh();
    }
-
    resetAfterSave();setAddOpen(false);
   }catch(e){
    console.error('Falha ao salvar lançamento de serviço:',e);
@@ -269,17 +236,22 @@ export default function LancamentoServicos(){
  };
 
  const remove=async id=>{
-  if(!isOnline){toast({title:'Offline',description:'Exclusão offline não permitida.',variant:'destructive'});return}
+  if(!isOnline){
+   toast({title:'Offline',description:'Exclusão offline não permitida.',variant:'destructive'});
+   return;
+  }
   try{
    const{error}=await supabase.from('lm_lanc_servicos').delete().eq('id',id).eq('user_id',user.id);
    if(error)throw error;
    toast({title:'Removido',description:'Serviço excluído.'});
    await refresh();
-  }catch(e){toast({title:'Erro',description:e.message,variant:'destructive'})}
+  }catch(e){
+   toast({title:'Erro',description:e.message,variant:'destructive'});
+  }
  };
 
  const exportar=()=>{
-  if(!filtered.length){toast({title:'Aviso',description:'Nenhum dado para exportar.',variant:'destructive'});return}
+  if(!filtered.length){toast({title:'Aviso',description:'Nenhum dado para exportar.',variant:'destructive');return}
   const data=filtered.map(i=>({DATA:dateBR(i.data),SERVIÇO:i.lm_servicos?.servico||'N/A',CLIENTE:i.lm_clientes?.nome||i.cliente||'-','FOLHAS GASTAS':folhasText(i.folhas_gastas),STATUS:i.status_financeiro||'PAGO',PAGAMENTO:i.forma_pagamento||'-',VALOR:Number(i.valor||0)}));
   const ws=XLSX.utils.json_to_sheet(data),wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Serviços');
@@ -294,43 +266,10 @@ export default function LancamentoServicos(){
     <div><p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:CYAN}}>LM Impressões</p><h1 className="mt-1 text-2xl font-bold text-foreground">Lançamento de Serviços</h1><p className="text-sm text-muted-foreground">Registre serviços e calcule automaticamente o custo das folhas utilizadas.</p></div>
     <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>setStockOpen(true)}><PackageSearch className="mr-2 h-4 w-4"/>Estoque</Button><Button variant="outline" onClick={()=>setExportOpen(true)}><Download className="mr-2 h-4 w-4"/>Exportar</Button><Button onClick={()=>openDialog()} className="text-white" style={{background:CYAN}}><Plus className="mr-2 h-4 w-4"/>Novo Serviço</Button></div>
    </div>
-
-   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-    {[{l:'Registros',v:filtered.length},{l:'Subtotal',v:BRL.format(subtotal)},{l:'Total recebido',v:BRL.format(totalRecebido)},{l:'Total pendente',v:BRL.format(totalPendente)},{l:'Com Folhas',v:filtered.filter(x=>Array.isArray(x.folhas_gastas)&&x.folhas_gastas.some(f=>!f.e_rascunho)).length},{l:'Clientes',v:new Set(filtered.map(x=>x.cliente_id||x.cliente)).size}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{x.v}</p></CardContent></Card>)}
-   </div>
-
-   <Card className="border-border bg-card">
-    <CardContent className="p-4">
-     <div className="flex flex-col gap-3 xl:flex-row">
-      <div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Buscar serviço ou cliente..." className="h-10 pl-9"/></div>
-      <div className="flex flex-wrap gap-2">
-       <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[140px]"><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select>
-       <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[110px]"><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
-       <Button variant="outline" onClick={()=>setSearchTerm('')}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button>
-      </div>
-     </div>
-    </CardContent>
-   </Card>
-
-   <Dialog open={stockOpen} onOpenChange={setStockOpen}>
-    <DialogContent className="bg-card border-border sm:max-w-[800px]">
-     <DialogHeader><DialogTitle><PackageSearch className="mr-2 inline h-5 w-5" style={{color:CYAN}}/>Estoque Atual</DialogTitle><DialogDescription>Disponibilidade atual de folhas e materiais.</DialogDescription></DialogHeader>
-     <ScrollArea className="max-h-[60vh]"><div className="grid gap-4 py-4 sm:grid-cols-2 lg:grid-cols-3">{isStockLoading?<Loader2 className="mx-auto h-8 w-8 animate-spin"/>:Object.values(stockData).map(i=><EstoqueAtualCard key={i.tipo_folha} item={i} lastUpdate={lastUpdate}/>)}</div></ScrollArea>
-     <DialogFooter><Button variant="outline" onClick={()=>setStockOpen(false)}>Fechar</Button></DialogFooter>
-    </DialogContent>
-   </Dialog>
-
-   <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-    <DialogContent className="bg-card border-border sm:max-w-[430px]">
-     <DialogHeader><DialogTitle>Exportar Serviços</DialogTitle><DialogDescription>Selecione o período.</DialogDescription></DialogHeader>
-     <div className="grid grid-cols-2 gap-4 py-4">
-      <div><Label>Mês</Label><Select value={String(exportFilters.month)} onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select></div>
-      <div><Label>Ano</Label><Select value={String(exportFilters.year)} onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select></div>
-     </div>
-     <DialogFooter><Button variant="outline" onClick={()=>setExportOpen(false)}>Cancelar</Button><Button onClick={exportar} style={{background:CYAN}} className="text-white">Exportar</Button></DialogFooter>
-    </DialogContent>
-   </Dialog>
-
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[{l:'Registros',v:filtered.length},{l:'Total',v:BRL.format(total)},{l:'Com Folhas',v:filtered.filter(x=>Array.isArray(x.folhas_gastas)&&x.folhas_gastas.some(f=>!f.e_rascunho)).length},{l:'Clientes',v:new Set(filtered.map(x=>x.cliente_id||x.cliente)).size}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{x.v}</p></CardContent></Card>)}</div>
+   <Card className="border-border bg-card"><CardContent className="p-4"><div className="flex flex-col gap-3 xl:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Buscar serviço ou cliente..." className="h-10 pl-9"/></div><div className="flex flex-wrap gap-2"><Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[140px]"><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select><Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[110px]"><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select><Button variant="outline" onClick={()=>setSearchTerm('')}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button></div></div></CardContent></Card>
+   <Dialog open={stockOpen} onOpenChange={setStockOpen}><DialogContent className="bg-card border-border sm:max-w-[800px]"><DialogHeader><DialogTitle><PackageSearch className="mr-2 inline h-5 w-5" style={{color:CYAN}}/>Estoque Atual</DialogTitle><DialogDescription>Disponibilidade atual de folhas e materiais.</DialogDescription></DialogHeader><ScrollArea className="max-h-[60vh]"><div className="grid gap-4 py-4 sm:grid-cols-2 lg:grid-cols-3">{isStockLoading?<Loader2 className="mx-auto h-8 w-8 animate-spin"/>:Object.values(stockData).map(i=><EstoqueAtualCard key={i.tipo_folha} item={i} lastUpdate={lastUpdate}/>)}</div></ScrollArea><DialogFooter><Button variant="outline" onClick={()=>setStockOpen(false)}>Fechar</Button></DialogFooter></DialogContent></Dialog>
+   <Dialog open={exportOpen} onOpenChange={setExportOpen}><DialogContent className="bg-card border-border sm:max-w-[430px]"><DialogHeader><DialogTitle>Exportar Serviços</DialogTitle><DialogDescription>Selecione o período.</DialogDescription></DialogHeader><div className="grid grid-cols-2 gap-4 py-4"><div><Label>Mês</Label><Select value={String(exportFilters.month)} onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select></div><div><Label>Ano</Label><Select value={String(exportFilters.year)} onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select></div></div><DialogFooter><Button variant="outline" onClick={()=>setExportOpen(false)}>Cancelar</Button><Button onClick={exportar} style={{background:CYAN}} className="text-white">Exportar</Button></DialogFooter></DialogContent></Dialog>
    <ModalLancamentoPadrao open={addOpen} onClose={closeDialog} title={editingId?'Editar Serviço':'Novo Serviço'} description={editingId?'Atualize os dados do serviço.':'Registre um novo serviço prestado.'} icon={Receipt} theme="cyan" footer={<><Button type="button" variant="outline" onClick={closeDialog} disabled={saving} className="h-11 rounded-xl border-border px-5">Cancelar</Button><Button type="button" onClick={save} disabled={saving} className="h-11 rounded-xl px-6 font-semibold text-white" style={{background:CYAN}}>{saving?<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Salvando...</>:editingId?'Atualizar':'Salvar'}</Button></>}>
     <form id="form-servico" onSubmit={save} noValidate className="max-h-[calc(100vh-300px)] space-y-5 overflow-y-auto overflow-x-hidden pr-1">
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -351,33 +290,58 @@ export default function LancamentoServicos(){
      {selectedServico?.usa_folha&&<div className="space-y-2 border-t border-border pt-4"><FolhasTable folhas={folhasConsumo} setFolhas={setFolhasConsumo} tiposFolha={tiposFolha} estoqueAtual={estoqueAtual} disabled={saving}/></div>}
     </form>
    </ModalLancamentoPadrao>
-
    <Card className="border-border bg-card">
-    <CardContent className="p-0">
-     <ScrollArea className="h-[560px]">
-      <Table>
+    <CardContent className="min-w-0 p-0">
+     <ScrollArea className="h-[560px] w-full max-w-full">
+      <Table className="w-full min-w-[1050px] table-fixed">
        <TableHeader className="sticky top-0 z-10 bg-secondary/70">
-        <TableRow><TableHead>Data</TableHead><TableHead>Serviço</TableHead><TableHead>Cliente</TableHead><TableHead>Folhas</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-center">Ações</TableHead></TableRow>
+        <TableRow className="h-11">
+         <TableHead className="w-[9%] min-w-[90px] whitespace-nowrap">Data</TableHead>
+         <TableHead className="w-[14%] min-w-[140px]">Serviço</TableHead>
+         <TableHead className="w-[15%] min-w-[140px]">Cliente</TableHead>
+         <TableHead className="w-[36%] min-w-[300px]">Folhas</TableHead>
+         <TableHead className="w-[9%] min-w-[90px]">Status</TableHead>
+         <TableHead className="w-[8%] min-w-[90px] text-right">Valor</TableHead>
+         <TableHead className="w-[9%] min-w-[100px] text-center">Ações</TableHead>
+        </TableRow>
        </TableHeader>
        <TableBody>
-        {loading?<TableRow><TableCell colSpan={7} className="py-12 text-center">Carregando...</TableCell></TableRow>:!filtered.length?<TableRow><TableCell colSpan={7} className="py-12 text-center text-muted-foreground">Nenhum serviço encontrado.</TableCell></TableRow>:filtered.map(x=><TableRow key={x.id} className="hover:bg-muted/40">
-         <TableCell>{dateBR(x.data)}</TableCell>
-         <TableCell className="font-semibold">{x.lm_servicos?.servico||'N/A'}<div className="text-xs text-muted-foreground">{x.forma_pagamento||''}</div></TableCell>
-         <TableCell>{x.lm_clientes?.nome||x.cliente||'-'}</TableCell>
-         <TableCell>{folhasText(x.folhas_gastas)}</TableCell>
-         <TableCell>{x.status_financeiro||'PAGO'}</TableCell>
-         <TableCell className="text-right font-bold" style={{color:CYAN}}>{BRL.format(Number(x.valor)||0)}</TableCell>
-         <TableCell><div className="flex justify-center gap-1">
-          <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço"><Edit className="h-4 w-4"/></Button>
-          <AlertDialog>
-           <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
-           <AlertDialogContent>
-            <AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita. Registros com recebimentos vinculados não poderão ser excluídos.</AlertDialogDescription></AlertDialogHeader>
-            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter>
-           </AlertDialogContent>
-          </AlertDialog>
-         </div></TableCell>
-        </TableRow>)}
+        {loading ? (
+         <TableRow><TableCell colSpan={7} className="py-12 text-center">Carregando...</TableCell></TableRow>
+        ) : !filtered.length ? (
+         <TableRow><TableCell colSpan={7} className="py-12 text-center text-muted-foreground">Nenhum serviço encontrado.</TableCell></TableRow>
+        ) : filtered.map(x => {
+         const materiais = folhasText(x.folhas_gastas);
+         return (
+          <TableRow key={x.id} className="h-14 hover:bg-muted/40">
+           <TableCell className="overflow-hidden whitespace-nowrap">{dateBR(x.data)}</TableCell>
+           <TableCell className="overflow-hidden">
+            <div className="truncate font-semibold" title={x.lm_servicos?.servico || 'N/A'}>{x.lm_servicos?.servico || 'N/A'}</div>
+            <div className="truncate text-xs text-muted-foreground" title={x.forma_pagamento || ''}>{x.forma_pagamento || ''}</div>
+           </TableCell>
+           <TableCell className="overflow-hidden">
+            <div className="truncate" title={x.lm_clientes?.nome || x.cliente || '-'}>{x.lm_clientes?.nome || x.cliente || '-'}</div>
+           </TableCell>
+           <TableCell className="overflow-hidden">
+            <div className="w-full min-w-0 truncate whitespace-nowrap" title={materiais}>{materiais}</div>
+           </TableCell>
+           <TableCell className="overflow-hidden whitespace-nowrap">{x.status_financeiro || 'PAGO'}</TableCell>
+           <TableCell className="overflow-hidden whitespace-nowrap text-right font-bold" style={{color:CYAN}}>{BRL.format(Number(x.valor)||0)}</TableCell>
+           <TableCell className="whitespace-nowrap">
+            <div className="flex items-center justify-center gap-1">
+             <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço" className="h-8 w-8 shrink-0"><Edit className="h-4 w-4"/></Button>
+             <AlertDialog>
+              <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
+              <AlertDialogContent>
+               <AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita. Registros com recebimentos vinculados não poderão ser excluídos.</AlertDialogDescription></AlertDialogHeader>
+               <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter>
+              </AlertDialogContent>
+             </AlertDialog>
+            </div>
+           </TableCell>
+          </TableRow>
+         );
+        })}
        </TableBody>
       </Table>
      </ScrollArea>
