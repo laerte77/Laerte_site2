@@ -1,6 +1,6 @@
 import React,{useState,useEffect,useCallback,useMemo}from'react';
 import{motion}from'framer-motion';
-import{FileText,Download,Calendar,TrendingUp,TrendingDown,AlertTriangle,Loader2,RotateCcw}from'lucide-react';
+import{FileText,Download,Calendar,TrendingUp,TrendingDown,AlertTriangle,Loader2,RotateCcw,ClipboardList}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -35,7 +35,7 @@ export default function ControleFolhas(){
     supabase.from('lm_tipos_folha').select('tipo_folha,insumo_id,preco').eq('user_id',user.id),
     supabase.from('lm_lanc_despesas').select('data,valor,tipo_lancamento,tipo_folha,quantidade,insumo_id,created_at,lm_despesas(despesa)').eq('user_id',user.id).eq('tipo_lancamento','Estoque').not('quantidade','is',null).gt('quantidade',0),
     supabase.from('lm_lanc_servicos').select('data,folhas_gastas').eq('user_id',user.id).not('folhas_gastas','is',null),
-    supabase.from('lm_folhas').select('data,tipo_folha,tipo_movimento,quantidade,insumo_id').eq('user_id',user.id)
+    supabase.from('lm_folhas').select('data,tipo_folha,tipo_movimento,categoria_movimento,quantidade,insumo_id').eq('user_id',user.id)
    ]);
    for(const r of[a,b,c,d,e])if(r.error)throw r.error;
    setRaw({insumos:a.data||[],tipos:b.data||[],despesas:c.data||[],servicos:d.data||[],movimentos:e.data||[]});
@@ -83,8 +83,6 @@ export default function ControleFolhas(){
    return true;
   };
 
-  // O custo estimado respeita a data final do relatório.
-  // Compras posteriores ao período não são utilizadas.
   const cutoff=dateRange.end_date||hojeSP();
   const costs={};
   const sortedExpenses=[...raw.despesas]
@@ -97,7 +95,6 @@ export default function ControleFolhas(){
    costs[keyFor(x.insumo_id,name)]=value/q;
   });
 
-  // O preço cadastrado serve de estimativa quando não há compra anterior disponível.
   raw.tipos.forEach(t=>{
    const key=keyFor(t.insumo_id,t.tipo_folha);
    if(costs[key]==null&&Number(t.preco)>0)costs[key]=Number(t.preco);
@@ -109,8 +106,8 @@ export default function ControleFolhas(){
    if(!grouped[key]){
     grouped[key]={
      key,tipo_folha:displayName(id,name),
-     entradas:0,saidas:0,perdas:0,variacao:0,
-     custo_unitario:costs[key]||0,valor_variacao:0
+     entradas:0,saidas:0,perdas:0,ajustes:0,
+     variacao:0,custo_unitario:costs[key]||0,valor_variacao:0
     };
    }else if(!grouped[key].custo_unitario){
     grouped[key].custo_unitario=costs[key]||0;
@@ -118,7 +115,7 @@ export default function ControleFolhas(){
    return grouped[key];
   };
 
-  // Entradas de estoque.
+  // Compras e reposições registradas como estoque.
   raw.despesas.forEach(x=>{
    if(!inRange(x.data)||norm(x.tipo_lancamento)!=='ESTOQUE')return;
    const q=Number(x.quantidade)||0,name=expenseName(x);
@@ -126,18 +123,23 @@ export default function ControleFolhas(){
    ensure(x.insumo_id,name).entradas+=q;
   });
 
-  // Movimentações manuais de insumos.
+  // Movimentações manuais: ajustes ficam separados das saídas operacionais.
   raw.movimentos.forEach(x=>{
    if(!inRange(x.data))return;
-   const q=Number(x.quantidade)||0,type=norm(x.tipo_movimento);
+   const q=Number(x.quantidade)||0;
+   const type=norm(x.tipo_movimento);
+   const categoria=norm(x.categoria_movimento);
    if(q<=0||!['ENTRADA','SAIDA','PERDA'].includes(type))return;
+
    const row=ensure(x.insumo_id,x.tipo_folha);
+
    if(type==='ENTRADA')row.entradas+=q;
+   else if(type==='PERDA')row.perdas+=q;
+   else if(type==='SAIDA'&&categoria==='AJUSTE_INVENTARIO')row.ajustes+=q;
    else if(type==='SAIDA')row.saidas+=q;
-   else row.perdas+=q;
   });
 
-  // Folhas consumidas em serviços. Rascunhos são ignorados.
+  // Consumo real em serviços; rascunhos são ignorados.
   raw.servicos.forEach(x=>{
    if(!inRange(x.data)||!Array.isArray(x.folhas_gastas))return;
    x.folhas_gastas.forEach(f=>{
@@ -147,7 +149,8 @@ export default function ControleFolhas(){
   });
 
   const all=Object.values(grouped).map(x=>{
-   x.variacao=x.entradas-x.saidas-x.perdas;
+   // Ajustes continuam compondo a variação física, mas não o consumo operacional.
+   x.variacao=x.entradas-x.saidas-x.perdas-x.ajustes;
    x.valor_variacao=x.variacao*x.custo_unitario;
    return x;
   }).sort((a,b)=>a.tipo_folha.localeCompare(b.tipo_folha,'pt-BR'));
@@ -169,9 +172,10 @@ export default function ControleFolhas(){
   entradas:a.entradas+x.entradas,
   saidas:a.saidas+x.saidas,
   perdas:a.perdas+x.perdas,
+  ajustes:a.ajustes+x.ajustes,
   variacao:a.variacao+x.variacao,
   valor:a.valor+x.valor_variacao
- }),{entradas:0,saidas:0,perdas:0,variacao:0,valor:0}),[controlData]);
+ }),{entradas:0,saidas:0,perdas:0,ajustes:0,variacao:0,valor:0}),[controlData]);
 
  const formatCurrency=v=>BRL.format(Number(v)||0);
 
@@ -189,8 +193,8 @@ export default function ControleFolhas(){
    return;
   }
   const rows=[
-   ['Tipo de folha','Entradas','Saídas/consumo','Perdas','Variação líquida do período','Custo unitário estimado','Valor estimado da variação'],
-   ...controlData.map(x=>[x.tipo_folha,x.entradas,x.saidas,x.perdas,x.variacao,x.custo_unitario,x.valor_variacao])
+   ['Tipo de folha','Entradas','Saídas/consumo real','Perdas','Ajustes de inventário','Variação física líquida','Custo unitário estimado','Valor estimado da variação'],
+   ...controlData.map(x=>[x.tipo_folha,x.entradas,x.saidas,x.perdas,x.ajustes,x.variacao,x.custo_unitario,x.valor_variacao])
   ];
   const csv=rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\r\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
@@ -218,26 +222,30 @@ export default function ControleFolhas(){
       <FileText className="h-6 w-6" style={{color:CYAN}}/>
       <h1 className="text-2xl font-bold">Controle de Folhas</h1>
      </div>
-     <p className="mt-1 text-sm text-muted-foreground">Movimentações e variação líquida de materiais no período.</p>
+     <p className="mt-1 text-sm text-muted-foreground">Movimentações, ajustes e variação física dos materiais no período.</p>
     </div>
     <Button variant="outline" onClick={handleExport} disabled={loading||!controlData.length}>
      <Download className="mr-2 h-4 w-4"/>Exportar CSV
     </Button>
    </div>
 
-   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
     <Card><CardContent className="flex items-center justify-between p-4"><div>
      <p className="text-xs uppercase tracking-wider text-muted-foreground">Entradas e reposições</p>
      <p className="mt-1 text-xl font-bold text-green-400">{totals.entradas.toLocaleString('pt-BR')}</p>
     </div><TrendingUp className="h-5 w-5 text-green-400"/></CardContent></Card>
     <Card><CardContent className="flex items-center justify-between p-4"><div>
-     <p className="text-xs uppercase tracking-wider text-muted-foreground">Saídas e consumo</p>
+     <p className="text-xs uppercase tracking-wider text-muted-foreground">Saídas e consumo real</p>
      <p className="mt-1 text-xl font-bold text-blue-400">{totals.saidas.toLocaleString('pt-BR')}</p>
     </div><TrendingDown className="h-5 w-5 text-blue-400"/></CardContent></Card>
     <Card><CardContent className="flex items-center justify-between p-4"><div>
      <p className="text-xs uppercase tracking-wider text-muted-foreground">Perdas</p>
      <p className="mt-1 text-xl font-bold text-red-400">{totals.perdas.toLocaleString('pt-BR')}</p>
     </div><AlertTriangle className="h-5 w-5 text-red-400"/></CardContent></Card>
+    <Card><CardContent className="flex items-center justify-between p-4"><div>
+     <p className="text-xs uppercase tracking-wider text-muted-foreground">Ajustes de inventário</p>
+     <p className="mt-1 text-xl font-bold text-amber-400">{totals.ajustes.toLocaleString('pt-BR')}</p>
+    </div><ClipboardList className="h-5 w-5 text-amber-400"/></CardContent></Card>
     <Card><CardContent className="flex items-center justify-between p-4"><div>
      <p className="text-xs uppercase tracking-wider text-muted-foreground">Valor estimado da variação</p>
      <p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{formatCurrency(totals.valor)}</p>
@@ -273,17 +281,17 @@ export default function ControleFolhas(){
    </Card>
 
    <Card className="border-cyan-500/20 bg-cyan-500/5">
-    <CardContent className="p-4 text-sm text-muted-foreground space-y-1">
+    <CardContent className="space-y-1 p-4 text-sm text-muted-foreground">
      <p className="font-semibold text-foreground">Como interpretar este relatório</p>
-     <p>A variação líquida do período é calculada como entradas menos saídas e perdas. Ela não representa, sozinha, a quantidade física total disponível em estoque.</p>
-     <p>O valor é uma estimativa: utiliza a compra mais recente até a data final selecionada ou, se não houver compra anterior, o preço unitário cadastrado. O sistema não mantém histórico completo de alteração desses preços.</p>
+     <p>Saídas e consumo real incluem o consumo registrado nos serviços e as saídas operacionais. Ajustes de inventário são exibidos separadamente e não são tratados como consumo nem custo operacional.</p>
+     <p>A variação física líquida considera entradas menos saídas reais, perdas e ajustes de inventário, pois todos esses movimentos alteram o saldo registrado. O valor é estimado pelo custo unitário disponível.</p>
     </CardContent>
    </Card>
 
    <Card>
     <CardHeader>
      <CardTitle className="text-base">Variação por tipo de folha</CardTitle>
-     <CardDescription>Valores negativos indicam que saídas e perdas superaram as entradas no período selecionado.</CardDescription>
+     <CardDescription>Os ajustes de inventário aparecem separados do consumo operacional.</CardDescription>
     </CardHeader>
     <CardContent className="p-0">
      <div className="overflow-x-auto">
@@ -293,17 +301,19 @@ export default function ControleFolhas(){
         <TableHead className="text-right">Entradas</TableHead>
         <TableHead className="text-right">Saídas/consumo</TableHead>
         <TableHead className="text-right">Perdas</TableHead>
+        <TableHead className="text-right">Ajustes</TableHead>
         <TableHead className="text-right">Variação líquida</TableHead>
-        <TableHead className="text-right">Valor estimado da variação</TableHead>
+        <TableHead className="text-right">Valor estimado</TableHead>
        </TableRow></TableHeader>
        <TableBody>
-        {loading?<TableRow><TableCell colSpan={6} className="py-12 text-center"><Loader2 className="mx-auto h-6 w-6" style={{color:CYAN}}/></TableCell></TableRow>
-        :!controlData.length?<TableRow><TableCell colSpan={6} className="py-12 text-center text-muted-foreground">Nenhuma movimentação no período.</TableCell></TableRow>
+        {loading?<TableRow><TableCell colSpan={7} className="py-12 text-center"><Loader2 className="mx-auto h-6 w-6" style={{color:CYAN}}/></TableCell></TableRow>
+        :!controlData.length?<TableRow><TableCell colSpan={7} className="py-12 text-center text-muted-foreground">Nenhuma movimentação no período.</TableCell></TableRow>
         :controlData.map(item=><TableRow key={item.key} className="hover:bg-muted/40">
          <TableCell className="font-semibold">{item.tipo_folha}</TableCell>
          <TableCell className="text-right font-mono text-green-400">{item.entradas.toLocaleString('pt-BR')}</TableCell>
          <TableCell className="text-right font-mono text-blue-400">{item.saidas.toLocaleString('pt-BR')}</TableCell>
          <TableCell className="text-right font-mono text-red-400">{item.perdas.toLocaleString('pt-BR')}</TableCell>
+         <TableCell className="text-right font-mono text-amber-400">{item.ajustes.toLocaleString('pt-BR')}</TableCell>
          <TableCell className={`text-right font-mono font-bold ${item.variacao<0?'text-red-400':''}`}>{item.variacao.toLocaleString('pt-BR')}</TableCell>
          <TableCell className={`text-right font-mono font-bold ${item.valor_variacao<0?'text-red-400':''}`} style={{color:item.valor_variacao<0?undefined:CYAN}}>{formatCurrency(item.valor_variacao)}</TableCell>
         </TableRow>)}
@@ -315,4 +325,3 @@ export default function ControleFolhas(){
   </motion.div>
  );
 }
-
