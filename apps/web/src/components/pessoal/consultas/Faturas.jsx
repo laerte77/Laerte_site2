@@ -223,7 +223,7 @@ const Faturas=()=>{
   if(fatRes.data){
    const{data:pags,error:pagsError}=await supabase
     .from('pessoal_cartao_pagamentos')
-    .select('id,user_id,fatura_id,valor,data,forma_pagamento,despesa_id,responsavel_id')
+    .select('id,user_id,fatura_id,valor,data,forma_pagamento,despesa_id,responsavel_id,lancamento_id')
     .eq('fatura_id',fatRes.data.id)
     .order('data',{ascending:false});
 
@@ -243,7 +243,6 @@ const Faturas=()=>{
   if(selectedCartao)fetchDados();
  },[selectedCartao,selectedMonth,selectedYear,fetchDados]);
 
- // O filtro por pessoa afeta somente os lançamentos exibidos.
  const lancamentosFiltrados=useMemo(()=>{
   if(selectedPessoa==='todas')return lancamentos;
 
@@ -420,7 +419,8 @@ const Faturas=()=>{
      data:pagForm.data,
      forma_pagamento:pagForm.forma_pagamento,
      despesa_id:null,
-     responsavel_id:null
+     responsavel_id:null,
+     lancamento_id:null
     });
 
    if(error)throw error;
@@ -539,20 +539,12 @@ const Faturas=()=>{
     </div>
 
     <div className="flex flex-wrap gap-2">
-     <Button
-      variant="outline"
-      onClick={handleExport}
-      disabled={!podeExportar}
-     >
+     <Button variant="outline" onClick={handleExport} disabled={!podeExportar}>
       <Download className="mr-2 h-4 w-4"/>
       Exportar
      </Button>
 
-     <Button
-      variant="outline"
-      onClick={fetchDados}
-      disabled={!selectedCartao}
-     >
+     <Button variant="outline" onClick={fetchDados} disabled={!selectedCartao}>
       <RefreshCw className="mr-2 h-4 w-4"/>
       Atualizar
      </Button>
@@ -782,7 +774,9 @@ const Faturas=()=>{
                <TableCell className="text-sm">{pessoa}</TableCell>
                <TableCell className="text-sm text-muted-foreground">
                 <div>{p.forma_pagamento||'—'}</div>
-                <div className="text-[11px]">{p.despesa_id?'Origem: Despesas':'Origem: Manual'}</div>
+                <div className="text-[11px]">
+                 {p.lancamento_id?'Compra específica':p.despesa_id?'Origem: Despesas':'Origem: Manual'}
+                </div>
                </TableCell>
                <TableCell className="text-right font-semibold text-emerald-400">{moeda(p.valor)}</TableCell>
                <TableCell className="text-center">
