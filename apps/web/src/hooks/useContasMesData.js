@@ -15,6 +15,130 @@ const normalize = (str) => {
     .replace(/\s+/g, ' ');
 };
 
+const toCents = value => Math.round((Number(value) || 0) * 100);
+const fromCents = value => (Number(value) || 0) / 100;
+
+// Distribui um valor em centavos proporcionalmente aos pesos, preservando o total.
+const distributeCents = (items, totalCents, getId, getWeight) => {
+  const result = new Map();
+  const valid = items
+    .map(item => ({
+      id: getId(item),
+      weight: Math.max(0, Number(getWeight(item)) || 0)
+    }))
+    .filter(item => item.weight > 0);
+
+  const totalWeight = valid.reduce((sum, item) => sum + item.weight, 0);
+  const target = Math.max(0, Math.min(Math.round(totalCents), totalWeight));
+
+  if (!valid.length || target <= 0 || totalWeight <= 0) return result;
+
+  let allocated = 0;
+  const shares = valid.map(item => {
+    const exact = target * item.weight / totalWeight;
+    const base = Math.floor(exact);
+    allocated += base;
+    return { ...item, cents: base, remainder: exact - base };
+  });
+
+  let remaining = target - allocated;
+  shares
+    .slice()
+    .sort((a, b) => b.remainder - a.remainder)
+    .forEach(item => {
+      if (remaining <= 0) return;
+      const share = shares.find(x => x.id === item.id);
+      if (share && share.cents < share.weight) {
+        share.cents += 1;
+        remaining -= 1;
+      }
+    });
+
+  shares.forEach(item => result.set(item.id, item.cents));
+  return result;
+};
+
+// Regra A: pagamentos com responsável reduzem primeiro o saldo dessa pessoa.
+// Pagamentos sem responsável e excedentes são rateados pelo saldo restante.
+const calcularRateioLancamentos = (compras, pagamentos) => {
+  const grupos = new Map();
+  const pagamentosDiretos = new Map();
+  let saldoCompartilhado = 0;
+
+  (compras || []).forEach(compra => {
+    const chave = compra.responsavel_id ? String(compra.responsavel_id) : '__sem_responsavel__';
+    if (!grupos.has(chave)) grupos.set(chave, { compras: [], total: 0, direto: 0, restante: 0, rateio: 0 });
+
+    const grupo = grupos.get(chave);
+    const valor = toCents(getInstallmentValue(
+      compra.valor,
+      compra.parcelas,
+      compra.parcela_atual
+    ));
+
+    grupo.compras.push({ compra, valor });
+    grupo.total += valor;
+  });
+
+  (pagamentos || []).forEach(pagamento => {
+    const valor = Math.max(0, toCents(pagamento.valor));
+    if (!valor) return;
+
+    if (pagamento.responsavel_id) {
+      const chave = String(pagamento.responsavel_id);
+      pagamentosDiretos.set(chave, (pagamentosDiretos.get(chave) || 0) + valor);
+    } else {
+      saldoCompartilhado += valor;
+    }
+  });
+
+  // Pagamento direto de pessoa sem compras nesta competência vira saldo compartilhado.
+  pagamentosDiretos.forEach((valor, chave) => {
+    if (!grupos.has(chave)) saldoCompartilhado += valor;
+  });
+
+  let totalRestante = 0;
+  grupos.forEach((grupo, chave) => {
+    const diretoInformado = grupos.has(chave) ? (pagamentosDiretos.get(chave) || 0) : 0;
+    grupo.direto = Math.min(grupo.total, diretoInformado);
+    grupo.restante = Math.max(0, grupo.total - grupo.direto);
+    saldoCompartilhado += Math.max(0, diretoInformado - grupo.total);
+    totalRestante += grupo.restante;
+  });
+
+  const gruposComSaldo = Array.from(grupos.entries())
+    .filter(([, grupo]) => grupo.restante > 0)
+    .map(([id, grupo]) => ({ id, restante: grupo.restante }));
+
+  const totalRatear = Math.min(saldoCompartilhado, totalRestante);
+  const rateioGrupos = distributeCents(
+    gruposComSaldo,
+    totalRatear,
+    item => item.id,
+    item => item.restante
+  );
+
+  const rateioPorLancamento = new Map();
+
+  grupos.forEach((grupo, chave) => {
+    const totalPessoaPago = Math.min(
+      grupo.total,
+      grupo.direto + (rateioGrupos.get(chave) || 0)
+    );
+
+    const rateioItens = distributeCents(
+      grupo.compras,
+      totalPessoaPago,
+      item => item.compra.id,
+      item => item.valor
+    );
+
+    rateioItens.forEach((valor, id) => rateioPorLancamento.set(id, valor));
+  });
+
+  return rateioPorLancamento;
+};
+
 export function useContasMesData(userId, month, year) {
   const [contasMes, setContasMes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +167,8 @@ export function useContasMesData(userId, month, year) {
 
       if (previstasError) throw previstasError;
 
-      // 2. Despesas realizadas.
+      // 2. Despesas realizadas. Crédito vinculado a cartão é pagamento de fatura,
+      // não uma compra individual; será considerado pela tabela de pagamentos.
       const { data: reais, error: reaisError } = await supabase
         .from('despesas')
         .select('*')
@@ -53,7 +178,11 @@ export function useContasMesData(userId, month, year) {
 
       if (reaisError) throw reaisError;
 
-      // 3. Pagamentos de cartão.
+      const reaisParaPrevisoes = (reais || []).filter(r => !(
+        normalize(r.forma_pagamento) === 'credito' && r.cartao_id
+      ));
+
+      // 3. Pagamentos do cartão registrados no mês.
       const { data: pagamentos, error: pagamentosError } = await supabase
         .from('pessoal_cartao_pagamentos')
         .select('*')
@@ -118,29 +247,31 @@ export function useContasMesData(userId, month, year) {
         (faturasComp || []).map(f => [f.cartao_id, f])
       );
 
-      // 8. Pagamentos das faturas da competência.
+      // 8. Pagamentos de cada fatura, preservando o responsável de cada origem.
       const faturaCompIds = (faturasComp || [])
         .map(f => f.id)
         .filter(Boolean);
 
-      const pagoPorFaturaComp = {};
+      const pagamentosPorFaturaComp = {};
 
       if (faturaCompIds.length > 0) {
         const { data: pagsComp, error: pagsCompError } = await supabase
           .from('pessoal_cartao_pagamentos')
-          .select('fatura_id, valor')
+          .select('fatura_id, valor, responsavel_id')
           .in('fatura_id', faturaCompIds);
 
         if (pagsCompError) throw pagsCompError;
 
         (pagsComp || []).forEach(p => {
-          pagoPorFaturaComp[p.fatura_id] =
-            (pagoPorFaturaComp[p.fatura_id] || 0) +
-            (Number(p.valor) || 0);
+          if (!pagamentosPorFaturaComp[p.fatura_id]) {
+            pagamentosPorFaturaComp[p.fatura_id] = [];
+          }
+
+          pagamentosPorFaturaComp[p.fatura_id].push(p);
         });
       }
 
-      // Estruturas auxiliares para pagamentos por fatura.
+      // Estruturas auxiliares para relacionar pagamentos pela data de pagamento.
       let faturasMap = {};
       let cartoesPagamentosMap = {};
 
@@ -180,15 +311,14 @@ export function useContasMesData(userId, month, year) {
         }
       }
 
-      // Soma dos pagamentos por fatura.
+      // Soma dos pagamentos por fatura na data em que foram realizados.
       const pagamentosPorFatura = {};
 
       (pagamentos || []).forEach(p => {
         if (!p.fatura_id) return;
 
         pagamentosPorFatura[p.fatura_id] =
-          (pagamentosPorFatura[p.fatura_id] || 0) +
-          (Number(p.valor) || 0);
+          (pagamentosPorFatura[p.fatura_id] || 0) + (Number(p.valor) || 0);
       });
 
       const realizadosCartao = Object.entries(pagamentosPorFatura).map(
@@ -198,8 +328,8 @@ export function useContasMesData(userId, month, year) {
           const nomeCartao = cartao.nome || 'Cartão';
 
           const refMesAno =
-            fatura.mes && fatura.ano
-              ? `${fatura.mes}/${fatura.ano}`
+            fatura.mes !== null && fatura.mes !== undefined && fatura.ano
+              ? `${String(fatura.mes + 1).padStart(2, '0')}/${fatura.ano}`
               : '';
 
           return {
@@ -221,11 +351,7 @@ export function useContasMesData(userId, month, year) {
         const cartao = cartoesMap[l.cartao_id];
         if (!cartao) return false;
 
-        const comp = competenciaFatura(
-          l.data,
-          cartao.dia_fechamento
-        );
-
+        const comp = competenciaFatura(l.data, cartao.dia_fechamento);
         return !!comp && comp.mes === target0 && comp.ano === year;
       });
 
@@ -233,54 +359,45 @@ export function useContasMesData(userId, month, year) {
         compLancamentos.map(l => l.cartao_id)
       );
 
-      // Total previsto por cartão para rateio de pagamentos parciais.
-      const sumPrevistoPorCartao = {};
+      // Rateio individualizado por fatura e por responsável.
+      const rateioPorLancamento = new Map();
 
-      compLancamentos.forEach(l => {
-        const v = getInstallmentValue(
-          l.valor,
-          l.parcelas,
-          l.parcela_atual
+      (faturasComp || []).forEach(fatura => {
+        const comprasDaFatura = compLancamentos.filter(
+          l => l.cartao_id === fatura.cartao_id
         );
-
-        sumPrevistoPorCartao[l.cartao_id] =
-          (sumPrevistoPorCartao[l.cartao_id] || 0) + v;
+        const pagamentosDaFatura = pagamentosPorFaturaComp[fatura.id] || [];
+        const rateio = calcularRateioLancamentos(comprasDaFatura, pagamentosDaFatura);
+        rateio.forEach((valor, id) => rateioPorLancamento.set(id, valor));
       });
 
-      // Compras individuais de cartão.
+      // Compras individuais do cartão com o valor pago atribuído ao responsável.
       const entradasCartao = compLancamentos.map(l => {
         const cartao = cartoesMap[l.cartao_id];
         const fatura = faturasCompMap[l.cartao_id];
-
-        const totalPago = fatura
-          ? pagoPorFaturaComp[fatura.id] || 0
-          : 0;
 
         const installmentValue = getInstallmentValue(
           l.valor,
           l.parcelas,
           l.parcela_atual
         );
+        const installmentCents = toCents(installmentValue);
 
-        let valorReal = 0;
-        let status = 'Pendente';
+        let valorRealCentavos = rateioPorLancamento.get(l.id) || 0;
 
+        // Mantém compatibilidade com faturas antigas marcadas como pagas manualmente.
         if (fatura && fatura.status === 'paga') {
-          valorReal = installmentValue;
+          valorRealCentavos = installmentCents;
+        }
+
+        valorRealCentavos = Math.min(installmentCents, valorRealCentavos);
+        const valorReal = fromCents(valorRealCentavos);
+
+        let status = 'Pendente';
+        if (valorRealCentavos >= installmentCents && installmentCents > 0) {
           status = 'Pago';
-        } else if (fatura && totalPago > 0) {
-          const sumPrev =
-            sumPrevistoPorCartao[l.cartao_id] || installmentValue;
-
-          const ratio = sumPrev > 0
-            ? Math.min(1, totalPago / sumPrev)
-            : 0;
-
-          valorReal = installmentValue * ratio;
-
-          if (valorReal >= installmentValue) status = 'Pago';
-          else if (valorReal > 0) status = 'Pago Parcialmente';
-          else status = 'Pendente';
+        } else if (valorRealCentavos > 0) {
+          status = 'Pago Parcialmente';
         }
 
         let dataVencimento = fatura?.data_vencimento || null;
@@ -301,7 +418,7 @@ export function useContasMesData(userId, month, year) {
 
         if (!dataVencimento) dataVencimento = l.data;
 
-        if (valorReal === 0 && status === 'Pendente') {
+        if (valorRealCentavos === 0 && status === 'Pendente') {
           try {
             const venc = parseISO(dataVencimento);
             if (isBefore(venc, new Date()) && !isToday(venc)) {
@@ -330,7 +447,7 @@ export function useContasMesData(userId, month, year) {
           categoria: 'Cartão de Crédito',
           valor_previsto: installmentValue,
           valor_real: valorReal,
-          diferenca: installmentValue - valorReal,
+          diferenca: fromCents(installmentCents - valorRealCentavos),
           status,
           origem_real: 'cartao',
           origem: 'cartao',
@@ -339,6 +456,8 @@ export function useContasMesData(userId, month, year) {
       });
 
       // Despesas previstas e correspondências com despesas reais.
+      // Pagamentos de crédito vinculados a cartão ficam fora desta busca para
+      // que não sejam confundidos com compras ou despesas comuns.
       const processedData = (previstas || []).map(prevista => {
         const valorPrevisto = Number(prevista.valor) || 0;
         let valorReal = 0;
@@ -350,7 +469,7 @@ export function useContasMesData(userId, month, year) {
 
         // a) Correspondência direta pelo ID da despesa.
         if (prevista.matched_transaction_id) {
-          const matched = reais.find(
+          const matched = reaisParaPrevisoes.find(
             r => r.id === prevista.matched_transaction_id
           );
 
@@ -364,7 +483,7 @@ export function useContasMesData(userId, month, year) {
 
         // b) Correspondência pela descrição.
         if (valorReal === 0) {
-          const matched = reais.find(
+          const matched = reaisParaPrevisoes.find(
             r => normalize(r.despesa) === descNorm
           );
 
@@ -376,7 +495,7 @@ export function useContasMesData(userId, month, year) {
           }
         }
 
-        // c) Correspondência com pagamentos de cartão.
+        // c) Correspondência com pagamentos de cartão (faturas gerais).
         if (valorReal === 0) {
           const matchedCartao = realizadosCartao.find(rc => {
             if (!rc.nome_cartao_norm) return false;
@@ -443,8 +562,7 @@ export function useContasMesData(userId, month, year) {
       const allData = [...processedData, ...entradasCartao];
 
       allData.sort(
-        (a, b) =>
-          new Date(a.data_vencimento) - new Date(b.data_vencimento)
+        (a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento)
       );
 
       setContasMes(allData);
