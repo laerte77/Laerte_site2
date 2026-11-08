@@ -61,14 +61,10 @@ const moneyNum=v=>{
 
 const brDate=v=>{
  if(!v)return'-';
-
  const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
  if(m)return`${m[3]}/${m[2]}/${m[1]}`;
-
  const d=new Date(v);
- return Number.isNaN(d.getTime())
-  ?'-'
-  :new Intl.DateTimeFormat('pt-BR',{timeZone:TZ}).format(d);
+ return Number.isNaN(d.getTime())?'-':new Intl.DateTimeFormat('pt-BR',{timeZone:TZ}).format(d);
 };
 
 const cicloFatura=(dia,mes,ano)=>{
@@ -76,7 +72,6 @@ const cicloFatura=(dia,mes,ano)=>{
  const diaF=Math.min(dia||1,28);
  const inicio=addMonths(setDate(ref,diaF),-1);
  const fim=subDays(setDate(ref,diaF),1);
-
  return{
   inicio:format(inicio,'yyyy-MM-dd'),
   fim:format(fim,'yyyy-MM-dd')
@@ -112,10 +107,12 @@ const Faturas=()=>{
 
  const[loading,setLoading]=useState(true);
  const[cartoes,setCartoes]=useState([]);
+ const[pessoas,setPessoas]=useState([]);
  const[lancamentos,setLancamentos]=useState([]);
  const[fatura,setFatura]=useState(null);
  const[pagamentos,setPagamentos]=useState([]);
  const[selectedCartao,setSelectedCartao]=useState('');
+ const[selectedPessoa,setSelectedPessoa]=useState('todas');
  const[selectedMonth,setSelectedMonth]=useState(String(new Date().getMonth()));
  const[selectedYear,setSelectedYear]=useState(String(new Date().getFullYear()));
  const[isPagamentoOpen,setIsPagamentoOpen]=useState(false);
@@ -139,13 +136,36 @@ const Faturas=()=>{
    .eq('user_id',user.id)
    .order('nome',{ascending:true});
 
-  if(error)return;
+  if(error){
+   console.error('Erro ao carregar cartões:',error);
+   return;
+  }
 
   if(mounted.current){
    setCartoes(data||[]);
    if(data?.length&&!selectedCartao)setSelectedCartao(data[0].id);
   }
  },[user,selectedCartao]);
+
+ const fetchPessoas=useCallback(async()=>{
+  if(!user){
+   setPessoas([]);
+   return;
+  }
+
+  const{data,error}=await supabase
+   .from('pessoal_cartao_usuarios')
+   .select('id,nome')
+   .eq('user_id',user.id)
+   .order('nome',{ascending:true});
+
+  if(error){
+   console.error('Erro ao carregar pessoas dos cartões:',error);
+   return;
+  }
+
+  if(mounted.current)setPessoas(data||[]);
+ },[user]);
 
  const cartao=useMemo(
   ()=>cartoes.find(c=>c.id===selectedCartao)||null,
@@ -187,29 +207,58 @@ const Faturas=()=>{
 
   if(!mounted.current)return;
 
+  if(lancRes.error){
+   console.error('Erro ao carregar lançamentos:',lancRes.error);
+   toast({title:'Erro',description:'Não foi possível carregar os lançamentos da fatura.',variant:'destructive'});
+  }
+
+  if(fatRes.error){
+   console.error('Erro ao carregar fatura:',fatRes.error);
+   toast({title:'Erro',description:'Não foi possível carregar os dados da fatura.',variant:'destructive'});
+  }
+
   setLancamentos(lancRes.data||[]);
   setFatura(fatRes.data||null);
 
   if(fatRes.data){
-   const{data:pags}=await supabase
+   const{data:pags,error:pagsError}=await supabase
     .from('pessoal_cartao_pagamentos')
     .select('*')
     .eq('fatura_id',fatRes.data.id)
     .order('data',{ascending:false});
 
+   if(pagsError)console.error('Erro ao carregar pagamentos:',pagsError);
    if(mounted.current)setPagamentos(pags||[]);
   }else{
    setPagamentos([]);
   }
 
-  setLoading(false);
- },[user,selectedCartao,ciclo,mes,ano]);
+  if(mounted.current)setLoading(false);
+ },[user,selectedCartao,ciclo,mes,ano,toast]);
 
  useEffect(()=>{fetchCartoes()},[fetchCartoes]);
+ useEffect(()=>{fetchPessoas()},[fetchPessoas]);
 
  useEffect(()=>{
   if(selectedCartao)fetchDados();
  },[selectedCartao,selectedMonth,selectedYear,fetchDados]);
+
+ // O filtro por pessoa afeta somente os lançamentos exibidos.
+ const lancamentosFiltrados=useMemo(()=>{
+  if(selectedPessoa==='todas')return lancamentos;
+
+  if(selectedPessoa==='sem_responsavel'){
+   return lancamentos.filter(l=>!l.responsavel_id);
+  }
+
+  return lancamentos.filter(l=>String(l.responsavel_id||'')===selectedPessoa);
+ },[lancamentos,selectedPessoa]);
+
+ const nomePessoaSelecionada=useMemo(()=>{
+  if(selectedPessoa==='todas')return'Todas as pessoas';
+  if(selectedPessoa==='sem_responsavel')return'Sem responsável';
+  return pessoas.find(p=>String(p.id)===selectedPessoa)?.nome||'Pessoa selecionada';
+ },[selectedPessoa,pessoas]);
 
  const totalFaturaCentavos=lancamentos.reduce(
   (total,l)=>total+toCents(
@@ -442,18 +491,21 @@ const Faturas=()=>{
  };
 
  const handleExport=()=>{
-  if(!lancamentos.length&&!pagamentos.length){
+  const exportarPagamentos=selectedPessoa==='todas';
+
+  if(!lancamentosFiltrados.length&&(!exportarPagamentos||!pagamentos.length)){
    toast({
     title:'Aviso',
-    description:'Nenhum dado para exportar.',
+    description:'Nenhum dado para exportar com o filtro selecionado.',
     variant:'destructive'
    });
    return;
   }
 
   const dados=[
-   ...lancamentos.map(l=>({
+   ...lancamentosFiltrados.map(l=>({
     Tipo:'Lançamento',
+    Pessoa:pessoas.find(p=>String(p.id)===String(l.responsavel_id))?.nome||'Sem responsável',
     Data:brDate(l.data),
     Descrição:l.descricao||'-',
     Parcela:`${l.parcela_atual||0}/${l.parcelas||0}`,
@@ -461,19 +513,21 @@ const Faturas=()=>{
      getInstallmentValue(l.valor,l.parcelas,l.parcela_atual)
     )
    })),
-   ...pagamentos.map(p=>({
+   ...(exportarPagamentos?pagamentos.map(p=>({
     Tipo:'Pagamento',
+    Pessoa:'Fatura geral',
     Data:brDate(p.data),
     Descrição:p.forma_pagamento||'-',
     Parcela:'-',
     Valor:roundMoney(p.valor)
-   }))
+   })):[])
   ];
 
   exportToExcel(dados,'Fatura_Cartao','Fatura');
  };
 
  const status=fatura?.status||'aberta';
+ const podeExportar=lancamentosFiltrados.length>0||(selectedPessoa==='todas'&&pagamentos.length>0);
 
  return(
   <div className="dark-pessoal space-y-4">
@@ -497,7 +551,7 @@ const Faturas=()=>{
      <Button
       variant="outline"
       onClick={handleExport}
-      disabled={!lancamentos.length&&!pagamentos.length}
+      disabled={!podeExportar}
      >
       <Download className="mr-2 h-4 w-4"/>
       Exportar
@@ -524,16 +578,12 @@ const Faturas=()=>{
    ):(
     <>
      <Card className="border-border bg-card/80">
-      <CardContent className="grid gap-4 p-4 md:grid-cols-4">
+      <CardContent className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-5">
 
        <div className="space-y-2">
         <Label className="text-xs">Cartão</Label>
-
         <Select value={selectedCartao} onValueChange={setSelectedCartao}>
-         <SelectTrigger className="bg-input">
-          <SelectValue/>
-         </SelectTrigger>
-
+         <SelectTrigger className="bg-input"><SelectValue/></SelectTrigger>
          <SelectContent className="dark-pessoal border-border bg-card">
           {cartoes.map(c=>(
            <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
@@ -544,12 +594,8 @@ const Faturas=()=>{
 
        <div className="space-y-2">
         <Label className="text-xs">Mês</Label>
-
         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-         <SelectTrigger className="bg-input">
-          <SelectValue/>
-         </SelectTrigger>
-
+         <SelectTrigger className="bg-input"><SelectValue/></SelectTrigger>
          <SelectContent className="dark-pessoal border-border bg-card">
           {meses.map(i=>(
            <SelectItem key={i} value={String(i)}>
@@ -562,16 +608,28 @@ const Faturas=()=>{
 
        <div className="space-y-2">
         <Label className="text-xs">Ano</Label>
-
         <Select value={selectedYear} onValueChange={setSelectedYear}>
-         <SelectTrigger className="bg-input">
-          <SelectValue/>
-         </SelectTrigger>
-
+         <SelectTrigger className="bg-input"><SelectValue/></SelectTrigger>
          <SelectContent className="dark-pessoal border-border bg-card">
           {anos.map(y=>(
            <SelectItem key={y} value={String(y)}>{y}</SelectItem>
           ))}
+         </SelectContent>
+        </Select>
+       </div>
+
+       <div className="space-y-2">
+        <Label className="text-xs">Pessoa</Label>
+        <Select value={selectedPessoa} onValueChange={setSelectedPessoa}>
+         <SelectTrigger className="bg-input">
+          <SelectValue placeholder="Todas as pessoas"/>
+         </SelectTrigger>
+         <SelectContent className="dark-pessoal border-border bg-card">
+          <SelectItem value="todas">Todas as pessoas</SelectItem>
+          {pessoas.map(p=>(
+           <SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>
+          ))}
+          <SelectItem value="sem_responsavel">Sem responsável</SelectItem>
          </SelectContent>
         </Select>
        </div>
@@ -588,19 +646,23 @@ const Faturas=()=>{
       </CardContent>
      </Card>
 
+     {selectedPessoa!=='todas'&&(
+      <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-muted-foreground">
+       Exibindo: <strong className="text-foreground">{nomePessoaSelecionada}</strong>.
+       O filtro afeta a lista e a exportação dos lançamentos. O total, o saldo, os pagamentos e o fechamento continuam considerando a fatura inteira.
+      </div>
+     )}
+
      {cartao&&ciclo&&(
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/50 px-4 py-3 text-sm text-muted-foreground">
        <CalendarClock className="h-4 w-4 text-[hsl(var(--neon-pessoal))]"/>
-
        <span>
         Ciclo:
         <strong className="text-foreground">
          {brDate(ciclo.inicio)} a {brDate(ciclo.fim)}
         </strong>
        </span>
-
        <span className="text-border">•</span>
-
        <span>
         Vencimento:
         <strong className="text-foreground">{brDate(dataVencimento)}</strong>
@@ -615,12 +677,8 @@ const Faturas=()=>{
 
       <Card className="border-border bg-card">
        <CardContent className="flex h-full flex-col justify-center gap-2 p-4">
-
         {status==='aberta'&&(
-         <Button
-          className="w-full bg-blue-600 text-white hover:bg-blue-700"
-          onClick={fecharFatura}
-         >
+         <Button className="w-full bg-blue-600 text-white hover:bg-blue-700" onClick={fecharFatura}>
           <Lock className="mr-2 h-4 w-4"/>
           Fechar Fatura
          </Button>
@@ -628,17 +686,11 @@ const Faturas=()=>{
 
         {status==='fechada'&&(
          <>
-          <Button
-           className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
-           onClick={openPagamento}
-          >
+          <Button className="w-full bg-emerald-600 text-white hover:bg-emerald-700" onClick={openPagamento}>
            <DollarSign className="mr-2 h-4 w-4"/>
            Registrar Pagamento
           </Button>
-
-          <Button variant="outline" className="w-full" onClick={reabrir}>
-           Reabrir Fatura
-          </Button>
+          <Button variant="outline" className="w-full" onClick={reabrir}>Reabrir Fatura</Button>
          </>
         )}
 
@@ -648,13 +700,9 @@ const Faturas=()=>{
            <Plus className="mr-2 h-4 w-4"/>
            Novo Pagamento
           </Button>
-
-          <Button variant="outline" className="w-full" onClick={reabrir}>
-           Reabrir Fatura
-          </Button>
+          <Button variant="outline" className="w-full" onClick={reabrir}>Reabrir Fatura</Button>
          </>
         )}
-
        </CardContent>
       </Card>
      </div>
@@ -680,24 +728,20 @@ const Faturas=()=>{
           <TableBody>
            {loading?(
             <TableRow>
-             <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-              Carregando...
-             </TableCell>
+             <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Carregando...</TableCell>
             </TableRow>
-           ):lancamentos.length===0?(
+           ):lancamentosFiltrados.length===0?(
             <TableRow>
              <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-              Nenhum lançamento no ciclo.
+              {selectedPessoa==='todas'?'Nenhum lançamento no ciclo.':'Nenhum lançamento encontrado para essa pessoa neste ciclo.'}
              </TableCell>
             </TableRow>
            ):(
-            lancamentos.map(l=>(
+            lancamentosFiltrados.map(l=>(
              <TableRow key={l.id} className="hover:bg-muted/50">
               <TableCell className="font-medium">{l.descricao}</TableCell>
               <TableCell className="text-sm">{brDate(l.data)}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-               {l.parcela_atual}/{l.parcelas}
-              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">{l.parcela_atual}/{l.parcelas}</TableCell>
               <TableCell className="text-right font-semibold text-red-400">
                {moeda(getInstallmentValue(l.valor,l.parcelas,l.parcela_atual))}
               </TableCell>
@@ -738,19 +782,10 @@ const Faturas=()=>{
             pagamentos.map(p=>(
              <TableRow key={p.id} className="hover:bg-muted/50">
               <TableCell className="text-sm">{brDate(p.data)}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-               {p.forma_pagamento||'—'}
-              </TableCell>
-              <TableCell className="text-right font-semibold text-emerald-400">
-               {moeda(p.valor)}
-              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">{p.forma_pagamento||'—'}</TableCell>
+              <TableCell className="text-right font-semibold text-emerald-400">{moeda(p.valor)}</TableCell>
               <TableCell className="text-center">
-               <Button
-                variant="ghost"
-                size="icon"
-                className="text-destructive hover:bg-destructive/10"
-                onClick={()=>excluirPagamento(p.id)}
-               >
+               <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={()=>excluirPagamento(p.id)}>
                 <Trash2 className="h-4 w-4"/>
                </Button>
               </TableCell>
@@ -775,23 +810,14 @@ const Faturas=()=>{
     theme="green"
     footer={
      <>
-      <Button
-       type="button"
-       variant="outline"
-       onClick={closePagamento}
-       className="h-11 rounded-xl border-border px-5"
-      >
+      <Button type="button" variant="outline" onClick={closePagamento} className="h-11 rounded-xl border-border px-5">
        Cancelar
       </Button>
-
       <Button
        type="button"
        onClick={salvarPagamento}
        className="h-11 rounded-xl px-6 font-semibold text-white hover:opacity-90"
-       style={{
-        background:GREEN,
-        boxShadow:'0 0 18px hsl(142 71% 45% / .22)'
-       }}
+       style={{background:GREEN,boxShadow:'0 0 18px hsl(142 71% 45% / .22)'}}
       >
        Salvar Pagamento
       </Button>
@@ -799,10 +825,8 @@ const Faturas=()=>{
     }
    >
     <div className="space-y-5">
-
      <div className="space-y-2">
       <Label>Valor</Label>
-
       <Input
        type="text"
        inputMode="numeric"
@@ -815,7 +839,6 @@ const Faturas=()=>{
 
      <div className="space-y-2">
       <Label>Data</Label>
-
       <Input
        type="date"
        value={pagForm.data}
@@ -826,15 +849,8 @@ const Faturas=()=>{
 
      <div className="space-y-2">
       <Label>Forma de Pagamento</Label>
-
-      <Select
-       value={pagForm.forma_pagamento}
-       onValueChange={v=>setPagForm(p=>({...p,forma_pagamento:v}))}
-      >
-       <SelectTrigger className="h-11 rounded-xl bg-input">
-        <SelectValue/>
-       </SelectTrigger>
-
+      <Select value={pagForm.forma_pagamento} onValueChange={v=>setPagForm(p=>({...p,forma_pagamento:v}))}>
+       <SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue/></SelectTrigger>
        <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
         <SelectItem value="Pix">Pix</SelectItem>
         <SelectItem value="Débito">Débito</SelectItem>
@@ -846,14 +862,10 @@ const Faturas=()=>{
 
      <div className="rounded-xl border border-red-500/15 bg-red-500/5 p-3 text-sm text-muted-foreground">
       Saldo restante:
-      <span className="ml-1 font-semibold text-red-400">
-       {moeda(saldoRestante)}
-      </span>
+      <span className="ml-1 font-semibold text-red-400">{moeda(saldoRestante)}</span>
      </div>
-
     </div>
    </ModalLancamentoPadrao>
-
   </div>
  );
 };
