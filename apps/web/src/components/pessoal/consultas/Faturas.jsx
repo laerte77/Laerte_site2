@@ -20,7 +20,7 @@ import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 const TZ='America/Sao_Paulo';
 const GREEN='hsl(142 71% 45%)';
 const meses=Array.from({length:12},(_,i)=>i);
-const anos=[2024,2025,2026];
+const anos=[2024,2025,2026,2027];
 
 const toCents=v=>Math.round((Number(v)||0)*100);
 const fromCents=v=>(Number(v)||0)/100;
@@ -223,7 +223,7 @@ const Faturas=()=>{
   if(fatRes.data){
    const{data:pags,error:pagsError}=await supabase
     .from('pessoal_cartao_pagamentos')
-    .select('*')
+    .select('id,user_id,fatura_id,valor,data,forma_pagamento,despesa_id,responsavel_id')
     .eq('fatura_id',fatRes.data.id)
     .order('data',{ascending:false});
 
@@ -301,6 +301,13 @@ const Faturas=()=>{
    return;
   }
 
+  const faturaPaga=totalFaturaCentavos>0&&totalPagoCentavos>=totalFaturaCentavos;
+  const ultimaDataPagamento=pagamentos
+   .map(p=>p.data)
+   .filter(Boolean)
+   .sort()
+   .at(-1)||null;
+
   const payload={
    user_id:user.id,
    cartao_id:cartao.id,
@@ -309,7 +316,8 @@ const Faturas=()=>{
    data_fechamento:ciclo.fim,
    data_vencimento:dataVencimento,
    valor_total:totalFatura,
-   status:'fechada'
+   status:faturaPaga?'paga':'fechada',
+   data_pagamento:faturaPaga?ultimaDataPagamento:null
   };
 
   const r=fatura
@@ -330,7 +338,7 @@ const Faturas=()=>{
   }else{
    toast({
     title:'Sucesso',
-    description:'Fatura fechada.'
+    description:faturaPaga?'Fatura fechada e identificada como paga.':'Fatura fechada.'
    });
   }
 
@@ -344,6 +352,7 @@ const Faturas=()=>{
    .from('pessoal_faturas')
    .update({
     status:'aberta',
+    data_pagamento:null,
     updated_at:new Date().toISOString()
    })
    .eq('id',fatura.id);
@@ -409,37 +418,20 @@ const Faturas=()=>{
      fatura_id:fatura.id,
      valor,
      data:pagForm.data,
-     forma_pagamento:pagForm.forma_pagamento
+     forma_pagamento:pagForm.forma_pagamento,
+     despesa_id:null,
+     responsavel_id:null
     });
 
    if(error)throw error;
 
-   const novoTotalCentavos=totalPagoCentavos+valorCentavos;
-   const novoStatus=novoTotalCentavos>=totalFaturaCentavos?'paga':'fechada';
-
-   const updatePayload={
-    status:novoStatus,
-    updated_at:new Date().toISOString()
-   };
-
-   if(novoStatus==='paga'){
-    updatePayload.data_pagamento=pagForm.data;
-   }
-
-   const{error:updateError}=await supabase
-    .from('pessoal_faturas')
-    .update(updatePayload)
-    .eq('id',fatura.id);
-
-   if(updateError)throw updateError;
-
    toast({
     title:'Sucesso',
-    description:'Pagamento registrado com sucesso.'
+    description:'Pagamento manual registrado com sucesso.'
    });
 
-   setPagForm(initialPagamento());
-   fetchDados();
+   closePagamento();
+   await fetchDados();
   }catch(error){
    toast({
     title:'Erro',
@@ -450,41 +442,38 @@ const Faturas=()=>{
  };
 
  const excluirPagamento=async id=>{
-  const{error}=await supabase
-   .from('pessoal_cartao_pagamentos')
-   .delete()
-   .eq('id',id);
+  const pagamento=pagamentos.find(p=>p.id===id);
 
-  if(error){
+  if(!pagamento)return;
+
+  if(pagamento.despesa_id){
    toast({
-    title:'Erro',
-    description:'Falha ao remover pagamento.',
+    title:'Pagamento vinculado',
+    description:'Este pagamento veio de Despesas. Edite ou exclua a despesa de origem para manter a sincronização.',
     variant:'destructive'
    });
    return;
   }
 
-  if(fatura){
-   const pagamento=pagamentos.find(p=>p.id===id);
+  const{error}=await supabase
+   .from('pessoal_cartao_pagamentos')
+   .delete()
+   .eq('id',id)
+   .eq('user_id',user.id)
+   .is('despesa_id',null);
 
-   const novoTotalCentavos=Math.max(
-    0,
-    totalPagoCentavos-toCents(pagamento?.valor||0)
-   );
-
-   await supabase
-    .from('pessoal_faturas')
-    .update({
-     status:novoTotalCentavos>=totalFaturaCentavos?'paga':'fechada',
-     data_pagamento:null,
-     updated_at:new Date().toISOString()
-    })
-    .eq('id',fatura.id);
+  if(error){
+   toast({
+    title:'Erro',
+    description:'Falha ao remover pagamento manual.',
+    variant:'destructive'
+   });
+   return;
   }
 
   toast({
    title:'Sucesso',
-   description:'Pagamento removido.'
+   description:'Pagamento manual removido. O status da fatura foi recalculado.'
   });
 
   fetchDados();
@@ -514,8 +503,10 @@ const Faturas=()=>{
     )
    })),
    ...(exportarPagamentos?pagamentos.map(p=>({
-    Tipo:'Pagamento',
-    Pessoa:'Fatura geral',
+    Tipo:p.despesa_id?'Pagamento via Despesas':'Pagamento manual',
+    Pessoa:p.responsavel_id
+     ?pessoas.find(x=>String(x.id)===String(p.responsavel_id))?.nome||'Pessoa removida'
+     :'Fatura geral',
     Data:brDate(p.data),
     Descrição:p.forma_pagamento||'-',
     Parcela:'-',
@@ -765,7 +756,8 @@ const Faturas=()=>{
           <TableHeader>
            <TableRow>
             <TableHead>Data</TableHead>
-            <TableHead>Forma</TableHead>
+            <TableHead>Responsável</TableHead>
+            <TableHead>Origem / Forma</TableHead>
             <TableHead className="text-right">Valor</TableHead>
             <TableHead className="text-center">Ações</TableHead>
            </TableRow>
@@ -774,23 +766,39 @@ const Faturas=()=>{
           <TableBody>
            {pagamentos.length===0?(
             <TableRow>
-             <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+             <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
               Nenhum pagamento registrado.
              </TableCell>
             </TableRow>
            ):(
-            pagamentos.map(p=>(
-             <TableRow key={p.id} className="hover:bg-muted/50">
-              <TableCell className="text-sm">{brDate(p.data)}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">{p.forma_pagamento||'—'}</TableCell>
-              <TableCell className="text-right font-semibold text-emerald-400">{moeda(p.valor)}</TableCell>
-              <TableCell className="text-center">
-               <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={()=>excluirPagamento(p.id)}>
-                <Trash2 className="h-4 w-4"/>
-               </Button>
-              </TableCell>
-             </TableRow>
-            ))
+            pagamentos.map(p=>{
+             const pessoa=p.responsavel_id
+              ?pessoas.find(x=>String(x.id)===String(p.responsavel_id))?.nome||'Pessoa removida'
+              :'Fatura geral';
+
+             return(
+              <TableRow key={p.id} className="hover:bg-muted/50">
+               <TableCell className="text-sm">{brDate(p.data)}</TableCell>
+               <TableCell className="text-sm">{pessoa}</TableCell>
+               <TableCell className="text-sm text-muted-foreground">
+                <div>{p.forma_pagamento||'—'}</div>
+                <div className="text-[11px]">{p.despesa_id?'Origem: Despesas':'Origem: Manual'}</div>
+               </TableCell>
+               <TableCell className="text-right font-semibold text-emerald-400">{moeda(p.valor)}</TableCell>
+               <TableCell className="text-center">
+                {p.despesa_id?(
+                 <Button variant="ghost" size="icon" disabled title="Edite ou exclua a despesa de origem.">
+                  <Lock className="h-4 w-4 text-muted-foreground"/>
+                 </Button>
+                ):(
+                 <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={()=>excluirPagamento(p.id)} title="Excluir pagamento manual">
+                  <Trash2 className="h-4 w-4"/>
+                 </Button>
+                )}
+               </TableCell>
+              </TableRow>
+             );
+            })
            )}
           </TableBody>
          </Table>
@@ -805,7 +813,7 @@ const Faturas=()=>{
     open={isPagamentoOpen}
     onClose={closePagamento}
     title="Registrar Pagamento"
-    description="Registre um pagamento da fatura atual."
+    description="Registre um pagamento manual da fatura atual. Pagamentos lançados em Despesas são sincronizados automaticamente."
     icon={WalletCards}
     theme="green"
     footer={
