@@ -4,7 +4,7 @@ import { format, parseISO, isBefore, isToday, endOfMonth, setDate } from 'date-f
 import { competenciaFatura } from '@/lib/cartaoCompetencia';
 import { getInstallmentValue } from '@/lib/cartaoParcelas';
 
-// Normaliza texto para comparação: lowercase, sem acentos, sem espaços extras.
+// Normaliza texto para comparação.
 const normalize = (str) => {
   if (!str) return '';
   return String(str)
@@ -19,19 +19,21 @@ export function useContasMesData(userId, month, year) {
   const [contasMes, setContasMes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [pessoas, setPessoas] = useState([]);
 
   const fetchData = useCallback(async () => {
     if (!userId) return;
+
     setLoading(true);
     setError(null);
 
     try {
-      // `month` chega 1-indexado (Janeiro = 1). Internamente usamos 0-indexado.
+      // O mês recebido é 1-indexado.
       const target0 = month - 1;
       const startDate = format(new Date(year, target0, 1), 'yyyy-MM-dd');
       const endDate = format(endOfMonth(new Date(year, target0, 1)), 'yyyy-MM-dd');
 
-      // 1) Despesas previstas (previsto) — filtradas pelo vencimento no mês/ano
+      // 1. Despesas previstas.
       const { data: previstas, error: previstasError } = await supabase
         .from('despesas_previstas')
         .select('*')
@@ -41,7 +43,7 @@ export function useContasMesData(userId, month, year) {
 
       if (previstasError) throw previstasError;
 
-      // 2) Despesas realizadas (dinheiro/débito/crédito) — banco de despesas
+      // 2. Despesas realizadas.
       const { data: reais, error: reaisError } = await supabase
         .from('despesas')
         .select('*')
@@ -51,7 +53,7 @@ export function useContasMesData(userId, month, year) {
 
       if (reaisError) throw reaisError;
 
-      // 3) Pagamentos de fatura do cartão de crédito — banco de cartão de crédito.
+      // 3. Pagamentos de cartão.
       const { data: pagamentos, error: pagamentosError } = await supabase
         .from('pessoal_cartao_pagamentos')
         .select('*')
@@ -61,19 +63,22 @@ export function useContasMesData(userId, month, year) {
 
       if (pagamentosError) throw pagamentosError;
 
-      // 4) Cartões de crédito (todos) — para dia de fechamento/vencimento e nomes.
+      // 4. Cartões.
       const { data: cartoes, error: cartoesError } = await supabase
         .from('pessoal_cartoes')
         .select('id, nome, dia_fechamento, dia_vencimento')
         .eq('user_id', userId);
 
       if (cartoesError) throw cartoesError;
-      const cartoesMap = Object.fromEntries((cartoes || []).map((c) => [c.id, c]));
 
-      // 5) Lançamentos de compra do cartão — janela ampliada (mês anterior ao próximo)
-      // para abranger compras cuja competência (pelo dia de fechamento) cai no mês alvo.
+      const cartoesMap = Object.fromEntries(
+        (cartoes || []).map(c => [c.id, c])
+      );
+
+      // 5. Lançamentos de compras de cartão.
       const lancStart = format(new Date(year, target0 - 1, 1), 'yyyy-MM-dd');
       const lancEnd = format(new Date(year, target0 + 2, 0), 'yyyy-MM-dd');
+
       const { data: lancamentos, error: lancamentosError } = await supabase
         .from('pessoal_cartao_lancamentos')
         .select('*')
@@ -83,16 +88,23 @@ export function useContasMesData(userId, month, year) {
 
       if (lancamentosError) throw lancamentosError;
 
-      // 6) Pessoas do cartão (responsáveis) — para exibir o titular/responsável na descrição.
+      // 6. Pessoas cadastradas.
       const { data: usuarios, error: usuariosError } = await supabase
         .from('pessoal_cartao_usuarios')
         .select('id, nome')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('nome', { ascending: true });
 
       if (usuariosError) throw usuariosError;
-      const usuariosMap = Object.fromEntries((usuarios || []).map((u) => [u.id, u]));
 
-      // 7) Faturas da competência alvo (mês 0-indexado) — para status/vencimento.
+      const listaPessoas = usuarios || [];
+      const usuariosMap = Object.fromEntries(
+        listaPessoas.map(u => [u.id, u])
+      );
+
+      setPessoas(listaPessoas);
+
+      // 7. Faturas da competência.
       const { data: faturasComp, error: faturasCompError } = await supabase
         .from('pessoal_faturas')
         .select('*')
@@ -101,100 +113,155 @@ export function useContasMesData(userId, month, year) {
         .eq('ano', year);
 
       if (faturasCompError) throw faturasCompError;
-      const faturasCompMap = Object.fromEntries((faturasComp || []).map((f) => [f.cartao_id, f]));
 
-      // 8) Pagamentos das faturas da competência alvo — para calcular o realizado.
-      const faturaCompIds = (faturasComp || []).map((f) => f.id).filter(Boolean);
+      const faturasCompMap = Object.fromEntries(
+        (faturasComp || []).map(f => [f.cartao_id, f])
+      );
+
+      // 8. Pagamentos das faturas da competência.
+      const faturaCompIds = (faturasComp || [])
+        .map(f => f.id)
+        .filter(Boolean);
+
       const pagoPorFaturaComp = {};
+
       if (faturaCompIds.length > 0) {
-        const { data: pagsComp } = await supabase
+        const { data: pagsComp, error: pagsCompError } = await supabase
           .from('pessoal_cartao_pagamentos')
           .select('fatura_id, valor')
           .in('fatura_id', faturaCompIds);
-        (pagsComp || []).forEach((p) => {
-          pagoPorFaturaComp[p.fatura_id] = (pagoPorFaturaComp[p.fatura_id] || 0) + (Number(p.valor) || 0);
+
+        if (pagsCompError) throw pagsCompError;
+
+        (pagsComp || []).forEach(p => {
+          pagoPorFaturaComp[p.fatura_id] =
+            (pagoPorFaturaComp[p.fatura_id] || 0) +
+            (Number(p.valor) || 0);
         });
       }
 
-      // Estruturas auxiliares para casar pagamentos com cartões/faturas (fluxo anterior)
+      // Estruturas auxiliares para pagamentos por fatura.
       let faturasMap = {};
       let cartoesPagamentosMap = {};
 
       if (pagamentos && pagamentos.length > 0) {
-        const faturaIds = [...new Set(pagamentos.map((p) => p.fatura_id).filter(Boolean))];
+        const faturaIds = [
+          ...new Set(pagamentos.map(p => p.fatura_id).filter(Boolean))
+        ];
+
         if (faturaIds.length > 0) {
-          const { data: faturas } = await supabase
+          const { data: faturas, error: faturasError } = await supabase
             .from('pessoal_faturas')
             .select('id, cartao_id, mes, ano, data_vencimento, status, data_pagamento')
             .in('id', faturaIds);
-          faturasMap = Object.fromEntries((faturas || []).map((f) => [f.id, f]));
 
-          const cartaoIds = [...new Set((faturas || []).map((f) => f.cartao_id).filter(Boolean))];
+          if (faturasError) throw faturasError;
+
+          faturasMap = Object.fromEntries(
+            (faturas || []).map(f => [f.id, f])
+          );
+
+          const cartaoIds = [
+            ...new Set((faturas || []).map(f => f.cartao_id).filter(Boolean))
+          ];
+
           if (cartaoIds.length > 0) {
-            const { data: cartoesPag } = await supabase
+            const { data: cartoesPag, error: cartoesPagError } = await supabase
               .from('pessoal_cartoes')
               .select('id, nome, bandeira')
               .in('id', cartaoIds);
-            cartoesPagamentosMap = Object.fromEntries((cartoesPag || []).map((c) => [c.id, c]));
+
+            if (cartoesPagError) throw cartoesPagError;
+
+            cartoesPagamentosMap = Object.fromEntries(
+              (cartoesPag || []).map(c => [c.id, c])
+            );
           }
         }
       }
 
-      // Soma dos pagamentos por fatura (uma fatura pode ter vários pagamentos parciais)
+      // Soma dos pagamentos por fatura.
       const pagamentosPorFatura = {};
-      pagamentos.forEach((p) => {
+
+      (pagamentos || []).forEach(p => {
         if (!p.fatura_id) return;
-        pagamentosPorFatura[p.fatura_id] = (pagamentosPorFatura[p.fatura_id] || 0) + (Number(p.valor) || 0);
+
+        pagamentosPorFatura[p.fatura_id] =
+          (pagamentosPorFatura[p.fatura_id] || 0) +
+          (Number(p.valor) || 0);
       });
 
-      // Constrói lista de "realizados de cartão" (pagamento de fatura) com descrição
-      // baseada no nome do cartão, para casar com despesas previstas por descrição.
-      const realizadosCartao = Object.entries(pagamentosPorFatura).map(([faturaId, valor]) => {
-        const fatura = faturasMap[faturaId] || {};
-        const cartao = cartoesPagamentosMap[fatura.cartao_id] || {};
-        const nomeCartao = cartao.nome || 'Cartão';
-        const refMesAno = fatura.mes && fatura.ano ? `${fatura.mes}/${fatura.ano}` : '';
-        return {
-          id: `pag-${faturaId}`,
-          fatura_id: faturaId,
-          cartao_id: fatura.cartao_id,
-          nome_cartao: nomeCartao,
-          nome_cartao_norm: normalize(nomeCartao),
-          ref_mes_ano: refMesAno,
-          valor: valor,
-          data_vencimento_fatura: fatura.data_vencimento || null,
-          fatura_status: fatura.status || null,
-        };
-      });
+      const realizadosCartao = Object.entries(pagamentosPorFatura).map(
+        ([faturaId, valor]) => {
+          const fatura = faturasMap[faturaId] || {};
+          const cartao = cartoesPagamentosMap[fatura.cartao_id] || {};
+          const nomeCartao = cartao.nome || 'Cartão';
 
-      // ---- Compras do cartão como compromisso/previsto (competência pelo fechamento) ----
-      // Filtra lançamentos cuja competência (dia de fechamento) cai no mês alvo.
-      const compLancamentos = (lancamentos || []).filter((l) => {
+          const refMesAno =
+            fatura.mes && fatura.ano
+              ? `${fatura.mes}/${fatura.ano}`
+              : '';
+
+          return {
+            id: `pag-${faturaId}`,
+            fatura_id: faturaId,
+            cartao_id: fatura.cartao_id,
+            nome_cartao: nomeCartao,
+            nome_cartao_norm: normalize(nomeCartao),
+            ref_mes_ano: refMesAno,
+            valor,
+            data_vencimento_fatura: fatura.data_vencimento || null,
+            fatura_status: fatura.status || null
+          };
+        }
+      );
+
+      // Compras do cartão por competência.
+      const compLancamentos = (lancamentos || []).filter(l => {
         const cartao = cartoesMap[l.cartao_id];
         if (!cartao) return false;
-        const comp = competenciaFatura(l.data, cartao.dia_fechamento);
+
+        const comp = competenciaFatura(
+          l.data,
+          cartao.dia_fechamento
+        );
+
         return !!comp && comp.mes === target0 && comp.ano === year;
       });
 
-      // Conjunto de cartões que possuem compras neste mês — para evitar duplicidade
-      // entre a compra (previsto) e o pagamento da fatura (realizado) no fluxo manual.
-      const cartoesComCompras = new Set(compLancamentos.map((l) => l.cartao_id));
+      const cartoesComCompras = new Set(
+        compLancamentos.map(l => l.cartao_id)
+      );
 
-      // Soma do previsto por cartão na competência (para ratear pagamentos parciais).
+      // Total previsto por cartão para rateio de pagamentos parciais.
       const sumPrevistoPorCartao = {};
-      compLancamentos.forEach((l) => {
-        const v = getInstallmentValue(l.valor, l.parcelas, l.parcela_atual);
-        sumPrevistoPorCartao[l.cartao_id] = (sumPrevistoPorCartao[l.cartao_id] || 0) + v;
+
+      compLancamentos.forEach(l => {
+        const v = getInstallmentValue(
+          l.valor,
+          l.parcelas,
+          l.parcela_atual
+        );
+
+        sumPrevistoPorCartao[l.cartao_id] =
+          (sumPrevistoPorCartao[l.cartao_id] || 0) + v;
       });
 
-      const entradasCartao = compLancamentos.map((l) => {
+      // Compras individuais de cartão.
+      const entradasCartao = compLancamentos.map(l => {
         const cartao = cartoesMap[l.cartao_id];
         const fatura = faturasCompMap[l.cartao_id];
-        const totalPago = fatura ? pagoPorFaturaComp[fatura.id] || 0 : 0;
-        const installmentValue = getInstallmentValue(l.valor, l.parcelas, l.parcela_atual);
 
-        // A compra individual não reduz o saldo realizado; somente o pagamento da
-        // fatura representa a saída de caixa. O realizado vem do status da fatura.
+        const totalPago = fatura
+          ? pagoPorFaturaComp[fatura.id] || 0
+          : 0;
+
+        const installmentValue = getInstallmentValue(
+          l.valor,
+          l.parcelas,
+          l.parcela_atual
+        );
+
         let valorReal = 0;
         let status = 'Pendente';
 
@@ -202,45 +269,62 @@ export function useContasMesData(userId, month, year) {
           valorReal = installmentValue;
           status = 'Pago';
         } else if (fatura && totalPago > 0) {
-          const sumPrev = sumPrevistoPorCartao[l.cartao_id] || installmentValue;
-          const ratio = sumPrev > 0 ? Math.min(1, totalPago / sumPrev) : 0;
+          const sumPrev =
+            sumPrevistoPorCartao[l.cartao_id] || installmentValue;
+
+          const ratio = sumPrev > 0
+            ? Math.min(1, totalPago / sumPrev)
+            : 0;
+
           valorReal = installmentValue * ratio;
+
           if (valorReal >= installmentValue) status = 'Pago';
           else if (valorReal > 0) status = 'Pago Parcialmente';
           else status = 'Pendente';
         }
 
-        // Data de vencimento: da fatura fechada, senão do dia de vencimento do cartão
-        // na competência, senão a própria data da compra.
         let dataVencimento = fatura?.data_vencimento || null;
+
         if (!dataVencimento && cartao?.dia_vencimento) {
           try {
             dataVencimento = format(
-              setDate(new Date(year, target0, 1), Math.min(Math.max(cartao.dia_vencimento, 1), 28)),
+              setDate(
+                new Date(year, target0, 1),
+                Math.min(Math.max(cartao.dia_vencimento, 1), 28)
+              ),
               'yyyy-MM-dd'
             );
           } catch {
             dataVencimento = l.data;
           }
         }
+
         if (!dataVencimento) dataVencimento = l.data;
 
-        // Atrasado: sem realizado e vencimento no passado.
         if (valorReal === 0 && status === 'Pendente') {
           try {
             const venc = parseISO(dataVencimento);
-            if (isBefore(venc, new Date()) && !isToday(venc)) status = 'Atrasado';
+            if (isBefore(venc, new Date()) && !isToday(venc)) {
+              status = 'Atrasado';
+            }
           } catch {
-            /* ignora data inválida */
+            // Ignora data inválida.
           }
         }
 
-        const responsavelNome = l.responsavel_id ? usuariosMap[l.responsavel_id]?.nome || '' : '';
-        const desc = `${l.descricao} (${l.parcela_atual}/${l.parcelas})${responsavelNome ? ' — ' + responsavelNome : ''}`;
+        const responsavelNome = l.responsavel_id
+          ? usuariosMap[l.responsavel_id]?.nome || ''
+          : '';
+
+        const desc =
+          `${l.descricao} (${l.parcela_atual}/${l.parcelas})` +
+          `${responsavelNome ? ' — ' + responsavelNome : ''}`;
 
         return {
           id: `cartao-${l.id}`,
           real_id: l.id,
+          responsavel_id: l.responsavel_id || null,
+          responsavel_nome: responsavelNome || null,
           data_vencimento: dataVencimento,
           descricao: desc,
           categoria: 'Cartão de Crédito',
@@ -250,52 +334,62 @@ export function useContasMesData(userId, month, year) {
           status,
           origem_real: 'cartao',
           origem: 'cartao',
-          cartao_id: l.cartao_id,
+          cartao_id: l.cartao_id
         };
       });
 
-      const processedData = previstas.map((prevista) => {
+      // Despesas previstas e correspondências com despesas reais.
+      const processedData = (previstas || []).map(prevista => {
         const valorPrevisto = Number(prevista.valor) || 0;
         let valorReal = 0;
         let realDespesaId = null;
         let origemReal = null;
+        let responsavelId = prevista.responsavel_id || null;
 
         const descNorm = normalize(prevista.descricao);
 
-        // a) Casamento direto por matched_transaction_id (despesas)
+        // a) Correspondência direta pelo ID da despesa.
         if (prevista.matched_transaction_id) {
-          const matched = reais.find((r) => r.id === prevista.matched_transaction_id);
+          const matched = reais.find(
+            r => r.id === prevista.matched_transaction_id
+          );
+
           if (matched) {
             valorReal = Number(matched.valor) || 0;
             realDespesaId = matched.id;
             origemReal = 'despesa';
+            responsavelId = matched.responsavel_id || responsavelId;
           }
         }
 
-        // b) Casamento por descrição no banco de despesas
+        // b) Correspondência pela descrição.
         if (valorReal === 0) {
           const matched = reais.find(
-            (r) => normalize(r.despesa) === descNorm
+            r => normalize(r.despesa) === descNorm
           );
+
           if (matched) {
             valorReal = Number(matched.valor) || 0;
             realDespesaId = matched.id;
             origemReal = 'despesa';
+            responsavelId = matched.responsavel_id || responsavelId;
           }
         }
 
-        // c) Casamento por nome do cartão no banco de cartão de crédito (pagamento de fatura).
-        // Pula cartões que já possuem compras neste mês — essas compras já aparecem como
-        // previsto e o realizado delas vem do status da fatura, evitando duplicidade.
+        // c) Correspondência com pagamentos de cartão.
         if (valorReal === 0) {
-          const matchedCartao = realizadosCartao.find((rc) => {
+          const matchedCartao = realizadosCartao.find(rc => {
             if (!rc.nome_cartao_norm) return false;
-            if (rc.cartao_id && cartoesComCompras.has(rc.cartao_id)) return false;
+            if (rc.cartao_id && cartoesComCompras.has(rc.cartao_id)) {
+              return false;
+            }
+
             return (
               descNorm.includes(rc.nome_cartao_norm) ||
               rc.nome_cartao_norm.includes(descNorm)
             );
           });
+
           if (matchedCartao) {
             valorReal = matchedCartao.valor;
             realDespesaId = matchedCartao.id;
@@ -303,7 +397,7 @@ export function useContasMesData(userId, month, year) {
           }
         }
 
-        // d) Fallback: se marcada como Paga sem casamento, considera realizada
+        // d) Fallback para despesas marcadas como pagas.
         if (valorReal === 0 && prevista.status === 'Pago') {
           valorReal = valorPrevisto;
           origemReal = 'manual';
@@ -318,27 +412,41 @@ export function useContasMesData(userId, month, year) {
           calculatedStatus = 'Pago';
         } else if (valorReal > 0 && valorReal < valorPrevisto) {
           calculatedStatus = 'Pago Parcialmente';
-        } else if (valorReal === 0 && isBefore(vencimento, new Date()) && !isToday(vencimento)) {
+        } else if (
+          valorReal === 0 &&
+          isBefore(vencimento, new Date()) &&
+          !isToday(vencimento)
+        ) {
           calculatedStatus = 'Atrasado';
         }
 
         return {
           id: prevista.id,
           real_id: realDespesaId,
+          responsavel_id: responsavelId,
+          responsavel_nome: responsavelId
+            ? usuariosMap[responsavelId]?.nome || null
+            : null,
           data_vencimento: prevista.data_vencimento,
           descricao: prevista.descricao,
-          categoria: prevista.categoria || (origemReal === 'cartao' ? 'Cartão de Crédito' : 'Outros'),
+          categoria: prevista.categoria ||
+            (origemReal === 'cartao' ? 'Cartão de Crédito' : 'Outros'),
           valor_previsto: valorPrevisto,
           valor_real: valorReal,
-          diferenca: diferenca,
+          diferenca,
           status: calculatedStatus,
           origem_real: origemReal,
-          origem: 'prevista',
+          origem: 'prevista'
         };
       });
 
       const allData = [...processedData, ...entradasCartao];
-      allData.sort((a, b) => new Date(a.data_vencimento) - new Date(b.data_vencimento));
+
+      allData.sort(
+        (a, b) =>
+          new Date(a.data_vencimento) - new Date(b.data_vencimento)
+      );
+
       setContasMes(allData);
     } catch (err) {
       console.error('Error fetching contas mes:', err);
@@ -356,5 +464,11 @@ export function useContasMesData(userId, month, year) {
     fetchData();
   };
 
-  return { contasMes, loading, error, refetch };
+  return {
+    contasMes,
+    loading,
+    error,
+    refetch,
+    pessoas
+  };
 }
