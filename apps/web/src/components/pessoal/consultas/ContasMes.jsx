@@ -6,10 +6,7 @@ import{Table,TableBody,TableCell,TableFooter,TableHead,TableHeader,TableRow}from
 import{Button}from'@/components/ui/button';
 import{Badge}from'@/components/ui/badge';
 import{formatCurrency}from'@/lib/utils';
-import{
- AlertCircle,RefreshCw,CheckCircle2,Clock,AlertTriangle,
- Download,Receipt,DollarSign,TrendingUp,CalendarDays,RotateCcw
-}from'lucide-react';
+import{AlertCircle,RefreshCw,CheckCircle2,Clock,AlertTriangle, Download,Receipt,DollarSign,TrendingUp,CalendarDays,RotateCcw }from'lucide-react';
 import{format,parseISO}from'date-fns';
 import{useContasMesData}from'@/hooks/useContasMesData';
 import CategoryIcon from'@/components/CategoryIcon';
@@ -36,10 +33,11 @@ export default function ContasMes(){
  const[selectedYear,setSelectedYear]=useState(currentDate.getFullYear());
  const[selectedCategory,setSelectedCategory]=useState('Todas');
  const[selectedStatus,setSelectedStatus]=useState('Todos');
+ const[selectedPerson,setSelectedPerson]=useState('todas');
  const[selectedExpense,setSelectedExpense]=useState(null);
  const[isModalOpen,setIsModalOpen]=useState(false);
 
- const{contasMes,loading,error,refetch}=useContasMesData(
+ const{contasMes,loading,error,refetch,pessoas}=useContasMesData(
   user?.id,selectedMonth,selectedYear
  );
 
@@ -53,12 +51,21 @@ export default function ContasMes(){
   ...new Set(contasMes.map(item=>item.categoria).filter(Boolean))
  ],[contasMes]);
 
+ // Aplica mês, categoria, status e pessoa na consulta.
  const filteredData=useMemo(
   ()=>contasMes.filter(item=>
    (selectedCategory==='Todas'||item.categoria===selectedCategory)&&
-   (selectedStatus==='Todos'||item.status===selectedStatus)
+   (selectedStatus==='Todos'||item.status===selectedStatus)&&
+   (
+    selectedPerson==='todas'||
+    (
+     selectedPerson==='sem_responsavel'
+      ?!item.responsavel_id
+      :String(item.responsavel_id||'')===selectedPerson
+    )
+   )
   ),
-  [contasMes,selectedCategory,selectedStatus]
+  [contasMes,selectedCategory,selectedStatus,selectedPerson]
  );
 
  const subtotals=useMemo(
@@ -83,16 +90,19 @@ export default function ContasMes(){
      <CheckCircle2 className="mr-1 h-3 w-3"/>Pago
     </Badge>;
     break;
+
    case'Pago Parcialmente':
     content=<Badge className="bg-[hsl(var(--status-parcial))] text-white">
      <AlertTriangle className="mr-1 h-3 w-3"/>Parcial
     </Badge>;
     break;
+
    case'Atrasado':
     content=<Badge className="bg-[hsl(var(--status-atrasado))] text-white">
      <AlertCircle className="mr-1 h-3 w-3"/>Atrasado
     </Badge>;
     break;
+
    default:
     content=<Badge className="bg-[hsl(var(--status-pendente))] text-white">
      <Clock className="mr-1 h-3 w-3"/>Pendente
@@ -126,6 +136,7 @@ export default function ContasMes(){
    filteredData.map(item=>({
     'Data Vencimento':format(parseISO(item.data_vencimento),'dd/MM/yyyy'),
     'Descrição':item.descricao,
+    'Pessoa':item.responsavel_nome||'Sem responsável',
     'Categoria':item.categoria||'',
     'Valor Previsto':fromCents(toCents(item.valor_previsto)),
     'Valor Real':fromCents(toCents(item.valor_real)),
@@ -140,6 +151,7 @@ export default function ContasMes(){
  const limparFiltros=()=>{
   setSelectedCategory('Todas');
   setSelectedStatus('Todos');
+  setSelectedPerson('todas');
  };
 
  const stats=[
@@ -209,7 +221,7 @@ export default function ContasMes(){
 
    <Card className="border-border bg-card">
     <CardContent className="p-4">
-     <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+     <div className="flex flex-wrap items-end gap-3">
       <div className="space-y-1.5">
        <label className="text-xs font-medium text-muted-foreground">Mês</label>
        <Select
@@ -250,6 +262,22 @@ export default function ContasMes(){
          {categories.map(category=>(
           <SelectItem key={category} value={category}>{category}</SelectItem>
          ))}
+        </SelectContent>
+       </Select>
+      </div>
+
+      <div className="space-y-1.5">
+       <label className="text-xs font-medium text-muted-foreground">Pessoa</label>
+       <Select value={selectedPerson} onValueChange={setSelectedPerson}>
+        <SelectTrigger className="h-10 w-[190px] bg-input">
+         <SelectValue placeholder="Todas as pessoas"/>
+        </SelectTrigger>
+        <SelectContent>
+         <SelectItem value="todas">Todas as pessoas</SelectItem>
+         {pessoas.map(p=>(
+          <SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>
+         ))}
+         <SelectItem value="sem_responsavel">Sem responsável</SelectItem>
         </SelectContent>
        </Select>
       </div>
