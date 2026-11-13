@@ -149,22 +149,43 @@ export default function LancamentoServicos(){
   setSaving(true);
   try{
    let registrarRecebimentoNaEdicao=false;
+   let recebimentoParaSincronizar=null;
+
    if(editingId&&isOnline){
-    const{data:recebidos,error:recError}=await supabase.from('lm_recebimentos').select('valor').eq('lanc_servico_id',editingId).eq('user_id',user.id);
+    const{data:recebidos,error:recError}=await supabase.from('lm_recebimentos').select('*').eq('lanc_servico_id',editingId).eq('user_id',user.id);
     if(recError)throw recError;
-    const totalRecebido=(recebidos||[]).reduce((s,r)=>s+Number(r.valor||0),0);
+
+    const listaRecebimentos=recebidos||[];
+    const totalRecebido=listaRecebimentos.reduce((s,r)=>s+Number(r.valor||0),0);
     const servicoAtual=servicosLancados.find(x=>x.id===editingId);
-    if(servicoAtual?.status_financeiro!=='PAGO'&&formData.status_financeiro==='PAGO'&&totalRecebido===0)registrarRecebimentoNaEdicao=true;
-    if(totalRecebido>0&&valorNumerico!==Number(servicoAtual?.valor||0)){
-     throw new Error('Este serviço já possui recebimentos. O valor original não pode ser alterado.');
+
+    if(!servicoAtual)throw new Error('Não foi possível localizar o serviço para edição. Atualize a página e tente novamente.');
+
+    if(servicoAtual.status_financeiro!=='PAGO'&&formData.status_financeiro==='PAGO'&&totalRecebido===0)registrarRecebimentoNaEdicao=true;
+
+    if(listaRecebimentos.length===1){
+     const recebimento=listaRecebimentos[0];
+     const recebimentoIntegral=Math.abs(Number(recebimento.valor||0)-Number(servicoAtual.valor||0))<0.01;
+     if(recebimentoIntegral)recebimentoParaSincronizar=recebimento;
     }
+
     if(totalRecebido>0&&formData.status_financeiro==='DEVENDO'){
-     throw new Error('Este serviço já possui recebimentos. Continue o controle do saldo pela tela Consulta de Clientes em Débito.');
+     throw new Error('Este serviço possui recebimentos registrados. Não é possível alterar seu status para DEVENDO enquanto houver pagamentos vinculados.');
+    }
+
+    if(totalRecebido>0&&valorNumerico!==Number(servicoAtual.valor||0)&&!recebimentoParaSincronizar){
+     throw new Error('Este serviço possui pagamentos parciais ou vários recebimentos. O valor não pode ser alterado para preservar o histórico financeiro.');
+    }
+
+    if(totalRecebido>0&&!recebimentoParaSincronizar&&(formData.data!==String(servicoAtual.data||'').slice(0,10)||formData.forma_pagamento!==(servicoAtual.forma_pagamento||''))){
+     throw new Error('Este serviço possui vários recebimentos. A data e a forma de pagamento não podem ser alteradas por esta tela.');
     }
    }
+
    const usaFolhas=!!selectedServico?.usa_folha;
    let folhasParaSalvar=usaFolhas&&folhasConsumo.length?folhasConsumo:null;
    let custosPendentes=[];
+
    if(usaFolhas&&folhasConsumo.length){
     if(isOnline){
      const resultado=await prepararCustosFolhas(folhasConsumo,originalFolhas,!!editingId,formData.data);
@@ -179,6 +200,7 @@ export default function LancamentoServicos(){
      custosPendentes=[...new Set(custosPendentes)];
     }
    }
+
    const payload={
     user_id:user.id,data:formData.data,servico_id:formData.servico_id,
     cliente_id:formData.cliente_id,
@@ -188,26 +210,45 @@ export default function LancamentoServicos(){
     forma_pagamento:formData.status_financeiro==='PAGO'?formData.forma_pagamento:null,
     folhas_gastas:folhasParaSalvar
    };
+
    if(!isOnline&&!editingId){
     await saveOfflineData('lm_servicos',payload);
     toast({title:'Serviço salvo localmente',description: custosPendentes.length?`Custo pendente para: ${custosPendentes.join(', ')}.`:'Serviço guardado no dispositivo para sincronização.'});
     checkPending();
    }else{
-    if(!isOnline){toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});return}
+    if(!isOnline){
+     toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});
+     return;
+    }
+
     if(editingId){
      const servicoAnterior=servicosLancados.find(x=>x.id===editingId);
      const{error}=await supabase.from('lm_lanc_servicos').update(payload).eq('id',editingId).eq('user_id',user.id);
      if(error)throw error;
-     if(registrarRecebimentoNaEdicao){
-      const{error:recError}=await supabase.from('lm_recebimentos').insert({user_id:user.id,lanc_servico_id:editingId,data:formData.data,valor:valorNumerico,forma_pagamento:formData.forma_pagamento});
-      if(recError){
-       await supabase.from('lm_lanc_servicos').update({
-        data:servicoAnterior.data,servico_id:servicoAnterior.servico_id,cliente_id:servicoAnterior.cliente_id,
-        cliente:servicoAnterior.cliente,valor:servicoAnterior.valor,status_financeiro:servicoAnterior.status_financeiro,
-        forma_pagamento:servicoAnterior.forma_pagamento,folhas_gastas:servicoAnterior.folhas_gastas
-       }).eq('id',editingId).eq('user_id',user.id);
-       throw recError;
+
+     try{
+      if(recebimentoParaSincronizar){
+       const{error:recUpdateError}=await supabase.from('lm_recebimentos').update({
+        data:formData.data,valor:valorNumerico,forma_pagamento:formData.forma_pagamento
+       }).eq('id',recebimentoParaSincronizar.id).eq('user_id',user.id);
+       if(recUpdateError)throw recUpdateError;
       }
+
+      if(registrarRecebimentoNaEdicao){
+       const{error:recInsertError}=await supabase.from('lm_recebimentos').insert({
+        user_id:user.id,lanc_servico_id:editingId,data:formData.data,
+        valor:valorNumerico,forma_pagamento:formData.forma_pagamento
+       });
+       if(recInsertError)throw recInsertError;
+      }
+     }catch(recError){
+      await supabase.from('lm_lanc_servicos').update({
+       data:servicoAnterior.data,servico_id:servicoAnterior.servico_id,
+       cliente_id:servicoAnterior.cliente_id,cliente:servicoAnterior.cliente,
+       valor:servicoAnterior.valor,status_financeiro:servicoAnterior.status_financeiro,
+       forma_pagamento:servicoAnterior.forma_pagamento,folhas_gastas:servicoAnterior.folhas_gastas
+      }).eq('id',editingId).eq('user_id',user.id);
+      throw recError;
      }
     }else{
      const{data:novoServico,error}=await supabase.from('lm_lanc_servicos').insert(payload).select('id').single();
@@ -223,16 +264,20 @@ export default function LancamentoServicos(){
       }
      }
     }
+
     toast(custosPendentes.length
      ?{title:'Serviço registrado com custo pendente',description:`Confira o cadastro ou as compras destas folhas: ${custosPendentes.join(', ')}.`,variant:'destructive'}
      :{title:'Sucesso',description:editingId?'Serviço atualizado.':'Serviço registrado.'});
     await refresh();
    }
+
    resetAfterSave();setAddOpen(false);
   }catch(e){
    console.error('Falha ao salvar lançamento de serviço:',e);
    toast({title:'Erro ao salvar',description:e.message||'Não foi possível salvar o serviço.',variant:'destructive'});
-  }finally{setSaving(false)}
+  }finally{
+   setSaving(false);
+  }
  };
 
  const remove=async id=>{
@@ -240,13 +285,37 @@ export default function LancamentoServicos(){
    toast({title:'Offline',description:'Exclusão offline não permitida.',variant:'destructive'});
    return;
   }
+  if(!user?.id){
+   toast({title:'Sessão inválida',description:'Entre novamente no sistema.',variant:'destructive'});
+   return;
+  }
+
   try{
-   const{error}=await supabase.from('lm_lanc_servicos').delete().eq('id',id).eq('user_id',user.id);
-   if(error)throw error;
-   toast({title:'Removido',description:'Serviço excluído.'});
+   const{data:recebimentos,error:consultaError}=await supabase.from('lm_recebimentos').select('*').eq('lanc_servico_id',id).eq('user_id',user.id);
+   if(consultaError)throw consultaError;
+
+   const vinculados=recebimentos||[];
+
+   if(vinculados.length){
+    const{error:exclusaoRecebimentosError}=await supabase.from('lm_recebimentos').delete().eq('lanc_servico_id',id).eq('user_id',user.id);
+    if(exclusaoRecebimentosError)throw exclusaoRecebimentosError;
+   }
+
+   const{error:exclusaoServicoError}=await supabase.from('lm_lanc_servicos').delete().eq('id',id).eq('user_id',user.id);
+
+   if(exclusaoServicoError){
+    if(vinculados.length){
+     const{error:restauracaoError}=await supabase.from('lm_recebimentos').insert(vinculados);
+     if(restauracaoError)console.error('Erro ao restaurar recebimentos:',restauracaoError);
+    }
+    throw exclusaoServicoError;
+   }
+
+   toast({title:'Serviço excluído',description:vinculados.length?'O serviço e seu recebimento vinculado foram removidos.':'O serviço foi removido com sucesso.'});
    await refresh();
   }catch(e){
-   toast({title:'Erro',description:e.message,variant:'destructive'});
+   console.error('Erro ao excluir serviço:',e);
+   toast({title:'Não foi possível excluir',description:e.message||'Ocorreu um erro ao excluir o serviço.',variant:'destructive'});
   }
  };
 
@@ -266,14 +335,61 @@ export default function LancamentoServicos(){
   <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="space-y-5">
    <OfflineIndicator/>
    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-    <div><p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:CYAN}}>LM Impressões</p><h1 className="mt-1 text-2xl font-bold text-foreground">Lançamento de Serviços</h1><p className="text-sm text-muted-foreground">Registre serviços e calcule automaticamente o custo das folhas utilizadas.</p></div>
-    <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>setStockOpen(true)}><PackageSearch className="mr-2 h-4 w-4"/>Estoque</Button><Button variant="outline" onClick={()=>setExportOpen(true)}><Download className="mr-2 h-4 w-4"/>Exportar</Button><Button onClick={()=>openDialog()} className="text-white" style={{background:CYAN}}><Plus className="mr-2 h-4 w-4"/>Novo Serviço</Button></div>
+    <div>
+     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:CYAN}}>LM Impressões</p>
+     <h1 className="mt-1 text-2xl font-bold text-foreground">Lançamento de Serviços</h1>
+     <p className="text-sm text-muted-foreground">Registre serviços e calcule automaticamente o custo das folhas utilizadas.</p>
+    </div>
+    <div className="flex flex-wrap gap-2">
+     <Button variant="outline" onClick={()=>setStockOpen(true)}><PackageSearch className="mr-2 h-4 w-4"/>Estoque</Button>
+     <Button variant="outline" onClick={()=>setExportOpen(true)}><Download className="mr-2 h-4 w-4"/>Exportar</Button>
+     <Button onClick={()=>openDialog()} className="text-white" style={{background:CYAN}}><Plus className="mr-2 h-4 w-4"/>Novo Serviço</Button>
+    </div>
    </div>
-   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[{l:'Registros',v:filtered.length},{l:'Total',v:BRL.format(total)},{l:'Com Folhas',v:filtered.filter(x=>Array.isArray(x.folhas_gastas)&&x.folhas_gastas.some(f=>!f.e_rascunho)).length},{l:'Clientes',v:new Set(filtered.map(x=>x.cliente_id||x.cliente)).size}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{x.v}</p></CardContent></Card>)}</div>
-   <Card className="border-border bg-card"><CardContent className="p-4"><div className="flex flex-col gap-3 xl:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Buscar serviço ou cliente..." className="h-10 pl-9"/></div><div className="flex flex-wrap gap-2"><Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[140px]"><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select><Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[110px]"><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select><Button variant="outline" onClick={()=>setSearchTerm('')}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button></div></div></CardContent></Card>
-   <Dialog open={stockOpen} onOpenChange={setStockOpen}><DialogContent className="bg-card border-border sm:max-w-[800px]"><DialogHeader><DialogTitle><PackageSearch className="mr-2 inline h-5 w-5" style={{color:CYAN}}/>Estoque Atual</DialogTitle><DialogDescription>Disponibilidade atual de folhas e materiais.</DialogDescription></DialogHeader><ScrollArea className="max-h-[60vh]"><div className="grid gap-4 py-4 sm:grid-cols-2 lg:grid-cols-3">{isStockLoading?<Loader2 className="mx-auto h-8 w-8 animate-spin"/>:Object.values(stockData).map(i=><EstoqueAtualCard key={i.tipo_folha} item={i} lastUpdate={lastUpdate}/>)}</div></ScrollArea><DialogFooter><Button variant="outline" onClick={()=>setStockOpen(false)}>Fechar</Button></DialogFooter></DialogContent></Dialog>
-   <Dialog open={exportOpen} onOpenChange={setExportOpen}><DialogContent className="bg-card border-border sm:max-w-[430px]"><DialogHeader><DialogTitle>Exportar Serviços</DialogTitle><DialogDescription>Selecione o período.</DialogDescription></DialogHeader><div className="grid grid-cols-2 gap-4 py-4"><div><Label>Mês</Label><Select value={String(exportFilters.month)} onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select></div><div><Label>Ano</Label><Select value={String(exportFilters.year)} onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select></div></div><DialogFooter><Button variant="outline" onClick={()=>setExportOpen(false)}>Cancelar</Button><Button onClick={exportar} style={{background:CYAN}} className="text-white">Exportar</Button></DialogFooter></DialogContent></Dialog>
-   <ModalLancamentoPadrao open={addOpen} onClose={closeDialog} title={editingId?'Editar Serviço':'Novo Serviço'} description={editingId?'Atualize os dados do serviço.':'Registre um novo serviço prestado.'} icon={Receipt} theme="cyan" footer={<><Button type="button" variant="outline" onClick={closeDialog} disabled={saving} className="h-11 rounded-xl border-border px-5">Cancelar</Button><Button type="button" onClick={save} disabled={saving} className="h-11 rounded-xl px-6 font-semibold text-white" style={{background:CYAN}}>{saving?<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Salvando...</>:editingId?'Atualizar':'Salvar'}</Button></>}>
+
+   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    {[{l:'Registros',v:filtered.length},{l:'Total',v:BRL.format(total)},{l:'Com Folhas',v:filtered.filter(x=>Array.isArray(x.folhas_gastas)&&x.folhas_gastas.some(f=>!f.e_rascunho)).length},{l:'Clientes',v:new Set(filtered.map(x=>x.cliente_id||x.cliente)).size}].map(x=><Card key={x.l} className="border-border bg-card"><CardContent className="p-4"><p className="text-xs uppercase tracking-wider text-muted-foreground">{x.l}</p><p className="mt-1 text-xl font-bold" style={{color:CYAN}}>{x.v}</p></CardContent></Card>)}
+   </div>
+
+   <Card className="border-border bg-card">
+    <CardContent className="p-4">
+     <div className="flex flex-col gap-3 xl:flex-row">
+      <div className="relative flex-1">
+       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+       <Input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Buscar serviço ou cliente..." className="h-10 pl-9"/>
+      </div>
+      <div className="flex flex-wrap gap-2">
+       <Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="w-[140px]"><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select>
+       <Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="w-[110px]"><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
+       <Button variant="outline" onClick={()=>setSearchTerm('')}><RotateCcw className="mr-2 h-4 w-4"/>Limpar</Button>
+      </div>
+     </div>
+    </CardContent>
+   </Card>
+
+   <Dialog open={stockOpen} onOpenChange={setStockOpen}>
+    <DialogContent className="bg-card border-border sm:max-w-[800px]">
+     <DialogHeader><DialogTitle><PackageSearch className="mr-2 inline h-5 w-5" style={{color:CYAN}}/>Estoque Atual</DialogTitle><DialogDescription>Disponibilidade atual de folhas e materiais.</DialogDescription></DialogHeader>
+     <ScrollArea className="max-h-[60vh]"><div className="grid gap-4 py-4 sm:grid-cols-2 lg:grid-cols-3">{isStockLoading?<Loader2 className="mx-auto h-8 w-8 animate-spin"/>:Object.values(stockData).map(i=><EstoqueAtualCard key={i.tipo_folha} item={i} lastUpdate={lastUpdate}/>)}</div></ScrollArea>
+     <DialogFooter><Button variant="outline" onClick={()=>setStockOpen(false)}>Fechar</Button></DialogFooter>
+    </DialogContent>
+   </Dialog>
+
+   <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+    <DialogContent className="bg-card border-border sm:max-w-[430px]">
+     <DialogHeader><DialogTitle>Exportar Serviços</DialogTitle><DialogDescription>Selecione o período.</DialogDescription></DialogHeader>
+     <div className="grid grid-cols-2 gap-4 py-4">
+      <div><Label>Mês</Label><Select value={String(exportFilters.month)} onValueChange={v=>setExportFilters(p=>({...p,month:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent></Select></div>
+      <div><Label>Ano</Label><Select value={String(exportFilters.year)} onValueChange={v=>setExportFilters(p=>({...p,year:Number(v)}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{availableYears().map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select></div>
+     </div>
+     <DialogFooter><Button variant="outline" onClick={()=>setExportOpen(false)}>Cancelar</Button><Button onClick={exportar} style={{background:CYAN}} className="text-white">Exportar</Button></DialogFooter>
+    </DialogContent>
+   </Dialog>
+
+   <ModalLancamentoPadrao open={addOpen} onClose={closeDialog} title={editingId?'Editar Serviço':'Novo Serviço'} description={editingId?'Atualize os dados do serviço.':'Registre um novo serviço prestado.'} icon={Receipt} theme="cyan" footer={<>
+    <Button type="button" variant="outline" onClick={closeDialog} disabled={saving} className="h-11 rounded-xl border-border px-5">Cancelar</Button>
+    <Button type="button" onClick={save} disabled={saving} className="h-11 rounded-xl px-6 font-semibold text-white" style={{background:CYAN}}>{saving?<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>Salvando...</>:editingId?'Atualizar':'Salvar'}</Button>
+   </>}>
     <form id="form-servico" onSubmit={save} noValidate className="max-h-[calc(100vh-300px)] space-y-5 overflow-y-auto overflow-x-hidden pr-1">
      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div className="space-y-2"><Label>Data *</Label><Input type="date" value={formData.data} onChange={e=>setFormData(p=>({...p,data:e.target.value}))} required disabled={saving} className="h-11 rounded-xl bg-input"/></div>
@@ -293,6 +409,7 @@ export default function LancamentoServicos(){
      {selectedServico?.usa_folha&&<div className="space-y-2 border-t border-border pt-4"><FolhasTable folhas={folhasConsumo} setFolhas={setFolhasConsumo} tiposFolha={tiposFolha} estoqueAtual={estoqueAtual} disabled={saving}/></div>}
     </form>
    </ModalLancamentoPadrao>
+
    <Card className="border-border bg-card">
     <CardContent className="min-w-0 p-0">
      <ScrollArea className="h-[560px] w-full max-w-full">
@@ -319,16 +436,21 @@ export default function LancamentoServicos(){
            <TableCell className="overflow-hidden"><div className="w-full min-w-0 truncate whitespace-nowrap" title={materiais}>{materiais}</div></TableCell>
            <TableCell className="overflow-hidden whitespace-nowrap">{x.status_financeiro||'PAGO'}</TableCell>
            <TableCell className="overflow-hidden whitespace-nowrap text-right font-bold" style={{color:CYAN}}>{BRL.format(Number(x.valor)||0)}</TableCell>
-           <TableCell className="whitespace-nowrap"><div className="flex items-center justify-center gap-1">
-            <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço" className="h-8 w-8 shrink-0"><Edit className="h-4 w-4"/></Button>
-            <AlertDialog>
-             <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
-             <AlertDialogContent>
-              <AlertDialogHeader><AlertDialogTitle>Excluir serviço?</AlertDialogTitle><AlertDialogDescription>Essa ação não poderá ser desfeita. Registros com recebimentos vinculados não poderão ser excluídos.</AlertDialogDescription></AlertDialogHeader>
-              <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter>
-             </AlertDialogContent>
-            </AlertDialog>
-           </div></TableCell>
+           <TableCell className="whitespace-nowrap">
+            <div className="flex items-center justify-center gap-1">
+             <Button variant="ghost" size="icon" onClick={()=>openDialog(x)} style={{color:CYAN}} title="Editar serviço" className="h-8 w-8 shrink-0"><Edit className="h-4 w-4"/></Button>
+             <AlertDialog>
+              <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-red-500" title="Excluir serviço"><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
+              <AlertDialogContent>
+               <AlertDialogHeader>
+                <AlertDialogTitle>Excluir serviço?</AlertDialogTitle>
+                <AlertDialogDescription>Essa ação não poderá ser desfeita. Se este serviço possuir recebimentos vinculados, eles também serão excluídos. Deseja continuar?</AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600">Excluir</AlertDialogAction></AlertDialogFooter>
+              </AlertDialogContent>
+             </AlertDialog>
+            </div>
+           </TableCell>
           </TableRow>
          );
         })}
