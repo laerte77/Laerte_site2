@@ -1,9 +1,10 @@
 import React,{useState,useEffect,useCallback}from'react';
-import{Plus,Edit,Trash2,FileStack,RefreshCw,Search}from'lucide-react';
+import{Plus,Edit,Trash2,FileStack,RefreshCw,Search,Package}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
 import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
+import{Select,SelectContent,SelectItem,SelectTrigger,SelectValue}from'@/components/ui/select';
 import{useToast}from'@/components/ui/use-toast';
 import{AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle,AlertDialogTrigger}from'@/components/ui/alert-dialog';
 import{supabase}from'@/lib/customSupabaseClient';
@@ -15,33 +16,53 @@ const BRL=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 
 export default function CadastroTiposFolhas(){
  const{user}=useAuth(),{toast}=useToast();
- const[data,setData]=useState([]),[loading,setLoading]=useState(true),[search,setSearch]=useState('');
- const[open,setOpen]=useState(false),[editId,setEditId]=useState(null),[nome,setNome]=useState(''),[preco,setPreco]=useState('');
+ const[data,setData]=useState([]),[insumos,setInsumos]=useState([]);
+ const[loading,setLoading]=useState(true),[search,setSearch]=useState('');
+ const[open,setOpen]=useState(false),[editId,setEditId]=useState(null);
+ const[nome,setNome]=useState(''),[preco,setPreco]=useState('');
+ const[insumoId,setInsumoId]=useState('nenhum');
 
  const load=useCallback(async()=>{
-  if(!user){setData([]);setLoading(false);return}
+  if(!user){setData([]);setInsumos([]);setLoading(false);return}
   setLoading(true);
   try{
-   const{data:rows,error}=await supabase.from('lm_tipos_folha').select('*').eq('user_id',user.id).order('tipo_folha');
-   if(error)throw error;
-   setData(rows||[]);
-  }catch(e){toast({title:'Erro ao carregar tipos de folha',description:e.message,variant:'destructive'})}
-  finally{setLoading(false)}
+   const[a,b]=await Promise.all([
+    supabase.from('lm_tipos_folha').select('*').eq('user_id',user.id).order('tipo_folha'),
+    supabase.from('lm_insumos').select('id,nome,unidade,ativo').eq('user_id',user.id).eq('ativo',true).order('nome')
+   ]);
+   if(a.error)throw a.error;
+   if(b.error)throw b.error;
+   setData(a.data||[]);
+   setInsumos(b.data||[]);
+  }catch(e){
+   toast({title:'Erro ao carregar cadastros',description:e.message,variant:'destructive'});
+  }finally{setLoading(false)}
  },[user,toast]);
 
  useEffect(()=>{load()},[load]);
+
  useEffect(()=>{
   if(!user)return;
-  const ch=supabase.channel(`lm_tipos_folha_changes_${user.id}`).on('postgres_changes',{event:'*',schema:'public',table:'lm_tipos_folha',filter:`user_id=eq.${user.id}`},load).subscribe();
+  const ch=supabase.channel(`lm_tipos_folha_changes_${user.id}`)
+   .on('postgres_changes',{event:'*',schema:'public',table:'lm_tipos_folha',filter:`user_id=eq.${user.id}`},load)
+   .subscribe();
   return()=>supabase.removeChannel(ch);
  },[user,load]);
 
- const reset=()=>{setNome('');setPreco('');setEditId(null)};
+ const reset=()=>{
+  setNome('');
+  setPreco('');
+  setInsumoId('nenhum');
+  setEditId(null);
+ };
+
  const closeForm=()=>{setOpen(false);reset()};
+
  const openForm=x=>{
   setEditId(x?.id||null);
   setNome(x?.tipo_folha||'');
   setPreco(Number(x?.preco)>0?String(x.preco):'');
+  setInsumoId(x?.insumo_id?String(x.insumo_id):'nenhum');
   setOpen(true);
  };
 
@@ -49,18 +70,38 @@ export default function CadastroTiposFolhas(){
   e.preventDefault();
   if(!user)return;
   if(!nome.trim())return toast({title:'Campo obrigatório',description:'Informe o tipo de folha.',variant:'destructive'});
+
   const custo=preco.trim()===''?0:Number(preco);
-  if(!Number.isFinite(custo)||custo<0)return toast({title:'Custo inválido',description:'Informe um custo igual ou maior que zero.',variant:'destructive'});
+  if(!Number.isFinite(custo)||custo<0)
+   return toast({title:'Custo inválido',description:'Informe um custo igual ou maior que zero.',variant:'destructive'});
+
+  const insumoSelecionado=insumoId==='nenhum'?null:insumos.find(x=>String(x.id)===String(insumoId));
+  if(insumoId!=='nenhum'&&!insumoSelecionado)
+   return toast({title:'Insumo inválido',description:'Atualize a lista e selecione um insumo disponível.',variant:'destructive'});
+
   try{
-   const payload={tipo_folha:nome.trim(),preco:custo,user_id:user.id};
+   const payload={
+    tipo_folha:nome.trim(),
+    preco:custo,
+    insumo_id:insumoSelecionado?.id||null,
+    user_id:user.id
+   };
+
    const q=editId
     ?await supabase.from('lm_tipos_folha').update(payload).eq('id',editId).eq('user_id',user.id)
     :await supabase.from('lm_tipos_folha').insert(payload);
+
    if(q.error)throw q.error;
-   toast({title:'Sucesso',description:editId?'Tipo e custo de referência atualizados.':'Tipo e custo de referência cadastrados.'});
+
+   toast({
+    title:'Sucesso',
+    description:editId?'Tipo de folha e vínculo atualizados.':'Tipo de folha cadastrado.'
+   });
    closeForm();
    await load();
-  }catch(e){toast({title:'Erro ao salvar',description:e.message,variant:'destructive'})}
+  }catch(e){
+   toast({title:'Erro ao salvar',description:e.message,variant:'destructive'});
+  }
  };
 
  const remove=async id=>{
@@ -69,61 +110,181 @@ export default function CadastroTiposFolhas(){
    if(error)throw error;
    toast({title:'Sucesso',description:'Tipo de folha excluído.'});
    await load();
-  }catch(e){toast({title:'Erro ao excluir',description:e.message,variant:'destructive'})}
+  }catch(e){
+   toast({title:'Erro ao excluir',description:e.message,variant:'destructive'});
+  }
  };
 
  const list=data.filter(x=>String(x.tipo_folha||'').toLowerCase().includes(search.trim().toLowerCase()))
   .sort((a,b)=>String(a.tipo_folha||'').localeCompare(String(b.tipo_folha||''),'pt-BR',{sensitivity:'base',numeric:true}));
 
- return <div className="dark-lm-impressoes space-y-4">
-  <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
-   <div className="flex items-center gap-3">
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-lanhouse)/.2)] bg-[hsl(var(--neon-lanhouse)/.08)]"><FileStack className="h-5 w-5" style={{color:C}}/></div>
-    <div><p className="text-[11px] font-semibold uppercase tracking-[.2em]" style={{color:C}}>Cadastros</p><h1 className="text-2xl font-bold tracking-tight">Tipos de Folha</h1><p className="text-sm text-muted-foreground">Cadastre materiais e seus custos unitários de referência.</p></div>
+ const insumoNome=id=>insumos.find(i=>String(i.id)===String(id));
+
+ return(
+  <div className="dark-lm-impressoes space-y-4">
+   <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex items-center gap-3">
+     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[hsl(var(--neon-lanhouse)/.2)] bg-[hsl(var(--neon-lanhouse)/.08)]">
+      <FileStack className="h-5 w-5" style={{color:C}}/>
+     </div>
+     <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[.2em]" style={{color:C}}>Cadastros</p>
+      <h1 className="text-2xl font-bold tracking-tight">Tipos de Folha</h1>
+      <p className="text-sm text-muted-foreground">Cadastre materiais, custos e vínculos com o estoque.</p>
+     </div>
+    </div>
+    <div className="flex flex-wrap gap-2">
+     <Button variant="outline" onClick={load}><RefreshCw className="mr-2 h-4 w-4"/>Atualizar</Button>
+     <Button onClick={()=>openForm()} className="text-slate-950 hover:opacity-90" style={{background:C}}>
+      <Plus className="mr-2 h-4 w-4"/>Novo Tipo
+     </Button>
+    </div>
    </div>
-   <div className="flex flex-wrap gap-2">
-    <Button variant="outline" onClick={load}><RefreshCw className="mr-2 h-4 w-4"/>Atualizar</Button>
-    <Button onClick={()=>openForm()} className="text-slate-950 hover:opacity-90" style={{background:C}}><Plus className="mr-2 h-4 w-4"/>Novo Tipo</Button>
+
+   <Card className="border-border bg-card/80">
+    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+     <div className="relative w-full max-w-md">
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
+      <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar tipo de folha..." className="h-11 rounded-xl bg-input pl-9"/>
+     </div>
+     <span className="text-sm text-muted-foreground">{list.length} tipo(s)</span>
+    </CardContent>
+   </Card>
+
+   <div className="grid gap-4 sm:grid-cols-2">
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tipos cadastrados</CardTitle></CardHeader>
+     <CardContent><p className="text-2xl font-bold" style={{color:C}}>{data.length}</p></CardContent>
+    </Card>
+    <Card className="border-border bg-card">
+     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tipos vinculados ao estoque</CardTitle></CardHeader>
+     <CardContent><p className="text-2xl font-bold">{data.filter(x=>x.insumo_id).length}</p></CardContent>
+    </Card>
    </div>
+
+   <ModalLancamentoPadrao
+    open={open}
+    onClose={closeForm}
+    title={editId?'Editar Tipo de Folha':'Novo Tipo de Folha'}
+    description="Cadastre o material e, se desejar, relacione-o a um insumo do estoque."
+    icon={FileStack}
+    theme="cyan"
+    footer={<>
+     <Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button>
+     <Button type="submit" form="f-folha" className="text-slate-950 hover:opacity-90" style={{background:C}}>
+      {editId?'Salvar Alterações':'Salvar Tipo'}
+     </Button>
+    </>}
+   >
+    <form id="f-folha" onSubmit={save} className="space-y-5">
+     <div className="space-y-2">
+      <Label htmlFor="nome-folha">Nome do Tipo de Folha *</Label>
+      <Input id="nome-folha" value={nome} onChange={e=>setNome(e.target.value)} placeholder="Ex.: PAPEL FOTOGRÁFICO 230G" className="h-11 rounded-xl bg-input" required/>
+     </div>
+
+     <div className="space-y-2">
+      <Label htmlFor="preco-folha">Custo unitário de referência (R$)</Label>
+      <Input id="preco-folha" type="number" min="0" step="0.000001" value={preco} onChange={e=>setPreco(e.target.value)} placeholder="0,00" className="h-11 rounded-xl bg-input"/>
+      <p className="text-xs text-muted-foreground">Uma compra válida anterior à data do uso terá prioridade sobre este custo.</p>
+     </div>
+
+     <div className="space-y-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+      <div className="flex items-center gap-2">
+       <Package className="h-4 w-4 text-cyan-400"/>
+       <Label>Vincular ao insumo do estoque</Label>
+      </div>
+      <Select value={insumoId} onValueChange={setInsumoId}>
+       <SelectTrigger className="h-11 rounded-xl bg-input">
+        <SelectValue placeholder="Selecione um insumo"/>
+       </SelectTrigger>
+       <SelectContent>
+        <SelectItem value="nenhum">Não vincular agora</SelectItem>
+        {insumos.map(i=>(
+         <SelectItem key={i.id} value={String(i.id)}>
+          {i.nome} — {i.unidade}
+         </SelectItem>
+        ))}
+       </SelectContent>
+      </Select>
+      {!insumos.length&&(
+       <p className="text-xs text-amber-400">Não existem insumos ativos cadastrados. Cadastre primeiro em Cadastros → Insumos.</p>
+      )}
+      <p className="text-xs text-muted-foreground">
+       Selecione o insumo correspondente ao tipo de folha. Esse vínculo permite controlar as entradas e saídas do material no estoque.
+      </p>
+     </div>
+    </form>
+   </ModalLancamentoPadrao>
+
+   <Card className="overflow-hidden border-border bg-card">
+    <CardHeader className="pb-3">
+     <CardTitle className="text-lg" style={{color:C}}>Tipos de folha cadastrados</CardTitle>
+    </CardHeader>
+    <CardContent className="p-0">
+     <div className="overflow-x-auto">
+      <table className="w-full min-w-[700px]">
+       <thead>
+        <tr className="border-b border-border bg-muted/30">
+         <th className="p-4 text-left text-sm font-semibold text-muted-foreground">Tipo de Folha</th>
+         <th className="p-4 text-left text-sm font-semibold text-muted-foreground">Insumo vinculado</th>
+         <th className="p-4 text-right text-sm font-semibold text-muted-foreground">Custo de referência</th>
+         <th className="w-28 p-4 text-right text-sm font-semibold text-muted-foreground">Ações</th>
+        </tr>
+       </thead>
+       <tbody>
+        {loading?(
+         <tr><td colSpan={4} className="p-10 text-center text-muted-foreground">Carregando...</td></tr>
+        ):!list.length?(
+         <tr><td colSpan={4} className="p-10 text-center text-muted-foreground">
+          <FileStack className="mx-auto mb-2 h-10 w-10 opacity-40"/>
+          <p>{data.length?'Nenhum resultado encontrado.':'Nenhum tipo cadastrado.'}</p>
+         </td></tr>
+        ):list.map(x=>{
+         const linked=insumoNome(x.insumo_id);
+         return(
+          <tr key={x.id} className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-lanhouse)/.04)]">
+           <td className="p-4 font-medium">{x.tipo_folha}</td>
+           <td className="p-4">
+            {linked?(
+             <span className="text-sm text-emerald-400">{linked.nome} ({linked.unidade})</span>
+            ):(
+             <span className="text-sm text-amber-400">Não vinculado</span>
+            )}
+           </td>
+           <td className="p-4 text-right font-mono">{Number(x.preco)>0?BRL.format(Number(x.preco)):'—'}</td>
+           <td className="p-4 text-right">
+            <div className="flex justify-end gap-1">
+             <Button type="button" variant="ghost" size="icon" onClick={()=>openForm(x)} className="text-blue-400 hover:bg-blue-500/10" title="Editar" aria-label={`Editar ${x.tipo_folha}`}>
+              <Edit className="h-4 w-4"/>
+             </Button>
+             <AlertDialog>
+              <AlertDialogTrigger asChild>
+               <Button type="button" variant="ghost" size="icon" className="text-red-400 hover:bg-red-500/10" title="Excluir" aria-label={`Excluir ${x.tipo_folha}`}>
+                <Trash2 className="h-4 w-4"/>
+               </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="dark-lm-impressoes border-border bg-card">
+               <AlertDialogHeader>
+                <AlertDialogTitle>Excluir tipo de folha?</AlertDialogTitle>
+                <AlertDialogDescription>Deseja excluir <strong>{x.tipo_folha}</strong>? Essa ação não poderá ser desfeita.</AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600 text-white hover:bg-red-700">Excluir</AlertDialogAction>
+               </AlertDialogFooter>
+              </AlertDialogContent>
+             </AlertDialog>
+            </div>
+           </td>
+          </tr>
+         );
+        })}
+       </tbody>
+      </table>
+     </div>
+    </CardContent>
+   </Card>
   </div>
-
-  <Card className="border-border bg-card/80"><CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-   <div className="relative w-full max-w-md"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar tipo de folha..." className="h-11 rounded-xl bg-input pl-9"/></div>
-   <span className="text-sm text-muted-foreground">{list.length} tipo(s)</span>
-  </CardContent></Card>
-
-  <div className="grid gap-4 sm:grid-cols-2">
-   <Card className="border-border bg-card"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Tipos cadastrados</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold" style={{color:C}}>{data.length}</p></CardContent></Card>
-   <Card className="border-border bg-card"><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Resultado da pesquisa</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{list.length}</p></CardContent></Card>
-  </div>
-
-  <ModalLancamentoPadrao open={open} onClose={closeForm} title={editId?'Editar Tipo de Folha':'Novo Tipo de Folha'} description="O custo de referência só será usado quando não houver compra válida anterior à data do uso." icon={FileStack} theme="cyan" footer={<><Button type="button" variant="outline" onClick={closeForm}>Cancelar</Button><Button type="submit" form="f-folha" className="text-slate-950 hover:opacity-90" style={{background:C}}>{editId?'Salvar Alterações':'Salvar Tipo'}</Button></>}>
-   <form id="f-folha" onSubmit={save} className="space-y-5">
-    <div className="space-y-2"><Label htmlFor="nome-folha">Nome do Tipo de Folha *</Label><Input id="nome-folha" value={nome} onChange={e=>setNome(e.target.value)} placeholder="Ex.: A4 75g" className="h-11 rounded-xl bg-input" required/></div>
-    <div className="space-y-2"><Label htmlFor="preco-folha">Custo unitário de referência (R$)</Label><Input id="preco-folha" type="number" min="0" step="0.000001" value={preco} onChange={e=>setPreco(e.target.value)} placeholder="0,00" className="h-11 rounded-xl bg-input"/><p className="text-xs text-muted-foreground">Estimativa de reserva: uma compra válida anterior à data do uso sempre terá prioridade.</p></div>
-   </form>
-  </ModalLancamentoPadrao>
-
-  <Card className="overflow-hidden border-border bg-card">
-   <CardHeader className="pb-3"><CardTitle className="text-lg" style={{color:C}}>Tipos de folha cadastrados</CardTitle></CardHeader>
-   <CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[560px]">
-    <thead><tr className="border-b border-border bg-muted/30"><th className="p-4 text-left text-sm font-semibold text-muted-foreground">Tipo de Folha</th><th className="p-4 text-right text-sm font-semibold text-muted-foreground">Custo de referência</th><th className="w-28 p-4 text-right text-sm font-semibold text-muted-foreground">Ações</th></tr></thead>
-    <tbody>
-     {loading?<tr><td colSpan={3} className="p-10 text-center text-muted-foreground">Carregando...</td></tr>
-     :!list.length?<tr><td colSpan={3} className="p-10 text-center text-muted-foreground"><FileStack className="mx-auto mb-2 h-10 w-10 opacity-40"/><p>{data.length?'Nenhum resultado encontrado.':'Nenhum tipo cadastrado.'}</p></td></tr>
-     :list.map(x=><tr key={x.id} className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-lanhouse)/.04)]">
-      <td className="p-4 font-medium">{x.tipo_folha}</td><td className="p-4 text-right font-mono">{Number(x.preco)>0?BRL.format(Number(x.preco)):'—'}</td>
-      <td className="p-4 text-right"><div className="flex justify-end gap-1">
-       <Button type="button" variant="ghost" size="icon" onClick={()=>openForm(x)} className="text-blue-400 hover:bg-blue-500/10" title="Editar" aria-label={`Editar ${x.tipo_folha}`}><Edit className="h-4 w-4"/></Button>
-       <AlertDialog><AlertDialogTrigger asChild><Button type="button" variant="ghost" size="icon" className="text-red-400 hover:bg-red-500/10" title="Excluir" aria-label={`Excluir ${x.tipo_folha}`}><Trash2 className="h-4 w-4"/></Button></AlertDialogTrigger>
-        <AlertDialogContent className="dark-lm-impressoes border-border bg-card"><AlertDialogHeader><AlertDialogTitle>Excluir tipo de folha?</AlertDialogTitle><AlertDialogDescription>Deseja excluir <strong>{x.tipo_folha}</strong>? Essa ação não poderá ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={()=>remove(x.id)} className="bg-red-600 text-white hover:bg-red-700">Excluir</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-       </AlertDialog>
-      </div></td>
-     </tr>)}
-    </tbody>
-   </table></div></CardContent>
-  </Card>
- </div>;
+ );
 }
-
 
