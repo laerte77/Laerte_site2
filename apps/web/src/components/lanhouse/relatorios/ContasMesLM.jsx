@@ -6,8 +6,8 @@ import{Table,TableBody,TableCell,TableHead,TableHeader,TableRow}from'@/component
 import{Button}from'@/components/ui/button';
 import{Badge}from'@/components/ui/badge';
 import{formatCurrency}from'@/lib/utils';
-import{AlertCircle,RefreshCw,CheckCircle2,Clock,AlertTriangle,FileText,Filter,Receipt,TrendingDown,TrendingUp,Minus,Loader2}from'lucide-react';
-import{format,parseISO,subMonths}from'date-fns';
+import{AlertCircle,RefreshCw,CheckCircle2,Clock,AlertTriangle,FileText,Filter,Receipt,TrendingDown,TrendingUp,Minus}from'lucide-react';
+import{format,parseISO}from'date-fns';
 import{supabase}from'@/lib/customSupabaseClient';
 import CategoryIcon from'@/components/CategoryIcon';
 import StatusChangeModal from'@/components/StatusChangeModal';
@@ -32,7 +32,6 @@ export default function ContasMesLM(){
  const fetchData=useCallback(async()=>{
   if(!user){setData([]);setLoading(false);return}
   setLoading(true);setError(null);
-
   try{
    const selectedDate=new Date(y,m-1,1),previousDate=new Date(y,m-2,1);
    const start=format(new Date(y,m-1,1),'yyyy-MM-dd');
@@ -54,14 +53,10 @@ export default function ContasMesLM(){
    const previstas=pRes.data||[];
    const today=todaySP();
 
-   // Agrupa contas previstas por descrição para identificar nomes repetidos.
    const contasPorDescricao=new Map();
-
    previstas.forEach(conta=>{
     const descricao=normalize(conta.descricao);
-    if(!contasPorDescricao.has(descricao)){
-     contasPorDescricao.set(descricao,[]);
-    }
+    if(!contasPorDescricao.has(descricao))contasPorDescricao.set(descricao,[]);
     contasPorDescricao.get(descricao).push(conta);
    });
 
@@ -69,22 +64,17 @@ export default function ContasMesLM(){
     const previsto=Number(x.valor)||0;
     const desc=normalize(x.descricao);
 
-    // 1. Prioridade absoluta: vínculo pelo ID da conta prevista.
-    // Um pagamento vinculado só pertence à conta indicada pelo despesa_prevista_id.
+    // Localiza os lançamentos vinculados exclusivamente a esta conta.
     const lancamentosVinculados=launches.filter(z=>
      String(z.despesa_prevista_id||'')===String(x.id)
     );
 
     let reais=[];
-
     if(lancamentosVinculados.length){
      reais=lancamentosVinculados;
     }else{
-     // 2. Compatibilidade com lançamentos antigos sem vínculo.
-     // Só utiliza a descrição quando existe uma única conta com esse nome
-     // no mês. Assim, o mesmo pagamento não é atribuído a várias contas.
+     // Compatibilidade com lançamentos antigos sem vínculo.
      const contasMesmoNome=contasPorDescricao.get(desc)||[];
-
      if(contasMesmoNome.length===1){
       reais=launches.filter(z=>
        !z.despesa_prevista_id&&
@@ -93,27 +83,33 @@ export default function ContasMesLM(){
      }
     }
 
-    const real=reais.reduce(
-     (sum,z)=>sum+(Number(z.valor)||0),
-     0
-    );
-
+    const real=reais.reduce((sum,z)=>sum+(Number(z.valor)||0),0);
     const dif=real-previsto;
 
     const savedStatus=normalize(x.status);
     let st;
-
-    if(savedStatus==='pago') st='Pago';
-    else if(previsto>0&&real>=previsto) st='Pago';
-    else if(real>0) st='Pago Parcialmente';
-    else if(savedStatus==='pago parcialmente'||savedStatus==='parcial') st='Pago Parcialmente';
-    else if(savedStatus==='atrasado') st='Atrasado';
+    if(savedStatus==='pago')st='Pago';
+    else if(previsto>0&&real>=previsto)st='Pago';
+    else if(real>0)st='Pago Parcialmente';
+    else if(savedStatus==='pago parcialmente'||savedStatus==='parcial')st='Pago Parcialmente';
+    else if(savedStatus==='atrasado')st='Atrasado';
     else st=dateKey(x.data_vencimento)<today?'Atrasado':'Pendente';
+
+    // Exibe o tipo de folha somente em contas de reposição.
+    // Os nomes são obtidos dos lançamentos vinculados à conta.
+    const isReposicaoFolhas=desc.includes('reposicao de folhas');
+    const tiposFolhas=isReposicaoFolhas
+     ?[...new Set(lancamentosVinculados.map(z=>String(z.tipo_folha||'').trim()).filter(Boolean))]
+     :[];
+
+    const descricaoExibicao=tiposFolhas.length
+     ?`${x.descricao} (${tiposFolhas.join(', ')})`
+     :x.descricao;
 
     return{
      id:x.id,
      data_vencimento:x.data_vencimento,
-     descricao:x.descricao,
+     descricao:descricaoExibicao,
      categoria:x.categoria||'Outros',
      valor_previsto:previsto,
      valor_real:real,
@@ -123,13 +119,11 @@ export default function ContasMesLM(){
    }).sort((a,b)=>dateKey(a.data_vencimento).localeCompare(dateKey(b.data_vencimento)));
 
    setData(result);
-
    setComparison({
     previstoAnterior:(prevRes.data||[]).reduce((s,x)=>s+(Number(x.valor)||0),0),
     gastoRealAnterior:Number(realPrevious)||0,
     gastoRealAtual:Number(realCurrent)||0
    });
-
   }catch(e){
    console.error('Erro em Contas do Mês:',e);
    setError(e.message||'Não foi possível carregar as contas.');
@@ -145,10 +139,7 @@ export default function ContasMesLM(){
   return[c-2,c-1,c,c+1,c+2]
  },[]);
 
- const cats=useMemo(
-  ()=>['Todas',...new Set(data.map(x=>x.categoria).filter(Boolean))],
-  [data]
- );
+ const cats=useMemo(()=>['Todas',...new Set(data.map(x=>x.categoria).filter(Boolean))],[data]);
 
  const filtered=useMemo(()=>data.filter(x=>
   (cat==='Todas'||x.categoria===cat)&&
@@ -170,39 +161,13 @@ export default function ContasMesLM(){
   setStatus('Todos');
  };
 
- const change=item=>{
-  setExpense(item);
-  setModal(true);
- };
-
- const badge=s=>{
-  const cfg={
-   pago:[CheckCircle2,'Pago','border-emerald-500/30 bg-emerald-500/10 text-emerald-400'],
-   'pago parcialmente':[AlertTriangle,'Parcial','border-orange-500/30 bg-orange-500/10 text-orange-400'],
-   parcial:[AlertTriangle,'Parcial','border-orange-500/30 bg-orange-500/10 text-orange-400'],
-   atrasado:[AlertCircle,'Atrasado','border-red-500/30 bg-red-500/10 text-red-400'],
-   pendente:[Clock,'Pendente','border-yellow-500/30 bg-yellow-500/10 text-yellow-400']
-  }[normalize(s)]||[Clock,'Pendente','border-yellow-500/30 bg-yellow-500/10 text-yellow-400'];
-
-  const Icon=cfg[0];
-
-  return(
-   <div className="flex flex-col items-center gap-1">
-    <Badge variant="outline" className={cfg[2]}>
-     <Icon className="mr-1 h-3 w-3"/>
-     {cfg[1]}
-    </Badge>
-    <Button variant="ghost" size="sm" className="h-6 text-xs text-cyan-500" onClick={()=>change({id:filtered.find(x=>x.status===s)?.id,status:s})}> </Button>
-   </div>
-  );
- };
-
- const diff=comparison.gastoRealAtual-comparison.gastoRealAnterior;
- const selectedLabel=`${MONTHS[m-1]} de ${y}`;
  const openStatus=item=>{
   setExpense(item);
   setModal(true);
  };
+
+ const diff=comparison.gastoRealAtual-comparison.gastoRealAnterior;
+ const selectedLabel=`${MONTHS[m-1]} de ${y}`;
 
  const StatusBadge=({item})=>{
   const cfg={
@@ -212,9 +177,7 @@ export default function ContasMesLM(){
    atrasado:[AlertCircle,'Atrasado','border-red-500/30 bg-red-500/10 text-red-400'],
    pendente:[Clock,'Pendente','border-yellow-500/30 bg-yellow-500/10 text-yellow-400']
   }[normalize(item.status)]||[Clock,'Pendente','border-yellow-500/30 bg-yellow-500/10 text-yellow-400'];
-
   const Icon=cfg[0];
-
   return(
    <div className="flex flex-col items-center gap-1">
     <Badge variant="outline" className={cfg[2]}>
@@ -243,7 +206,6 @@ export default function ContasMesLM(){
         <p className="text-sm text-muted-foreground">Acompanhamento das despesas e vencimentos.</p>
        </div>
       </div>
-
       <Button variant="outline" onClick={fetchData} disabled={loading} className="border-cyan-500/40 text-cyan-400">
        <RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>
        Atualizar
@@ -276,19 +238,16 @@ export default function ContasMesLM(){
      <CardTitle>Comparativo com o mês anterior</CardTitle>
      <p className="text-sm text-muted-foreground">Resumo financeiro de {selectedLabel}; não muda com os filtros da tabela.</p>
     </CardHeader>
-
     <CardContent>
      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-4">
        <p className="text-sm text-muted-foreground">Previsto no mês anterior</p>
        <p className="mt-2 text-xl font-bold">{brl(comparison.previstoAnterior)}</p>
       </div>
-
       <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-4">
        <p className="text-sm text-muted-foreground">Gasto real anterior</p>
        <p className="mt-2 text-xl font-bold">{brl(comparison.gastoRealAnterior)}</p>
       </div>
-
       <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-4">
        <p className="text-sm text-muted-foreground">Gasto real em {selectedLabel}</p>
        <p className="mt-2 text-xl font-bold">{brl(comparison.gastoRealAtual)}</p>
@@ -323,45 +282,32 @@ export default function ContasMesLM(){
       Filtros
      </CardTitle>
     </CardHeader>
-
     <CardContent>
      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <Select value={String(m)} onValueChange={v=>setM(Number(v))}>
        <SelectTrigger><SelectValue placeholder="Mês"/></SelectTrigger>
        <SelectContent>
-        {MONTHS.map((x,i)=>(
-         <SelectItem key={i} value={String(i+1)}>{x}</SelectItem>
-        ))}
+        {MONTHS.map((x,i)=><SelectItem key={i} value={String(i+1)}>{x}</SelectItem>)}
        </SelectContent>
       </Select>
-
       <Select value={String(y)} onValueChange={v=>setY(Number(v))}>
        <SelectTrigger><SelectValue placeholder="Ano"/></SelectTrigger>
        <SelectContent>
-        {years.map(x=>(
-         <SelectItem key={x} value={String(x)}>{x}</SelectItem>
-        ))}
+        {years.map(x=><SelectItem key={x} value={String(x)}>{x}</SelectItem>)}
        </SelectContent>
       </Select>
-
       <Select value={cat} onValueChange={setCat}>
        <SelectTrigger><SelectValue placeholder="Categoria"/></SelectTrigger>
        <SelectContent>
-        {cats.map(x=>(
-         <SelectItem key={x} value={x}>{x}</SelectItem>
-        ))}
+        {cats.map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}
        </SelectContent>
       </Select>
-
       <Select value={status} onValueChange={setStatus}>
        <SelectTrigger><SelectValue placeholder="Status"/></SelectTrigger>
        <SelectContent>
-        {['Todos','Pago','Parcial','Pendente','Atrasado'].map(x=>(
-         <SelectItem key={x} value={x}>{x}</SelectItem>
-        ))}
+        {['Todos','Pago','Parcial','Pendente','Atrasado'].map(x=><SelectItem key={x} value={x}>{x}</SelectItem>)}
        </SelectContent>
       </Select>
-
       <Button variant="outline" onClick={clear} className="border-cyan-500/30 hover:bg-cyan-500/10">
        <RefreshCw className="mr-2 h-4 w-4"/>
        Limpar filtros
@@ -387,12 +333,9 @@ export default function ContasMesLM(){
       </div>
       <p className="text-sm text-muted-foreground">Contas vencidas sem pagamento registrado são identificadas como atrasadas.</p>
      </CardHeader>
-
      <CardContent className="p-0">
       {loading?(
-       <div className="p-6">
-        <LoadingSkeleton count={5} height="h-12"/>
-       </div>
+       <div className="p-6"><LoadingSkeleton count={5} height="h-12"/></div>
       ):(
        <div className="overflow-x-auto">
         <Table>
@@ -407,12 +350,9 @@ export default function ContasMesLM(){
            <TableHead className="text-center">Status</TableHead>
           </TableRow>
          </TableHeader>
-
          <TableBody>
           {!filtered.length?(
-           <TableRow>
-            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">Nenhuma conta encontrada.</TableCell>
-           </TableRow>
+           <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">Nenhuma conta encontrada.</TableCell></TableRow>
           ):filtered.map(x=>(
            <TableRow key={x.id} className="hover:bg-cyan-500/5">
             <TableCell className="whitespace-nowrap">
@@ -430,12 +370,9 @@ export default function ContasMesLM(){
             <TableCell className={`text-right ${x.diferenca<0?'text-emerald-500':x.diferenca>0?'text-destructive':'text-muted-foreground'}`}>
              {brl(x.diferenca)}
             </TableCell>
-            <TableCell className="text-center">
-             <StatusBadge item={x}/>
-            </TableCell>
+            <TableCell className="text-center"><StatusBadge item={x}/></TableCell>
            </TableRow>
           ))}
-
           {filtered.length>0&&(
            <TableRow className="bg-muted/30 font-bold">
             <TableCell colSpan={3} className="text-right">Subtotais:</TableCell>
