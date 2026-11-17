@@ -24,7 +24,6 @@ const TZ='America/Sao_Paulo';
 const RED='hsl(0 84% 60%)';
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const years=[new Date().getFullYear(),new Date().getFullYear()-1,new Date().getFullYear()-2];
-
 const toCents=v=>Math.round((Number(v)||0)*100);
 const fromCents=v=>(Number(v)||0)/100;
 const roundMoney=v=>fromCents(toCents(v));
@@ -87,7 +86,6 @@ const Despesas=()=>{
  const{toast}=useToast();
  const{isOnline,checkPending}=useOnlineStatus();
  const mounted=useRef(true);
-
  const[loading,setLoading]=useState(true);
  const[despesas,setDespesas]=useState([]);
  const[tipos,setTipos]=useState([]);
@@ -104,7 +102,6 @@ const Despesas=()=>{
  const[editing,setEditing]=useState(null);
  const[form,setForm]=useState(initial);
  const[currentPage,setCurrentPage]=useState(1);
-
  const pageSize=10;
 
  useEffect(()=>{
@@ -129,7 +126,7 @@ const Despesas=()=>{
  const fetchUsuarios=useCallback(async()=>{
   if(!user)return;
   const{data,error}=await supabase.from('pessoal_cartao_usuarios')
-   .select('id,nome').eq('user_id',user.id).order('nome');
+   .select('id,nome,parentesco').eq('user_id',user.id).order('nome');
   if(!error&&mounted.current)setUsuarios(data||[]);
  },[user]);
 
@@ -209,17 +206,30 @@ const Despesas=()=>{
  const responsavel=id=>usuarios.find(x=>String(x.id)===String(id))?.nome||'';
  const monthKey=value=>String(value||'').slice(0,7);
 
+ const titularIds=useMemo(()=>usuarios
+  .filter(u=>String(u.parentesco||'').trim().toLowerCase()==='titular')
+  .map(u=>String(u.id)),[usuarios]);
+
+ const mesVencimentoCompra=c=>{
+  const cartao=cartoes.find(x=>String(x.id)===String(c.cartao_id));
+  if(!cartao||!c.data)return null;
+  const comp=competenciaFatura(c.data,cartao.dia_fechamento);
+  if(!comp)return null;
+  const dia=Math.min(Math.max(parseInt(cartao.dia_vencimento,10)||1,1),28);
+  return format(new Date(comp.ano,comp.mes,dia),'yyyy-MM');
+ };
+
  const contasPrevistasDoMes=useMemo(()=>contasPrevistas.filter(p=>
   (monthKey(p.data_vencimento)===monthKey(form.data)||
    String(p.matched_transaction_id||'')===String(editing||''))&&
   (!p.matched_transaction_id||String(p.matched_transaction_id)===String(editing||''))
  ),[contasPrevistas,form.data,editing]);
 
- // Compras exibidas somente no mês/ano da data escolhida e no cartão selecionado.
  const comprasDisponiveis=useMemo(()=>comprasCartao.filter(c=>
-  monthKey(c.data)===monthKey(form.data)&&
-  (!form.cartao_id||String(c.cartao_id)===String(form.cartao_id))
- ),[comprasCartao,form.data,form.cartao_id]);
+  c.responsavel_id&&titularIds.includes(String(c.responsavel_id))&&
+  (!form.cartao_id||String(c.cartao_id)===String(form.cartao_id))&&
+  mesVencimentoCompra(c)===monthKey(form.data)
+ ),[comprasCartao,titularIds,cartoes,form.cartao_id,form.data]);
 
  const reset=useCallback(()=>{
   setForm(initial());
@@ -235,7 +245,6 @@ const Despesas=()=>{
   if(item){
    setEditing(item.id);
    let linked=contasPrevistas.find(p=>String(p.matched_transaction_id||'')===String(item.id))||null;
-
    if(!linked){
     const{data,error}=await supabase.from('despesas_previstas')
      .select('id,descricao,data_vencimento,valor,matched_transaction_id')
@@ -245,13 +254,10 @@ const Despesas=()=>{
      setContasPrevistas(prev=>[...prev.filter(p=>p.id!==data.id),data]);
     }
    }
-
    const{data:pagamento,error:pagamentoError}=await supabase.from('pessoal_cartao_pagamentos')
     .select('id,lancamento_id,responsavel_id')
     .eq('user_id',user.id).eq('despesa_id',item.id).maybeSingle();
-
    if(pagamentoError)console.error('Erro ao recuperar vínculo do pagamento:',pagamentoError);
-
    setForm({
     data:String(item.data||'').slice(0,10)||getBRDate(),
     despesa:item.despesa||'',
@@ -265,29 +271,24 @@ const Despesas=()=>{
     lancamento_id:pagamento?.lancamento_id||''
    });
   }else reset();
-
   setOpen(true);
  };
 
  const changeData=value=>{
   const linked=contasPrevistas.find(p=>String(p.id)===String(form.despesa_prevista_id));
   const compraVinculada=comprasCartao.find(c=>String(c.id)===String(form.lancamento_id));
-
   const removerConta=linked&&monthKey(linked.data_vencimento)!==monthKey(value);
-  const removerCompra=compraVinculada&&monthKey(compraVinculada.data)!==monthKey(value);
-
+  const removerCompra=compraVinculada&&(
+   !titularIds.includes(String(compraVinculada.responsavel_id))||
+   mesVencimentoCompra(compraVinculada)!==monthKey(value)
+  );
   setForm(prev=>({
-   ...prev,
-   data:value,
+   ...prev,data:value,
    ...(removerConta?{despesa_prevista_id:''}:{}),
    ...(removerCompra?{lancamento_id:''}:{})
   }));
-
   if(removerConta||removerCompra){
-   toast({
-    title:'Vínculo removido',
-    description:'A conta ou compra vinculada pertence a outro mês. Selecione um vínculo correspondente à nova data.'
-   });
+   toast({title:'Vínculo removido',description:'A conta ou compra vinculada pertence a outro mês. Selecione um vínculo correspondente à nova data.'});
   }
  };
 
@@ -298,8 +299,7 @@ const Despesas=()=>{
    return;
   }
   setForm(prev=>({
-   ...prev,
-   forma_pagamento:'Crédito',
+   ...prev,forma_pagamento:'Crédito',
    cartao_id:compra.cartao_id||prev.cartao_id,
    responsavel_id:compra.responsavel_id||prev.responsavel_id,
    lancamento_id:String(compra.id)
@@ -308,31 +308,24 @@ const Despesas=()=>{
 
  const obterFaturaId=async(cartaoId,dataReferencia,compra)=>{
   if(compra?.fatura_id)return compra.fatura_id;
-
   const cartao=cartoes.find(c=>String(c.id)===String(cartaoId));
   if(!cartao)throw new Error('Cartão selecionado não foi encontrado.');
-
   const competencia=competenciaFatura(dataReferencia,cartao.dia_fechamento);
   if(!competencia)throw new Error('Não foi possível determinar a competência da fatura.');
-
   const{data:existente,error}=await supabase.from('pessoal_faturas')
    .select('id').eq('user_id',user.id).eq('cartao_id',cartaoId)
    .eq('mes',competencia.mes).eq('ano',competencia.ano).maybeSingle();
-
   if(error)throw error;
   if(existente?.id)return existente.id;
-
   const ciclo=cicloFatura(cartao.dia_fechamento,competencia.mes,competencia.ano);
   const vencimento=format(setDate(new Date(competencia.ano,competencia.mes,1),
    Math.min(cartao.dia_vencimento||1,28)),'yyyy-MM-dd');
-
   const{data:nova,error:erroInsert}=await supabase.from('pessoal_faturas')
    .insert({
     user_id:user.id,cartao_id:cartaoId,mes:competencia.mes,ano:competencia.ano,
     data_fechamento:ciclo.fim,data_vencimento:vencimento,
     valor_total:0,status:'aberta',data_pagamento:null
    }).select('id').single();
-
   if(erroInsert)throw erroInsert;
   return nova.id;
  };
@@ -340,44 +333,37 @@ const Despesas=()=>{
  const sincronizarPagamento=async(despesaId,payload)=>{
   const{data:existente,error:consultaError}=await supabase.from('pessoal_cartao_pagamentos')
    .select('id').eq('user_id',user.id).eq('despesa_id',despesaId).maybeSingle();
-
   if(consultaError)throw consultaError;
-
   if(payload.forma_pagamento!=='Crédito'){
    if(existente?.id){
-    const{error}=await supabase.from('pessoal_cartao_pagamentos')
-     .delete().eq('id',existente.id).eq('user_id',user.id);
+    const{error}=await supabase.from('pessoal_cartao_pagamentos').delete()
+     .eq('id',existente.id).eq('user_id',user.id);
     if(error)throw error;
    }
    return;
   }
-
   const compra=payload.lancamento_id
-   ?comprasCartao.find(c=>String(c.id)===String(payload.lancamento_id))
-   :null;
-
+   ?comprasCartao.find(c=>String(c.id)===String(payload.lancamento_id)):null;
   if(payload.lancamento_id&&!compra)throw new Error('A compra vinculada não foi encontrada. Atualize a lista e tente novamente.');
-
   if(compra&&String(compra.cartao_id)!==String(payload.cartao_id)){
    throw new Error('O cartão da despesa precisa ser o mesmo cartão da compra vinculada.');
   }
-
-  if(compra&&monthKey(compra.data)!==monthKey(payload.data)){
-   throw new Error('A compra vinculada precisa pertencer ao mesmo mês e ano da data da despesa.');
+  if(compra&&!titularIds.includes(String(compra.responsavel_id))){
+   throw new Error('Somente compras do titular podem ser vinculadas.');
   }
-
+  if(compra&&mesVencimentoCompra(compra)!==monthKey(payload.data)){
+   throw new Error('A compra precisa pertencer a uma fatura com vencimento no mês do pagamento.');
+  }
   const faturaId=await obterFaturaId(payload.cartao_id,compra?.data||payload.data,compra);
-
   const pagamentoPayload={
    user_id:user.id,fatura_id:faturaId,despesa_id:despesaId,
    lancamento_id:compra?.id||null,
    responsavel_id:compra?.responsavel_id||payload.responsavel_id||null,
    valor:roundMoney(payload.valor),data:payload.data,forma_pagamento:'Crédito'
   };
-
   if(existente?.id){
-   const{error}=await supabase.from('pessoal_cartao_pagamentos')
-    .update(pagamentoPayload).eq('id',existente.id).eq('user_id',user.id);
+   const{error}=await supabase.from('pessoal_cartao_pagamentos').update(pagamentoPayload)
+    .eq('id',existente.id).eq('user_id',user.id);
    if(error)throw error;
   }else{
    const{error}=await supabase.from('pessoal_cartao_pagamentos').insert(pagamentoPayload);
@@ -388,35 +374,28 @@ const Despesas=()=>{
  const save=async e=>{
   e.preventDefault();
   const valor=roundMoney(moneyNum(form.valor));
-
   if(!form.data||!form.despesa||valor<=0){
    toast({title:'Campos obrigatórios',description:'Preencha todos os campos obrigatórios.',variant:'destructive'});
    return;
   }
-
   if(form.forma_pagamento==='Crédito'&&!form.cartao_id){
    toast({title:'Cartão obrigatório',description:'Selecione o cartão de crédito utilizado.',variant:'destructive'});
    return;
   }
-
   if(form.despesa_prevista_id&&!isOnline){
    toast({title:'Conexão necessária',description:'Conecte-se à internet para vincular uma conta prevista.',variant:'destructive'});
    return;
   }
-
   if(form.forma_pagamento==='Crédito'&&!isOnline){
    toast({title:'Conexão necessária',description:'Conecte-se à internet para sincronizar o pagamento do cartão.',variant:'destructive'});
    return;
   }
-
   try{
    let conta=null;
-
    if(form.despesa_prevista_id){
     const{data,error}=await supabase.from('despesas_previstas')
      .select('id,data_vencimento,matched_transaction_id')
      .eq('id',form.despesa_prevista_id).eq('user_id',user.id).maybeSingle();
-
     if(error)throw error;
     if(!data)throw new Error('Conta prevista não encontrada.');
     if(monthKey(data.data_vencimento)!==monthKey(form.data)){
@@ -427,11 +406,8 @@ const Despesas=()=>{
     }
     conta=data;
    }
-
    const compraSelecionada=form.lancamento_id
-    ?comprasCartao.find(c=>String(c.id)===String(form.lancamento_id))
-    :null;
-
+    ?comprasCartao.find(c=>String(c.id)===String(form.lancamento_id)):null;
    if(form.lancamento_id&&!compraSelecionada)throw new Error('Compra vinculada não encontrada.');
    if(form.lancamento_id&&form.forma_pagamento!=='Crédito'){
     throw new Error('Uma compra do cartão só pode ser vinculada a uma despesa no crédito.');
@@ -439,10 +415,12 @@ const Despesas=()=>{
    if(compraSelecionada&&String(compraSelecionada.cartao_id)!==String(form.cartao_id)){
     throw new Error('Selecione o mesmo cartão utilizado na compra vinculada.');
    }
-   if(compraSelecionada&&monthKey(compraSelecionada.data)!==monthKey(form.data)){
-    throw new Error('A compra vinculada precisa pertencer ao mesmo mês e ano da data da despesa.');
+   if(compraSelecionada&&!titularIds.includes(String(compraSelecionada.responsavel_id))){
+    throw new Error('Somente compras do titular podem ser vinculadas.');
    }
-
+   if(compraSelecionada&&mesVencimentoCompra(compraSelecionada)!==monthKey(form.data)){
+    throw new Error('A compra precisa pertencer a uma fatura com vencimento no mês do pagamento.');
+   }
    const payload={
     user_id:user.id,data:form.data,despesa:form.despesa,valor,
     categoria:form.categoria,forma_pagamento:form.forma_pagamento,
@@ -451,7 +429,6 @@ const Despesas=()=>{
     responsavel_id:form.forma_pagamento==='Crédito'
      ?(compraSelecionada?.responsavel_id||form.responsavel_id||null):null
    };
-
    if(!isOnline&&!editing){
     await saveOfflineData('pessoal_despesas',payload);
     if(mounted.current){
@@ -461,14 +438,11 @@ const Despesas=()=>{
     checkPending();
     return;
    }
-
    if(editing&&!isOnline){
     toast({title:'Offline',description:'Edição offline não permitida.',variant:'destructive'});
     return;
    }
-
    let despesaId=editing;
-
    if(editing){
     const{data,error}=await supabase.from('despesas').update(payload)
      .eq('id',editing).eq('user_id',user.id).select('id').single();
@@ -480,32 +454,25 @@ const Despesas=()=>{
     if(error)throw error;
     despesaId=data.id;
    }
-
    const{error:unlinkError}=await supabase.from('despesas_previstas')
     .update({matched_transaction_id:null})
     .eq('user_id',user.id).eq('matched_transaction_id',despesaId);
    if(unlinkError)throw unlinkError;
-
    if(conta){
     const{error}=await supabase.from('despesas_previstas')
      .update({matched_transaction_id:despesaId})
      .eq('id',conta.id).eq('user_id',user.id);
     if(error)throw error;
    }
-
    await sincronizarPagamento(despesaId,{
     ...payload,lancamento_id:form.lancamento_id||null
    });
-
    toast({
     title:'Sucesso',
     description:editing?'Despesa atualizada e pagamento sincronizado.':'Despesa registrada e pagamento sincronizado.'
    });
-
    reset();
-   if(mounted.current){
-    await Promise.all([fetchDespesas(),fetchContasPrevistas(),fetchComprasCartao()]);
-   }
+   if(mounted.current)await Promise.all([fetchDespesas(),fetchContasPrevistas(),fetchComprasCartao()]);
   }catch(e){
    toast({title:'Erro',description:e.message||'Falha ao salvar despesa.',variant:'destructive'});
   }
@@ -516,21 +483,17 @@ const Despesas=()=>{
    toast({title:'Offline',description:'Exclusão offline não permitida.',variant:'destructive'});
    return;
   }
-
   try{
    const{error:pagamentoError}=await supabase.from('pessoal_cartao_pagamentos')
     .delete().eq('user_id',user.id).eq('despesa_id',id);
    if(pagamentoError)throw pagamentoError;
-
    const{error:unlinkError}=await supabase.from('despesas_previstas')
     .update({matched_transaction_id:null})
     .eq('user_id',user.id).eq('matched_transaction_id',id);
    if(unlinkError)throw unlinkError;
-
    const{error}=await supabase.from('despesas').delete()
     .eq('id',id).eq('user_id',user.id);
    if(error)throw error;
-
    toast({title:'Sucesso',description:'Despesa removida, pagamento excluído e vínculo liberado.'});
    await Promise.all([fetchDespesas(),fetchContasPrevistas(),fetchComprasCartao()]);
   }catch(e){
@@ -558,7 +521,6 @@ const Despesas=()=>{
  return(
   <motion.div initial={{opacity:0,y:20}} animate={{opacity:1,y:0}} className="dark-pessoal space-y-4">
    <OfflineIndicator/>
-
    <div className="rounded-xl border border-border bg-card/70">
     <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
      <div className="flex items-center gap-4">
@@ -576,7 +538,6 @@ const Despesas=()=>{
      </div>
     </div>
    </div>
-
    <div className="rounded-xl border border-border bg-card/70 p-3">
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_.65fr_.5fr_.8fr_.8fr_auto]">
      <div className="relative">
@@ -612,14 +573,12 @@ const Despesas=()=>{
      <Button variant="outline" onClick={clearFilters} className="h-11 border-border"><Filter className="mr-2 h-4 w-4"/>Limpar</Button>
     </div>
    </div>
-
    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
     <StatCard icon={FileText} label="Total de Registros" value={filtered.length}/>
     <StatCard icon={DollarSign} label="Total do Período" value={money.format(total)}/>
     <StatCard icon={ArrowDownRight} label="Média por Registro" value={money.format(media)}/>
     <StatCard icon={WalletCards} label="Maior Lançamento" value={money.format(maior)}/>
    </div>
-
    <div className="overflow-hidden rounded-xl border border-border bg-card/70">
     <div className="overflow-x-auto">
      <Table>
@@ -665,7 +624,6 @@ const Despesas=()=>{
       </TableBody>
      </Table>
     </div>
-
     {!loading&&filtered.length>0&&(
      <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="text-sm text-muted-foreground">Mostrando {Math.min((currentPage-1)*pageSize+1,filtered.length)} a {Math.min(currentPage*pageSize,filtered.length)} de {filtered.length} registros</div>
@@ -677,7 +635,6 @@ const Despesas=()=>{
      </div>
     )}
    </div>
-
    <ModalLancamentoPadrao
     open={open}
     onClose={closeModal}
@@ -704,7 +661,6 @@ const Despesas=()=>{
         <Input type="text" inputMode="numeric" name="valor" value={form.valor} onChange={e=>setForm({...form,valor:formatMoney(e.target.value)})} required placeholder="R$ 0,00" className="h-11 rounded-xl bg-input font-semibold tabular-nums"/>
        </div>
       </div>
-
       <div className="space-y-2">
        <Label>Descrição (Tipo de Despesa)</Label>
        <Select value={form.despesa} onValueChange={v=>{
@@ -717,12 +673,10 @@ const Despesas=()=>{
         </SelectContent>
        </Select>
       </div>
-
       <div className="space-y-2">
        <Label>Categoria</Label>
        <Input value={form.categoria||'Selecione um tipo'} readOnly className="h-11 rounded-xl bg-muted text-muted-foreground"/>
       </div>
-
       <div className="space-y-2">
        <Label>Conta prevista vinculada (opcional)</Label>
        <Select value={form.despesa_prevista_id||'nenhuma'} onValueChange={v=>setForm(prev=>({...prev,despesa_prevista_id:v==='nenhuma'?'':v}))}>
@@ -737,7 +691,6 @@ const Despesas=()=>{
        <p className="text-xs text-muted-foreground">Escolha a conta específica quitada por esta despesa. Contas com nomes iguais são diferenciadas pelo vínculo individual.</p>
        {!contasPrevistasDoMes.length&&<p className="text-xs text-amber-400">Nenhuma conta prevista disponível para este mês.</p>}
       </div>
-
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
        <div className="space-y-2">
         <Label>Pagamento</Label>
@@ -754,7 +707,6 @@ const Despesas=()=>{
         <Input type="number" name="parcelas" min="1" value={form.parcelas} onChange={e=>setForm({...form,parcelas:e.target.value})} className="h-11 rounded-xl bg-input"/>
        </div>
       </div>
-
       {form.forma_pagamento==='Crédito'&&(
        <div className="space-y-5 rounded-xl p-4" style={{border:'1px solid hsl(0 84% 60% / .14)',background:'hsl(0 84% 60% / .025)'}}>
         <div className="space-y-2">
@@ -773,7 +725,6 @@ const Despesas=()=>{
           </Select>
          )}
         </div>
-
         <div className="space-y-2">
          <Label>Compra do cartão vinculada (opcional)</Label>
          <Select value={form.lancamento_id||'nenhuma'} onValueChange={v=>selecionarCompra(v==='nenhuma'?'':v)}>
@@ -793,10 +744,9 @@ const Despesas=()=>{
            </ScrollArea>
           </SelectContent>
          </Select>
-         <p className="text-xs text-muted-foreground">São exibidas somente compras do mesmo mês e ano da data da despesa e, quando selecionado, do cartão escolhido. O vínculo reduz apenas o saldo da compra correspondente.</p>
-         {!comprasDisponiveis.length&&<p className="text-xs text-amber-400">Nenhuma compra disponível para este mês e cartão.</p>}
+         <p className="text-xs text-muted-foreground">São exibidas as compras do titular que pertencem às faturas com vencimento no mês e ano da data do pagamento. Compras de dependentes não aparecem.</p>
+         {!comprasDisponiveis.length&&<p className="text-xs text-amber-400">Nenhuma compra do titular encontrada em faturas com vencimento neste mês.</p>}
         </div>
-
         <div className="space-y-2">
          <Label>Responsável pela Compra</Label>
          {usuarios.length===0?(
@@ -824,3 +774,4 @@ const Despesas=()=>{
 };
 
 export default Despesas;
+
