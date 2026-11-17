@@ -17,241 +17,87 @@ import{useToast}from'@/components/ui/use-toast';
 import{exportToExcel}from'@/lib/ExportUtils';
 import ModalLancamentoPadrao from'@/components/ModalLancamentoPadrao';
 
-const TZ='America/Sao_Paulo';
-const GREEN='hsl(142 71% 45%)';
-const meses=Array.from({length:12},(_,i)=>i);
-const anos=[2024,2025,2026,2027];
-
-const toCents=v=>Math.round((Number(v)||0)*100);
-const fromCents=v=>(Number(v)||0)/100;
-const roundMoney=v=>fromCents(toCents(v));
-
-const moeda=v=>new Intl.NumberFormat('pt-BR',{
- style:'currency',
- currency:'BRL'
-}).format(roundMoney(v));
-
-const getBRDate=()=>{
- const parts=new Intl.DateTimeFormat('en-CA',{
-  timeZone:TZ,
-  year:'numeric',
-  month:'2-digit',
-  day:'2-digit'
- }).formatToParts(new Date()),v={};
-
- parts.forEach(x=>{
-  if(x.type!=='literal')v[x.type]=x.value;
- });
-
- return`${v.year}-${v.month}-${v.day}`;
-};
-
-const money=v=>{
- const d=String(v??'').replace(/\D/g,'');
- return d?new Intl.NumberFormat('pt-BR',{
-  style:'currency',
-  currency:'BRL'
- }).format(fromCents(Number(d))):'';
-};
-
-const moneyNum=v=>{
- const d=String(v??'').replace(/\D/g,'');
- return d?fromCents(Number(d)):0;
-};
-
-const brDate=v=>{
- if(!v)return'-';
- const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
- if(m)return`${m[3]}/${m[2]}/${m[1]}`;
- const d=new Date(v);
- return Number.isNaN(d.getTime())?'-':new Intl.DateTimeFormat('pt-BR',{timeZone:TZ}).format(d);
-};
-
-const cicloFatura=(dia,mes,ano)=>{
- const ref=new Date(ano,mes,1);
- const diaF=Math.min(dia||1,28);
- const inicio=addMonths(setDate(ref,diaF),-1);
- const fim=subDays(setDate(ref,diaF),1);
- return{
-  inicio:format(inicio,'yyyy-MM-dd'),
-  fim:format(fim,'yyyy-MM-dd')
- };
-};
-
-const STATUS_STYLE={
- aberta:'bg-amber-500/20 text-amber-400 border-amber-500/40',
- fechada:'bg-blue-500/20 text-blue-400 border-blue-500/40',
- paga:'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-};
+const TZ='America/Sao_Paulo',GREEN='hsl(142 71% 45%)';
+const meses=Array.from({length:12},(_,i)=>i),anos=[2024,2025,2026,2027];
+const toCents=v=>Math.round((Number(v)||0)*100),fromCents=v=>(Number(v)||0)/100,roundMoney=v=>fromCents(toCents(v));
+const moeda=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(roundMoney(v));
+const getBRDate=()=>{const p=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()),v={};p.forEach(x=>{if(x.type!=='literal')v[x.type]=x.value});return`${v.year}-${v.month}-${v.day}`;};
+const money=v=>{const d=String(v??'').replace(/\D/g,'');return d?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(fromCents(Number(d))):'';};
+const moneyNum=v=>{const d=String(v??'').replace(/\D/g,'');return d?fromCents(Number(d)):0;};
+const brDate=v=>{if(!v)return'-';const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return`${m[3]}/${m[2]}/${m[1]}`;const d=new Date(v);return Number.isNaN(d.getTime())?'-':new Intl.DateTimeFormat('pt-BR',{timeZone:TZ}).format(d);};
+const cicloFatura=(dia,mes,ano)=>{const ref=new Date(ano,mes,1),diaF=Math.min(dia||1,28),inicio=addMonths(setDate(ref,diaF),-1),fim=subDays(setDate(ref,diaF),1);return{inicio:format(inicio,'yyyy-MM-dd'),fim:format(fim,'yyyy-MM-dd')};};
+const STATUS_STYLE={aberta:'bg-amber-500/20 text-amber-400 border-amber-500/40',fechada:'bg-blue-500/20 text-blue-400 border-blue-500/40',paga:'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'};
 
 const StatCard=({label,value,icon:Icon,color='blue'})=>(
  <Card className={`border-${color}-500/20 bg-gradient-to-br from-${color}-500/10 to-${color}-700/10`}>
-  <CardContent className="p-4">
-   <div className="flex items-center gap-3">
-    <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-${color}-500/10`}>
-     <Icon className={`h-5 w-5 text-${color}-400`}/>
-    </div>
-    <div className="min-w-0">
-     <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-     <p className={`mt-1 truncate text-xl font-bold text-${color}-400`}>{value}</p>
-    </div>
-   </div>
-  </CardContent>
+  <CardContent className="p-4"><div className="flex items-center gap-3">
+   <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-${color}-500/10`}><Icon className={`h-5 w-5 text-${color}-400`}/></div>
+   <div className="min-w-0"><p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p><p className={`mt-1 truncate text-xl font-bold text-${color}-400`}>{value}</p></div>
+  </div></CardContent>
  </Card>
 );
 
 const Faturas=()=>{
- const{user}=useAuth();
- const{toast}=useToast();
- const mounted=useRef(true);
-
- const[loading,setLoading]=useState(true);
- const[cartoes,setCartoes]=useState([]);
- const[pessoas,setPessoas]=useState([]);
- const[lancamentos,setLancamentos]=useState([]);
- const[fatura,setFatura]=useState(null);
- const[pagamentos,setPagamentos]=useState([]);
- const[selectedCartao,setSelectedCartao]=useState('');
- const[selectedPessoa,setSelectedPessoa]=useState('todas');
- const[selectedMonth,setSelectedMonth]=useState(String(new Date().getMonth()));
- const[selectedYear,setSelectedYear]=useState(String(new Date().getFullYear()));
- const[isPagamentoOpen,setIsPagamentoOpen]=useState(false);
-
- const initialPagamento=()=>({
-  valor:'',
-  data:getBRDate(),
-  forma_pagamento:'Pix'
- });
-
+ const{user}=useAuth(),{toast}=useToast(),mounted=useRef(true);
+ const[loading,setLoading]=useState(true),[cartoes,setCartoes]=useState([]),[pessoas,setPessoas]=useState([]),[lancamentos,setLancamentos]=useState([]),[fatura,setFatura]=useState(null),[pagamentos,setPagamentos]=useState([]);
+ const[selectedCartao,setSelectedCartao]=useState(''),[selectedPessoa,setSelectedPessoa]=useState('todas'),[selectedMonth,setSelectedMonth]=useState(String(new Date().getMonth())),[selectedYear,setSelectedYear]=useState(String(new Date().getFullYear())),[isPagamentoOpen,setIsPagamentoOpen]=useState(false);
+ const initialPagamento=()=>({valor:'',data:getBRDate(),forma_pagamento:'Pix',responsavel_id:'',lancamento_id:''});
  const[pagForm,setPagForm]=useState(initialPagamento);
 
  useEffect(()=>()=>{mounted.current=false},[]);
 
  const fetchCartoes=useCallback(async()=>{
   if(!user)return;
-
-  const{data,error}=await supabase
-   .from('pessoal_cartoes')
-   .select('*')
-   .eq('user_id',user.id)
-   .order('nome',{ascending:true});
-
-  if(error){
-   console.error('Erro ao carregar cartões:',error);
-   return;
-  }
-
-  if(mounted.current){
-   setCartoes(data||[]);
-   if(data?.length&&!selectedCartao)setSelectedCartao(data[0].id);
-  }
+  const{data,error}=await supabase.from('pessoal_cartoes').select('*').eq('user_id',user.id).order('nome',{ascending:true});
+  if(error){console.error('Erro ao carregar cartões:',error);return;}
+  if(mounted.current){setCartoes(data||[]);if(data?.length&&!selectedCartao)setSelectedCartao(data[0].id);}
  },[user,selectedCartao]);
 
  const fetchPessoas=useCallback(async()=>{
-  if(!user){
-   setPessoas([]);
-   return;
-  }
-
-  const{data,error}=await supabase
-   .from('pessoal_cartao_usuarios')
-   .select('id,nome')
-   .eq('user_id',user.id)
-   .order('nome',{ascending:true});
-
-  if(error){
-   console.error('Erro ao carregar pessoas dos cartões:',error);
-   return;
-  }
-
+  if(!user){setPessoas([]);return;}
+  const{data,error}=await supabase.from('pessoal_cartao_usuarios').select('id,nome,parentesco').eq('user_id',user.id).order('nome',{ascending:true});
+  if(error){console.error('Erro ao carregar pessoas dos cartões:',error);return;}
   if(mounted.current)setPessoas(data||[]);
  },[user]);
 
- const cartao=useMemo(
-  ()=>cartoes.find(c=>c.id===selectedCartao)||null,
-  [cartoes,selectedCartao]
- );
-
- const mes=Number(selectedMonth);
- const ano=Number(selectedYear);
-
- const ciclo=useMemo(
-  ()=>cartao?cicloFatura(cartao.dia_fechamento,mes,ano):null,
-  [cartao,mes,ano]
- );
+ const cartao=useMemo(()=>cartoes.find(c=>c.id===selectedCartao)||null,[cartoes,selectedCartao]);
+ const mes=Number(selectedMonth),ano=Number(selectedYear);
+ const ciclo=useMemo(()=>cartao?cicloFatura(cartao.dia_fechamento,mes,ano):null,[cartao,mes,ano]);
 
  const fetchDados=useCallback(async()=>{
   if(!user||!selectedCartao||!ciclo)return;
-
   setLoading(true);
-
   const[lancRes,fatRes]=await Promise.all([
-   supabase
-    .from('pessoal_cartao_lancamentos')
-    .select('*')
-    .eq('user_id',user.id)
-    .eq('cartao_id',selectedCartao)
-    .gte('data',ciclo.inicio)
-    .lte('data',ciclo.fim)
-    .order('data',{ascending:false}),
-
-   supabase
-    .from('pessoal_faturas')
-    .select('*')
-    .eq('user_id',user.id)
-    .eq('cartao_id',selectedCartao)
-    .eq('mes',mes)
-    .eq('ano',ano)
-    .maybeSingle()
+   supabase.from('pessoal_cartao_lancamentos').select('*').eq('user_id',user.id).eq('cartao_id',selectedCartao).gte('data',ciclo.inicio).lte('data',ciclo.fim).order('data',{ascending:false}),
+   supabase.from('pessoal_faturas').select('*').eq('user_id',user.id).eq('cartao_id',selectedCartao).eq('mes',mes).eq('ano',ano).maybeSingle()
   ]);
-
   if(!mounted.current)return;
-
-  if(lancRes.error){
-   console.error('Erro ao carregar lançamentos:',lancRes.error);
-   toast({title:'Erro',description:'Não foi possível carregar os lançamentos da fatura.',variant:'destructive'});
-  }
-
-  if(fatRes.error){
-   console.error('Erro ao carregar fatura:',fatRes.error);
-   toast({title:'Erro',description:'Não foi possível carregar os dados da fatura.',variant:'destructive'});
-  }
-
-  setLancamentos(lancRes.data||[]);
-  setFatura(fatRes.data||null);
-
+  if(lancRes.error){console.error('Erro ao carregar lançamentos:',lancRes.error);toast({title:'Erro',description:'Não foi possível carregar os lançamentos da fatura.',variant:'destructive'});}
+  if(fatRes.error){console.error('Erro ao carregar fatura:',fatRes.error);toast({title:'Erro',description:'Não foi possível carregar os dados da fatura.',variant:'destructive'});}
+  setLancamentos(lancRes.data||[]);setFatura(fatRes.data||null);
   if(fatRes.data){
-   const{data:pags,error:pagsError}=await supabase
-    .from('pessoal_cartao_pagamentos')
-    .select('id,user_id,fatura_id,valor,data,forma_pagamento,despesa_id,responsavel_id,lancamento_id')
-    .eq('fatura_id',fatRes.data.id)
-    .order('data',{ascending:false});
-
+   const{data:pags,error:pagsError}=await supabase.from('pessoal_cartao_pagamentos').select('id,user_id,fatura_id,valor,data,forma_pagamento,despesa_id,responsavel_id,lancamento_id').eq('fatura_id',fatRes.data.id).order('data',{ascending:false});
    if(pagsError)console.error('Erro ao carregar pagamentos:',pagsError);
    if(mounted.current)setPagamentos(pags||[]);
-  }else{
-   setPagamentos([]);
-  }
-
+  }else setPagamentos([]);
   if(mounted.current)setLoading(false);
  },[user,selectedCartao,ciclo,mes,ano,toast]);
 
  useEffect(()=>{fetchCartoes()},[fetchCartoes]);
  useEffect(()=>{fetchPessoas()},[fetchPessoas]);
-
- useEffect(()=>{
-  if(selectedCartao)fetchDados();
- },[selectedCartao,selectedMonth,selectedYear,fetchDados]);
+ useEffect(()=>{if(selectedCartao)fetchDados()},[selectedCartao,selectedMonth,selectedYear,fetchDados]);
 
  const lancamentosFiltrados=useMemo(()=>{
   if(selectedPessoa==='todas')return lancamentos;
-
-  if(selectedPessoa==='sem_responsavel'){
-   return lancamentos.filter(l=>!l.responsavel_id);
-  }
-
+  if(selectedPessoa==='sem_responsavel')return lancamentos.filter(l=>!l.responsavel_id);
   return lancamentos.filter(l=>String(l.responsavel_id||'')===selectedPessoa);
  },[lancamentos,selectedPessoa]);
+
+ const titularesIds=useMemo(()=>pessoas.filter(p=>String(p.parentesco||'').trim().toLowerCase()==='titular').map(p=>String(p.id)),[pessoas]);
+ const pessoasNaoTitulares=useMemo(()=>pessoas.filter(p=>!titularesIds.includes(String(p.id))),[pessoas,titularesIds]);
+ const comprasOutrasPessoas=useMemo(()=>lancamentos.filter(l=>l.responsavel_id&&pessoasNaoTitulares.some(p=>String(p.id)===String(l.responsavel_id))),[lancamentos,pessoasNaoTitulares]);
+ const pessoasComComprasNaFatura=useMemo(()=>pessoasNaoTitulares.filter(p=>comprasOutrasPessoas.some(l=>String(l.responsavel_id)===String(p.id))),[pessoasNaoTitulares,comprasOutrasPessoas]);
+ const pagamentosPorCompra=useMemo(()=>pagamentos.reduce((acc,p)=>{if(p.lancamento_id)acc[p.lancamento_id]=(acc[p.lancamento_id]||0)+toCents(p.valor);return acc;},{}),[pagamentos]);
 
  const nomePessoaSelecionada=useMemo(()=>{
   if(selectedPessoa==='todas')return'Todas as pessoas';
@@ -259,261 +105,92 @@ const Faturas=()=>{
   return pessoas.find(p=>String(p.id)===selectedPessoa)?.nome||'Pessoa selecionada';
  },[selectedPessoa,pessoas]);
 
- const totalFaturaCentavos=lancamentos.reduce(
-  (total,l)=>total+toCents(
-   getInstallmentValue(l.valor,l.parcelas,l.parcela_atual)
-  ),0
- );
-
- const totalPagoCentavos=pagamentos.reduce(
-  (total,p)=>total+toCents(p.valor),0
- );
-
- const totalFatura=fromCents(totalFaturaCentavos);
- const totalPago=fromCents(totalPagoCentavos);
-
- const saldoRestante=fromCents(
-  Math.max(0,totalFaturaCentavos-totalPagoCentavos)
- );
+ const totalFaturaCentavos=lancamentos.reduce((t,l)=>t+toCents(getInstallmentValue(l.valor,l.parcelas,l.parcela_atual)),0);
+ const totalPagoCentavos=pagamentos.reduce((t,p)=>t+toCents(p.valor),0);
+ const totalFatura=fromCents(totalFaturaCentavos),totalPago=fromCents(totalPagoCentavos);
+ const saldoRestante=fromCents(Math.max(0,totalFaturaCentavos-totalPagoCentavos));
 
  const dataVencimento=useMemo(()=>{
   if(!cartao)return null;
-
-  return format(
-   setDate(
-    new Date(ano,mes,1),
-    Math.min(cartao.dia_vencimento||1,28)
-   ),
-   'yyyy-MM-dd'
-  );
+  return format(setDate(new Date(ano,mes,1),Math.min(cartao.dia_vencimento||1,28)),'yyyy-MM-dd');
  },[cartao,mes,ano]);
 
  const fecharFatura=async()=>{
   if(!cartao||!ciclo)return;
-
-  if(!lancamentos.length){
-   toast({
-    title:'Aviso',
-    description:'Não há lançamentos neste ciclo para fechar a fatura.',
-    variant:'destructive'
-   });
-   return;
-  }
-
+  if(!lancamentos.length){toast({title:'Aviso',description:'Não há lançamentos neste ciclo para fechar a fatura.',variant:'destructive'});return;}
   const faturaPaga=totalFaturaCentavos>0&&totalPagoCentavos>=totalFaturaCentavos;
-  const ultimaDataPagamento=pagamentos
-   .map(p=>p.data)
-   .filter(Boolean)
-   .sort()
-   .at(-1)||null;
-
-  const payload={
-   user_id:user.id,
-   cartao_id:cartao.id,
-   mes,
-   ano,
-   data_fechamento:ciclo.fim,
-   data_vencimento:dataVencimento,
-   valor_total:totalFatura,
-   status:faturaPaga?'paga':'fechada',
-   data_pagamento:faturaPaga?ultimaDataPagamento:null
-  };
-
-  const r=fatura
-   ?await supabase
-    .from('pessoal_faturas')
-    .update({...payload,updated_at:new Date().toISOString()})
-    .eq('id',fatura.id)
-   :await supabase
-    .from('pessoal_faturas')
-    .insert(payload);
-
-  if(r.error){
-   toast({
-    title:'Erro',
-    description:'Não foi possível fechar a fatura.',
-    variant:'destructive'
-   });
-  }else{
-   toast({
-    title:'Sucesso',
-    description:faturaPaga?'Fatura fechada e identificada como paga.':'Fatura fechada.'
-   });
-  }
-
+  const ultimaDataPagamento=pagamentos.map(p=>p.data).filter(Boolean).sort().at(-1)||null;
+  const payload={user_id:user.id,cartao_id:cartao.id,mes,ano,data_fechamento:ciclo.fim,data_vencimento:dataVencimento,valor_total:totalFatura,status:faturaPaga?'paga':'fechada',data_pagamento:faturaPaga?ultimaDataPagamento:null};
+  const r=fatura?await supabase.from('pessoal_faturas').update({...payload,updated_at:new Date().toISOString()}).eq('id',fatura.id):await supabase.from('pessoal_faturas').insert(payload);
+  if(r.error)toast({title:'Erro',description:'Não foi possível fechar a fatura.',variant:'destructive'});
+  else toast({title:'Sucesso',description:faturaPaga?'Fatura fechada e identificada como paga.':'Fatura fechada.'});
   fetchDados();
  };
 
  const reabrir=async()=>{
   if(!fatura)return;
-
-  const{error}=await supabase
-   .from('pessoal_faturas')
-   .update({
-    status:'aberta',
-    data_pagamento:null,
-    updated_at:new Date().toISOString()
-   })
-   .eq('id',fatura.id);
-
-  toast(
-   error
-    ?{
-      title:'Erro',
-      description:'Não foi possível reabrir a fatura.',
-      variant:'destructive'
-     }
-    :{
-      title:'Sucesso',
-      description:'Fatura reaberta.'
-     }
-  );
-
+  const{error}=await supabase.from('pessoal_faturas').update({status:'aberta',data_pagamento:null,updated_at:new Date().toISOString()}).eq('id',fatura.id);
+  toast(error?{title:'Erro',description:'Não foi possível reabrir a fatura.',variant:'destructive'}:{title:'Sucesso',description:'Fatura reaberta.'});
   fetchDados();
  };
 
- const openPagamento=()=>{
-  setPagForm({
-   valor:money(toCents(saldoRestante)),
-   data:getBRDate(),
-   forma_pagamento:'Pix'
-  });
+ const openPagamento=()=>{setPagForm({...initialPagamento(),valor:money(toCents(saldoRestante))});setIsPagamentoOpen(true);};
 
-  setIsPagamentoOpen(true);
+ const selecionarCompraPagamento=id=>{
+  const compra=comprasOutrasPessoas.find(l=>String(l.id)===String(id));
+  if(!compra){setPagForm(prev=>({...prev,lancamento_id:''}));return;}
+  const valorCompra=toCents(getInstallmentValue(compra.valor,compra.parcelas,compra.parcela_atual));
+  const saldoCompra=Math.max(0,valorCompra-(pagamentosPorCompra[compra.id]||0));
+  setPagForm(prev=>({...prev,lancamento_id:String(compra.id),responsavel_id:String(compra.responsavel_id),valor:money(Math.min(saldoCompra,toCents(saldoRestante)))}));
  };
 
- const closePagamento=()=>{
-  setIsPagamentoOpen(false);
-  setPagForm(initialPagamento());
- };
+ const closePagamento=()=>{setIsPagamentoOpen(false);setPagForm(initialPagamento());};
 
  const salvarPagamento=async()=>{
-  if(!fatura){
-   toast({
-    title:'Erro',
-    description:'Feche a fatura antes de registrar pagamentos.',
-    variant:'destructive'
-   });
-   return;
-  }
+  if(!fatura){toast({title:'Erro',description:'Feche a fatura antes de registrar pagamentos.',variant:'destructive'});return;}
+  const valor=roundMoney(moneyNum(pagForm.valor)),valorCentavos=toCents(valor);
+  if(valorCentavos<=0){toast({title:'Erro',description:'Informe um valor válido.',variant:'destructive'});return;}
+  if(valorCentavos>toCents(saldoRestante)){toast({title:'Valor acima do saldo',description:`O pagamento não pode ultrapassar ${moeda(saldoRestante)}.`,variant:'destructive'});return;}
 
-  const valor=roundMoney(moneyNum(pagForm.valor));
-  const valorCentavos=toCents(valor);
+  const compraVinculada=pagForm.lancamento_id?comprasOutrasPessoas.find(l=>String(l.id)===String(pagForm.lancamento_id)):null;
+  if(pagForm.lancamento_id&&!compraVinculada){toast({title:'Compra inválida',description:'A compra selecionada não pertence às outras pessoas desta fatura.',variant:'destructive'});return;}
+  if(pagForm.responsavel_id&&!pessoasComComprasNaFatura.some(p=>String(p.id)===String(pagForm.responsavel_id))){toast({title:'Responsável inválido',description:'Selecione uma das outras pessoas com compras nesta fatura.',variant:'destructive'});return;}
 
-  if(valorCentavos<=0){
-   toast({
-    title:'Erro',
-    description:'Informe um valor válido.',
-    variant:'destructive'
-   });
-   return;
+  if(compraVinculada){
+   const valorCompra=toCents(getInstallmentValue(compraVinculada.valor,compraVinculada.parcelas,compraVinculada.parcela_atual));
+   const saldoCompra=Math.max(0,valorCompra-(pagamentosPorCompra[compraVinculada.id]||0));
+   if(!pagForm.responsavel_id||String(pagForm.responsavel_id)!==String(compraVinculada.responsavel_id)){toast({title:'Responsável divergente',description:'O responsável deve corresponder à pessoa da compra selecionada.',variant:'destructive'});return;}
+   if(valorCentavos>saldoCompra){toast({title:'Valor acima do saldo da compra',description:`O saldo disponível desta compra é ${moeda(fromCents(saldoCompra))}.`,variant:'destructive'});return;}
   }
 
   try{
-   const{error}=await supabase
-    .from('pessoal_cartao_pagamentos')
-    .insert({
-     user_id:user.id,
-     fatura_id:fatura.id,
-     valor,
-     data:pagForm.data,
-     forma_pagamento:pagForm.forma_pagamento,
-     despesa_id:null,
-     responsavel_id:null,
-     lancamento_id:null
-    });
-
+   const{error}=await supabase.from('pessoal_cartao_pagamentos').insert({
+    user_id:user.id,fatura_id:fatura.id,valor,data:pagForm.data,forma_pagamento:pagForm.forma_pagamento,
+    despesa_id:null,responsavel_id:pagForm.responsavel_id||null,lancamento_id:compraVinculada?.id||null
+   });
    if(error)throw error;
-
-   toast({
-    title:'Sucesso',
-    description:'Pagamento manual registrado com sucesso.'
-   });
-
-   closePagamento();
-   await fetchDados();
-  }catch(error){
-   toast({
-    title:'Erro',
-    description:error.message||'Não foi possível registrar o pagamento.',
-    variant:'destructive'
-   });
-  }
+   toast({title:'Sucesso',description:compraVinculada?'Pagamento registrado e vinculado à compra de '+(pessoas.find(p=>String(p.id)===String(compraVinculada.responsavel_id))?.nome||'outra pessoa')+'.':'Pagamento manual registrado com sucesso.'});
+   closePagamento();await fetchDados();
+  }catch(error){toast({title:'Erro',description:error.message||'Não foi possível registrar o pagamento.',variant:'destructive'});}
  };
 
  const excluirPagamento=async id=>{
   const pagamento=pagamentos.find(p=>p.id===id);
-
   if(!pagamento)return;
-
-  if(pagamento.despesa_id){
-   toast({
-    title:'Pagamento vinculado',
-    description:'Este pagamento veio de Despesas. Edite ou exclua a despesa de origem para manter a sincronização.',
-    variant:'destructive'
-   });
-   return;
-  }
-
-  const{error}=await supabase
-   .from('pessoal_cartao_pagamentos')
-   .delete()
-   .eq('id',id)
-   .eq('user_id',user.id)
-   .is('despesa_id',null);
-
-  if(error){
-   toast({
-    title:'Erro',
-    description:'Falha ao remover pagamento manual.',
-    variant:'destructive'
-   });
-   return;
-  }
-
-  toast({
-   title:'Sucesso',
-   description:'Pagamento manual removido. O status da fatura foi recalculado.'
-  });
-
+  if(pagamento.despesa_id){toast({title:'Pagamento vinculado',description:'Este pagamento veio de Despesas. Edite ou exclua a despesa de origem para manter a sincronização.',variant:'destructive'});return;}
+  const{error}=await supabase.from('pessoal_cartao_pagamentos').delete().eq('id',id).eq('user_id',user.id).is('despesa_id',null);
+  if(error){toast({title:'Erro',description:'Falha ao remover pagamento manual.',variant:'destructive'});return;}
+  toast({title:'Sucesso',description:'Pagamento manual removido. O status da fatura foi recalculado.'});
   fetchDados();
  };
 
  const handleExport=()=>{
   const exportarPagamentos=selectedPessoa==='todas';
-
-  if(!lancamentosFiltrados.length&&(!exportarPagamentos||!pagamentos.length)){
-   toast({
-    title:'Aviso',
-    description:'Nenhum dado para exportar com o filtro selecionado.',
-    variant:'destructive'
-   });
-   return;
-  }
-
+  if(!lancamentosFiltrados.length&&(!exportarPagamentos||!pagamentos.length)){toast({title:'Aviso',description:'Nenhum dado para exportar com o filtro selecionado.',variant:'destructive'});return;}
   const dados=[
-   ...lancamentosFiltrados.map(l=>({
-    Tipo:'Lançamento',
-    Pessoa:pessoas.find(p=>String(p.id)===String(l.responsavel_id))?.nome||'Sem responsável',
-    Data:brDate(l.data),
-    Descrição:l.descricao||'-',
-    Parcela:`${l.parcela_atual||0}/${l.parcelas||0}`,
-    Valor:roundMoney(
-     getInstallmentValue(l.valor,l.parcelas,l.parcela_atual)
-    )
-   })),
-   ...(exportarPagamentos?pagamentos.map(p=>({
-    Tipo:p.despesa_id?'Pagamento via Despesas':'Pagamento manual',
-    Pessoa:p.responsavel_id
-     ?pessoas.find(x=>String(x.id)===String(p.responsavel_id))?.nome||'Pessoa removida'
-     :'Fatura geral',
-    Data:brDate(p.data),
-    Descrição:p.forma_pagamento||'-',
-    Parcela:'-',
-    Valor:roundMoney(p.valor)
-   })):[])
+   ...lancamentosFiltrados.map(l=>({Tipo:'Lançamento',Pessoa:pessoas.find(p=>String(p.id)===String(l.responsavel_id))?.nome||'Sem responsável',Data:brDate(l.data),Descrição:l.descricao||'-',Parcela:`${l.parcela_atual||0}/${l.parcelas||0}`,Valor:roundMoney(getInstallmentValue(l.valor,l.parcelas,l.parcela_atual))})),
+   ...(exportarPagamentos?pagamentos.map(p=>({Tipo:p.despesa_id?'Pagamento via Despesas':'Pagamento manual',Pessoa:p.responsavel_id?pessoas.find(x=>String(x.id)===String(p.responsavel_id))?.nome||'Pessoa removida':'Fatura geral',Data:brDate(p.data),Descrição:p.forma_pagamento||'-',Parcela:'-',Valor:roundMoney(p.valor)})):[])
   ];
-
   exportToExcel(dados,'Fatura_Cartao','Fatura');
  };
 
@@ -522,350 +199,111 @@ const Faturas=()=>{
 
  return(
   <div className="dark-pessoal space-y-4">
-
    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card/70 p-5 lg:flex-row lg:items-center lg:justify-between">
-    <div className="min-w-0">
-     <div className="flex items-center gap-3">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10">
-       <WalletCards className="h-5 w-5 text-red-400"/>
-      </div>
-
-      <div>
-       <p className="text-[11px] font-semibold uppercase tracking-[.2em] text-red-400">Consultas</p>
-       <h1 className="text-2xl font-bold tracking-tight">Faturas do Cartão</h1>
-       <p className="text-sm text-muted-foreground">Acompanhe fechamento, vencimento e pagamentos.</p>
-      </div>
-     </div>
-    </div>
-
+    <div className="min-w-0"><div className="flex items-center gap-3">
+     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10"><WalletCards className="h-5 w-5 text-red-400"/></div>
+     <div><p className="text-[11px] font-semibold uppercase tracking-[.2em] text-red-400">Consultas</p><h1 className="text-2xl font-bold tracking-tight">Faturas do Cartão</h1><p className="text-sm text-muted-foreground">Acompanhe fechamento, vencimento e pagamentos.</p></div>
+    </div></div>
     <div className="flex flex-wrap gap-2">
-     <Button variant="outline" onClick={handleExport} disabled={!podeExportar}>
-      <Download className="mr-2 h-4 w-4"/>
-      Exportar
-     </Button>
-
-     <Button variant="outline" onClick={fetchDados} disabled={!selectedCartao}>
-      <RefreshCw className="mr-2 h-4 w-4"/>
-      Atualizar
-     </Button>
+     <Button variant="outline" onClick={handleExport} disabled={!podeExportar}><Download className="mr-2 h-4 w-4"/>Exportar</Button>
+     <Button variant="outline" onClick={fetchDados} disabled={!selectedCartao}><RefreshCw className="mr-2 h-4 w-4"/>Atualizar</Button>
     </div>
    </div>
 
    {cartoes.length===0?(
-    <Card className="border-border bg-card">
-     <CardContent className="p-12 text-center text-muted-foreground">
-      <Receipt className="mx-auto mb-3 h-12 w-12 opacity-50"/>
-      <p>Cadastre um cartão para gerenciar faturas.</p>
-     </CardContent>
-    </Card>
+    <Card className="border-border bg-card"><CardContent className="p-12 text-center text-muted-foreground"><Receipt className="mx-auto mb-3 h-12 w-12 opacity-50"/><p>Cadastre um cartão para gerenciar faturas.</p></CardContent></Card>
    ):(
     <>
      <Card className="border-border bg-card/80">
       <CardContent className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-5">
-
-       <div className="space-y-2">
-        <Label className="text-xs">Cartão</Label>
-        <Select value={selectedCartao} onValueChange={setSelectedCartao}>
-         <SelectTrigger className="bg-input"><SelectValue/></SelectTrigger>
-         <SelectContent className="dark-pessoal border-border bg-card">
-          {cartoes.map(c=>(
-           <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
-          ))}
-         </SelectContent>
-        </Select>
-       </div>
-
-       <div className="space-y-2">
-        <Label className="text-xs">Mês</Label>
-        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-         <SelectTrigger className="bg-input"><SelectValue/></SelectTrigger>
-         <SelectContent className="dark-pessoal border-border bg-card">
-          {meses.map(i=>(
-           <SelectItem key={i} value={String(i)}>
-            {format(new Date(2024,i,1),'MMMM',{locale:ptBR})}
-           </SelectItem>
-          ))}
-         </SelectContent>
-        </Select>
-       </div>
-
-       <div className="space-y-2">
-        <Label className="text-xs">Ano</Label>
-        <Select value={selectedYear} onValueChange={setSelectedYear}>
-         <SelectTrigger className="bg-input"><SelectValue/></SelectTrigger>
-         <SelectContent className="dark-pessoal border-border bg-card">
-          {anos.map(y=>(
-           <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-          ))}
-         </SelectContent>
-        </Select>
-       </div>
-
-       <div className="space-y-2">
-        <Label className="text-xs">Pessoa</Label>
-        <Select value={selectedPessoa} onValueChange={setSelectedPessoa}>
-         <SelectTrigger className="bg-input">
-          <SelectValue placeholder="Todas as pessoas"/>
-         </SelectTrigger>
-         <SelectContent className="dark-pessoal border-border bg-card">
-          <SelectItem value="todas">Todas as pessoas</SelectItem>
-          {pessoas.map(p=>(
-           <SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>
-          ))}
-          <SelectItem value="sem_responsavel">Sem responsável</SelectItem>
-         </SelectContent>
-        </Select>
-       </div>
-
-       <div className="flex items-end">
-        <div className="w-full rounded-lg border border-border bg-muted/20 px-3 py-2">
-         <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
-         <Badge className={STATUS_STYLE[status]} variant="outline">
-          {status.toUpperCase()}
-         </Badge>
-        </div>
-       </div>
-
+       <div className="space-y-2"><Label className="text-xs">Cartão</Label><Select value={selectedCartao} onValueChange={setSelectedCartao}><SelectTrigger className="bg-input"><SelectValue/></SelectTrigger><SelectContent className="dark-pessoal border-border bg-card">{cartoes.map(c=><SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}</SelectContent></Select></div>
+       <div className="space-y-2"><Label className="text-xs">Mês</Label><Select value={selectedMonth} onValueChange={setSelectedMonth}><SelectTrigger className="bg-input"><SelectValue/></SelectTrigger><SelectContent className="dark-pessoal border-border bg-card">{meses.map(i=><SelectItem key={i} value={String(i)}>{format(new Date(2024,i,1),'MMMM',{locale:ptBR})}</SelectItem>)}</SelectContent></Select></div>
+       <div className="space-y-2"><Label className="text-xs">Ano</Label><Select value={selectedYear} onValueChange={setSelectedYear}><SelectTrigger className="bg-input"><SelectValue/></SelectTrigger><SelectContent className="dark-pessoal border-border bg-card">{anos.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select></Select></div>
+       <div className="space-y-2"><Label className="text-xs">Pessoa</Label><Select value={selectedPessoa} onValueChange={setSelectedPessoa}><SelectTrigger className="bg-input"><SelectValue placeholder="Todas as pessoas"/></SelectTrigger><SelectContent className="dark-pessoal border-border bg-card"><SelectItem value="todas">Todas as pessoas</SelectItem>{pessoas.map(p=><SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>)}<SelectItem value="sem_responsavel">Sem responsável</SelectItem></SelectContent></Select></div>
+       <div className="flex items-end"><div className="w-full rounded-lg border border-border bg-muted/20 px-3 py-2"><p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</p><Badge className={STATUS_STYLE[status]} variant="outline">{status.toUpperCase()}</Badge></div></div>
       </CardContent>
      </Card>
 
-     {selectedPessoa!=='todas'&&(
-      <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-muted-foreground">
-       Exibindo: <strong className="text-foreground">{nomePessoaSelecionada}</strong>.
-       O filtro afeta a lista e a exportação dos lançamentos. O total, o saldo, os pagamentos e o fechamento continuam considerando a fatura inteira.
-      </div>
-     )}
+     {selectedPessoa!=='todas'&&<div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-muted-foreground">Exibindo: <strong className="text-foreground">{nomePessoaSelecionada}</strong>. O filtro afeta a lista e a exportação dos lançamentos. O total, o saldo, os pagamentos e o fechamento continuam considerando a fatura inteira.</div>}
 
-     {cartao&&ciclo&&(
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/50 px-4 py-3 text-sm text-muted-foreground">
-       <CalendarClock className="h-4 w-4 text-[hsl(var(--neon-pessoal))]"/>
-       <span>
-        Ciclo:
-        <strong className="text-foreground">
-         {brDate(ciclo.inicio)} a {brDate(ciclo.fim)}
-        </strong>
-       </span>
-       <span className="text-border">•</span>
-       <span>
-        Vencimento:
-        <strong className="text-foreground">{brDate(dataVencimento)}</strong>
-       </span>
-      </div>
-     )}
+     {cartao&&ciclo&&<div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/50 px-4 py-3 text-sm text-muted-foreground"><CalendarClock className="h-4 w-4 text-[hsl(var(--neon-pessoal))]"/><span>Ciclo: <strong className="text-foreground">{brDate(ciclo.inicio)} a {brDate(ciclo.fim)}</strong></span><span className="text-border">•</span><span>Vencimento: <strong className="text-foreground">{brDate(dataVencimento)}</strong></span></div>}
 
      <div className="grid gap-4 md:grid-cols-4">
       <StatCard label="Total da Fatura" value={moeda(totalFatura)} icon={Receipt} color="red"/>
       <StatCard label="Total Pago" value={moeda(totalPago)} icon={DollarSign} color="emerald"/>
       <StatCard label="Saldo Restante" value={moeda(saldoRestante)} icon={WalletCards} color="red"/>
-
-      <Card className="border-border bg-card">
-       <CardContent className="flex h-full flex-col justify-center gap-2 p-4">
-        {status==='aberta'&&(
-         <Button className="w-full bg-blue-600 text-white hover:bg-blue-700" onClick={fecharFatura}>
-          <Lock className="mr-2 h-4 w-4"/>
-          Fechar Fatura
-         </Button>
-        )}
-
-        {status==='fechada'&&(
-         <>
-          <Button className="w-full bg-emerald-600 text-white hover:bg-emerald-700" onClick={openPagamento}>
-           <DollarSign className="mr-2 h-4 w-4"/>
-           Registrar Pagamento
-          </Button>
-          <Button variant="outline" className="w-full" onClick={reabrir}>Reabrir Fatura</Button>
-         </>
-        )}
-
-        {status==='paga'&&(
-         <>
-          <Button variant="outline" className="w-full" onClick={openPagamento}>
-           <Plus className="mr-2 h-4 w-4"/>
-           Novo Pagamento
-          </Button>
-          <Button variant="outline" className="w-full" onClick={reabrir}>Reabrir Fatura</Button>
-         </>
-        )}
-       </CardContent>
-      </Card>
+      <Card className="border-border bg-card"><CardContent className="flex h-full flex-col justify-center gap-2 p-4">
+       {status==='aberta'&&<Button className="w-full bg-blue-600 text-white hover:bg-blue-700" onClick={fecharFatura}><Lock className="mr-2 h-4 w-4"/>Fechar Fatura</Button>}
+       {status==='fechada'&&<><Button className="w-full bg-emerald-600 text-white hover:bg-emerald-700" onClick={openPagamento}><DollarSign className="mr-2 h-4 w-4"/>Registrar Pagamento</Button><Button variant="outline" className="w-full" onClick={reabrir}>Reabrir Fatura</Button></>}
+       {status==='paga'&&<><Button variant="outline" className="w-full" onClick={openPagamento}><Plus className="mr-2 h-4 w-4"/>Novo Pagamento</Button><Button variant="outline" className="w-full" onClick={reabrir}>Reabrir Fatura</Button></>}
+      </CardContent></Card>
      </div>
 
      <div className="grid gap-4 lg:grid-cols-2">
-      <Card className="border-border bg-card">
-       <CardHeader className="pb-3">
-        <CardTitle className="text-base text-red-400">Lançamentos do Ciclo</CardTitle>
-       </CardHeader>
+      <Card className="border-border bg-card"><CardHeader className="pb-3"><CardTitle className="text-base text-red-400">Lançamentos do Ciclo</CardTitle></CardHeader><CardContent className="p-0"><ScrollArea className="h-[360px]"><Table>
+       <TableHeader><TableRow><TableHead>Descrição</TableHead><TableHead>Data</TableHead><TableHead>Parc.</TableHead><TableHead className="text-right">Valor/Parc.</TableHead></TableRow></TableHeader>
+       <TableBody>
+        {loading?<TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Carregando...</TableCell></TableRow>:lancamentosFiltrados.length===0?<TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">{selectedPessoa==='todas'?'Nenhum lançamento no ciclo.':'Nenhum lançamento encontrado para essa pessoa neste ciclo.'}</TableCell></TableRow>:lancamentosFiltrados.map(l=><TableRow key={l.id} className="hover:bg-muted/50"><TableCell className="font-medium">{l.descricao}</TableCell><TableCell className="text-sm">{brDate(l.data)}</TableCell><TableCell className="text-sm text-muted-foreground">{l.parcela_atual}/{l.parcelas}</TableCell><TableCell className="text-right font-semibold text-red-400">{moeda(getInstallmentValue(l.valor,l.parcelas,l.parcela_atual))}</TableCell></TableRow>)}
+       </TableBody>
+      </Table></ScrollArea></CardContent></Card>
 
-       <CardContent className="p-0">
-        <ScrollArea className="h-[360px]">
-         <Table>
-          <TableHeader>
-           <TableRow>
-            <TableHead>Descrição</TableHead>
-            <TableHead>Data</TableHead>
-            <TableHead>Parc.</TableHead>
-            <TableHead className="text-right">Valor/Parc.</TableHead>
-           </TableRow>
-          </TableHeader>
-
-          <TableBody>
-           {loading?(
-            <TableRow>
-             <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Carregando...</TableCell>
-            </TableRow>
-           ):lancamentosFiltrados.length===0?(
-            <TableRow>
-             <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-              {selectedPessoa==='todas'?'Nenhum lançamento no ciclo.':'Nenhum lançamento encontrado para essa pessoa neste ciclo.'}
-             </TableCell>
-            </TableRow>
-           ):(
-            lancamentosFiltrados.map(l=>(
-             <TableRow key={l.id} className="hover:bg-muted/50">
-              <TableCell className="font-medium">{l.descricao}</TableCell>
-              <TableCell className="text-sm">{brDate(l.data)}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">{l.parcela_atual}/{l.parcelas}</TableCell>
-              <TableCell className="text-right font-semibold text-red-400">
-               {moeda(getInstallmentValue(l.valor,l.parcelas,l.parcela_atual))}
-              </TableCell>
-             </TableRow>
-            ))
-           )}
-          </TableBody>
-         </Table>
-        </ScrollArea>
-       </CardContent>
-      </Card>
-
-      <Card className="border-border bg-card">
-       <CardHeader className="pb-3">
-        <CardTitle className="text-base text-emerald-400">Pagamentos</CardTitle>
-       </CardHeader>
-
-       <CardContent className="p-0">
-        <ScrollArea className="h-[360px]">
-         <Table>
-          <TableHeader>
-           <TableRow>
-            <TableHead>Data</TableHead>
-            <TableHead>Responsável</TableHead>
-            <TableHead>Origem / Forma</TableHead>
-            <TableHead className="text-right">Valor</TableHead>
-            <TableHead className="text-center">Ações</TableHead>
-           </TableRow>
-          </TableHeader>
-
-          <TableBody>
-           {pagamentos.length===0?(
-            <TableRow>
-             <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-              Nenhum pagamento registrado.
-             </TableCell>
-            </TableRow>
-           ):(
-            pagamentos.map(p=>{
-             const pessoa=p.responsavel_id
-              ?pessoas.find(x=>String(x.id)===String(p.responsavel_id))?.nome||'Pessoa removida'
-              :'Fatura geral';
-
-             return(
-              <TableRow key={p.id} className="hover:bg-muted/50">
-               <TableCell className="text-sm">{brDate(p.data)}</TableCell>
-               <TableCell className="text-sm">{pessoa}</TableCell>
-               <TableCell className="text-sm text-muted-foreground">
-                <div>{p.forma_pagamento||'—'}</div>
-                <div className="text-[11px]">
-                 {p.lancamento_id?'Compra específica':p.despesa_id?'Origem: Despesas':'Origem: Manual'}
-                </div>
-               </TableCell>
-               <TableCell className="text-right font-semibold text-emerald-400">{moeda(p.valor)}</TableCell>
-               <TableCell className="text-center">
-                {p.despesa_id?(
-                 <Button variant="ghost" size="icon" disabled title="Edite ou exclua a despesa de origem.">
-                  <Lock className="h-4 w-4 text-muted-foreground"/>
-                 </Button>
-                ):(
-                 <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={()=>excluirPagamento(p.id)} title="Excluir pagamento manual">
-                  <Trash2 className="h-4 w-4"/>
-                 </Button>
-                )}
-               </TableCell>
-              </TableRow>
-             );
-            })
-           )}
-          </TableBody>
-         </Table>
-        </ScrollArea>
-       </CardContent>
-      </Card>
+      <Card className="border-border bg-card"><CardHeader className="pb-3"><CardTitle className="text-base text-emerald-400">Pagamentos</CardTitle></CardHeader><CardContent className="p-0"><ScrollArea className="h-[360px]"><Table>
+       <TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Responsável</TableHead><TableHead>Origem / Forma</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-center">Ações</TableHead></TableRow></TableHeader>
+       <TableBody>
+        {pagamentos.length===0?<TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">Nenhum pagamento registrado.</TableCell></TableRow>:pagamentos.map(p=>{
+         const pessoa=p.responsavel_id?pessoas.find(x=>String(x.id)===String(p.responsavel_id))?.nome||'Pessoa removida':'Fatura geral';
+         return <TableRow key={p.id} className="hover:bg-muted/50"><TableCell className="text-sm">{brDate(p.data)}</TableCell><TableCell className="text-sm">{pessoa}</TableCell><TableCell className="text-sm text-muted-foreground"><div>{p.forma_pagamento||'—'}</div><div className="text-[11px]">{p.lancamento_id?'Compra específica':p.despesa_id?'Origem: Despesas':'Origem: Manual'}</div></TableCell><TableCell className="text-right font-semibold text-emerald-400">{moeda(p.valor)}</TableCell><TableCell className="text-center">{p.despesa_id?<Button variant="ghost" size="icon" disabled title="Edite ou exclua a despesa de origem."><Lock className="h-4 w-4 text-muted-foreground"/></Button>:<Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={()=>excluirPagamento(p.id)} title="Excluir pagamento manual"><Trash2 className="h-4 w-4"/></Button>}</TableCell></TableRow>;
+        })}
+       </TableBody>
+      </Table></ScrollArea></CardContent></Card>
      </div>
     </>
    )}
 
-   <ModalLancamentoPadrao
-    open={isPagamentoOpen}
-    onClose={closePagamento}
-    title="Registrar Pagamento"
-    description="Registre um pagamento manual da fatura atual. Pagamentos lançados em Despesas são sincronizados automaticamente."
-    icon={WalletCards}
-    theme="green"
-    footer={
-     <>
-      <Button type="button" variant="outline" onClick={closePagamento} className="h-11 rounded-xl border-border px-5">
-       Cancelar
-      </Button>
-      <Button
-       type="button"
-       onClick={salvarPagamento}
-       className="h-11 rounded-xl px-6 font-semibold text-white hover:opacity-90"
-       style={{background:GREEN,boxShadow:'0 0 18px hsl(142 71% 45% / .22)'}}
-      >
-       Salvar Pagamento
-      </Button>
-     </>
-    }
+   <ModalLancamentoPadrao open={isPagamentoOpen} onClose={closePagamento} title="Registrar Pagamento" description="Registre um pagamento manual da fatura atual. Selecione outra pessoa do cartão e, se desejar, vincule o pagamento a uma compra específica." icon={WalletCards} theme="green"
+    footer={<><Button type="button" variant="outline" onClick={closePagamento} className="h-11 rounded-xl border-border px-5">Cancelar</Button><Button type="button" onClick={salvarPagamento} className="h-11 rounded-xl px-6 font-semibold text-white hover:opacity-90" style={{background:GREEN,boxShadow:'0 0 18px hsl(142 71% 45% / .22)'}}>Salvar Pagamento</Button></>}
    >
     <div className="space-y-5">
+     <div className="space-y-2"><Label>Valor</Label><Input type="text" inputMode="numeric" value={pagForm.valor} onChange={e=>setPagForm(p=>({...p,valor:money(e.target.value)}))} placeholder="R$ 0,00" className="h-11 rounded-xl bg-input font-semibold tabular-nums"/></div>
+     <div className="space-y-2"><Label>Data</Label><Input type="date" value={pagForm.data} onChange={e=>setPagForm(p=>({...p,data:e.target.value}))} className="h-11 rounded-xl bg-input"/></div>
+
      <div className="space-y-2">
-      <Label>Valor</Label>
-      <Input
-       type="text"
-       inputMode="numeric"
-       value={pagForm.valor}
-       onChange={e=>setPagForm(p=>({...p,valor:money(e.target.value)}))}
-       placeholder="R$ 0,00"
-       className="h-11 rounded-xl bg-input font-semibold tabular-nums"
-      />
+      <Label>Responsável (outras pessoas com compras nesta fatura)</Label>
+      <Select value={pagForm.responsavel_id||'nenhum'} onValueChange={v=>setPagForm(p=>({...p,responsavel_id:v==='nenhum'?'':v,lancamento_id:''}))}>
+       <SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Pagamento geral / sem responsável"/></SelectTrigger>
+       <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
+        <SelectItem value="nenhum">Pagamento geral / sem responsável</SelectItem>
+        {pessoasComComprasNaFatura.map(p=><SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>)}
+       </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">O titular é excluído. Só aparecem outras pessoas com compras nesta fatura.</p>
      </div>
 
      <div className="space-y-2">
-      <Label>Data</Label>
-      <Input
-       type="date"
-       value={pagForm.data}
-       onChange={e=>setPagForm(p=>({...p,data:e.target.value}))}
-       className="h-11 rounded-xl bg-input"
-      />
+      <Label>Compra vinculada (opcional)</Label>
+      <Select value={pagForm.lancamento_id||'nenhuma'} onValueChange={v=>selecionarCompraPagamento(v==='nenhuma'?'':v)}>
+       <SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue placeholder="Sem compra específica"/></SelectTrigger>
+       <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
+        <ScrollArea className="h-56">
+         <SelectItem value="nenhuma">Sem compra específica</SelectItem>
+         {comprasOutrasPessoas.filter(l=>!pagForm.responsavel_id||String(l.responsavel_id)===String(pagForm.responsavel_id)).map(l=>{
+          const pessoa=pessoas.find(p=>String(p.id)===String(l.responsavel_id)),valorParcela=getInstallmentValue(l.valor,l.parcelas,l.parcela_atual),saldoCompra=Math.max(0,toCents(valorParcela)-(pagamentosPorCompra[l.id]||0));
+          return <SelectItem key={l.id} value={String(l.id)} disabled={saldoCompra<=0}>{l.descricao||'Compra'} • {pessoa?.nome||'Pessoa'} • {moeda(fromCents(saldoCompra))} disponível</SelectItem>;
+         })}
+        </ScrollArea>
+       </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">Somente compras das outras pessoas que pertencem à fatura exibida. O pagamento não pode ultrapassar o saldo da compra.</p>
      </div>
 
-     <div className="space-y-2">
-      <Label>Forma de Pagamento</Label>
+     <div className="space-y-2"><Label>Forma de Pagamento</Label>
       <Select value={pagForm.forma_pagamento} onValueChange={v=>setPagForm(p=>({...p,forma_pagamento:v}))}>
        <SelectTrigger className="h-11 rounded-xl bg-input"><SelectValue/></SelectTrigger>
-       <SelectContent className="dark-pessoal rounded-xl border-border bg-card">
-        <SelectItem value="Pix">Pix</SelectItem>
-        <SelectItem value="Débito">Débito</SelectItem>
-        <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-        <SelectItem value="Boleto">Boleto</SelectItem>
-       </SelectContent>
+       <SelectContent className="dark-pessoal rounded-xl border-border bg-card"><SelectItem value="Pix">Pix</SelectItem><SelectItem value="Débito">Débito</SelectItem><SelectItem value="Dinheiro">Dinheiro</SelectItem><SelectItem value="Boleto">Boleto</SelectItem></SelectContent>
       </Select>
      </div>
 
-     <div className="rounded-xl border border-red-500/15 bg-red-500/5 p-3 text-sm text-muted-foreground">
-      Saldo restante:
-      <span className="ml-1 font-semibold text-red-400">{moeda(saldoRestante)}</span>
-     </div>
+     <div className="rounded-xl border border-red-500/15 bg-red-500/5 p-3 text-sm text-muted-foreground">Saldo restante: <span className="ml-1 font-semibold text-red-400">{moeda(saldoRestante)}</span></div>
     </div>
    </ModalLancamentoPadrao>
   </div>
