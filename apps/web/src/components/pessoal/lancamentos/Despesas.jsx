@@ -55,16 +55,9 @@ const moneyNum=v=>{
 };
 
 const initial=()=>({
- data:getBRDate(),
- despesa:'',
- valor:'',
- categoria:'',
- forma_pagamento:'Débito',
- parcelas:1,
- cartao_id:'',
- responsavel_id:'',
- despesa_prevista_id:'',
- lancamento_id:''
+ data:getBRDate(),despesa:'',valor:'',categoria:'',
+ forma_pagamento:'Débito',parcelas:1,cartao_id:'',
+ responsavel_id:'',despesa_prevista_id:'',lancamento_id:''
 });
 
 const cicloFatura=(dia,mes,ano)=>{
@@ -72,10 +65,7 @@ const cicloFatura=(dia,mes,ano)=>{
  const diaF=Math.min(Math.max(parseInt(dia,10)||1,1),28);
  const inicio=addMonths(setDate(ref,diaF),-1);
  const fim=subDays(setDate(ref,diaF),1);
- return{
-  inicio:format(inicio,'yyyy-MM-dd'),
-  fim:format(fim,'yyyy-MM-dd')
- };
+ return{inicio:format(inicio,'yyyy-MM-dd'),fim:format(fim,'yyyy-MM-dd')};
 };
 
 const StatCard=({icon:Icon,label,value})=>(
@@ -225,9 +215,11 @@ const Despesas=()=>{
   (!p.matched_transaction_id||String(p.matched_transaction_id)===String(editing||''))
  ),[contasPrevistas,form.data,editing]);
 
+ // Compras exibidas somente no mês/ano da data escolhida e no cartão selecionado.
  const comprasDisponiveis=useMemo(()=>comprasCartao.filter(c=>
-  !form.cartao_id||String(c.cartao_id)===String(form.cartao_id)
- ),[comprasCartao,form.cartao_id]);
+  monthKey(c.data)===monthKey(form.data)&&
+  (!form.cartao_id||String(c.cartao_id)===String(form.cartao_id))
+ ),[comprasCartao,form.data,form.cartao_id]);
 
  const reset=useCallback(()=>{
   setForm(initial());
@@ -279,16 +271,28 @@ const Despesas=()=>{
 
  const changeData=value=>{
   const linked=contasPrevistas.find(p=>String(p.id)===String(form.despesa_prevista_id));
-  if(linked&&monthKey(linked.data_vencimento)!==monthKey(value)){
-   setForm(prev=>({...prev,data:value,despesa_prevista_id:''}));
-   toast({title:'Vínculo removido',description:'A conta prevista pertence a outro mês. Selecione outra conta para este período.'});
-   return;
+  const compraVinculada=comprasCartao.find(c=>String(c.id)===String(form.lancamento_id));
+
+  const removerConta=linked&&monthKey(linked.data_vencimento)!==monthKey(value);
+  const removerCompra=compraVinculada&&monthKey(compraVinculada.data)!==monthKey(value);
+
+  setForm(prev=>({
+   ...prev,
+   data:value,
+   ...(removerConta?{despesa_prevista_id:''}:{}),
+   ...(removerCompra?{lancamento_id:''}:{})
+  }));
+
+  if(removerConta||removerCompra){
+   toast({
+    title:'Vínculo removido',
+    description:'A conta ou compra vinculada pertence a outro mês. Selecione um vínculo correspondente à nova data.'
+   });
   }
-  setForm(prev=>({...prev,data:value}));
  };
 
  const selecionarCompra=value=>{
-  const compra=comprasCartao.find(c=>String(c.id)===String(value));
+  const compra=comprasDisponiveis.find(c=>String(c.id)===String(value));
   if(!compra){
    setForm(prev=>({...prev,lancamento_id:''}));
    return;
@@ -324,15 +328,9 @@ const Despesas=()=>{
 
   const{data:nova,error:erroInsert}=await supabase.from('pessoal_faturas')
    .insert({
-    user_id:user.id,
-    cartao_id:cartaoId,
-    mes:competencia.mes,
-    ano:competencia.ano,
-    data_fechamento:ciclo.fim,
-    data_vencimento:vencimento,
-    valor_total:0,
-    status:'aberta',
-    data_pagamento:null
+    user_id:user.id,cartao_id:cartaoId,mes:competencia.mes,ano:competencia.ano,
+    data_fechamento:ciclo.fim,data_vencimento:vencimento,
+    valor_total:0,status:'aberta',data_pagamento:null
    }).select('id').single();
 
   if(erroInsert)throw erroInsert;
@@ -364,17 +362,17 @@ const Despesas=()=>{
    throw new Error('O cartão da despesa precisa ser o mesmo cartão da compra vinculada.');
   }
 
+  if(compra&&monthKey(compra.data)!==monthKey(payload.data)){
+   throw new Error('A compra vinculada precisa pertencer ao mesmo mês e ano da data da despesa.');
+  }
+
   const faturaId=await obterFaturaId(payload.cartao_id,compra?.data||payload.data,compra);
 
   const pagamentoPayload={
-   user_id:user.id,
-   fatura_id:faturaId,
-   despesa_id:despesaId,
+   user_id:user.id,fatura_id:faturaId,despesa_id:despesaId,
    lancamento_id:compra?.id||null,
    responsavel_id:compra?.responsavel_id||payload.responsavel_id||null,
-   valor:roundMoney(payload.valor),
-   data:payload.data,
-   forma_pagamento:'Crédito'
+   valor:roundMoney(payload.valor),data:payload.data,forma_pagamento:'Crédito'
   };
 
   if(existente?.id){
@@ -441,14 +439,13 @@ const Despesas=()=>{
    if(compraSelecionada&&String(compraSelecionada.cartao_id)!==String(form.cartao_id)){
     throw new Error('Selecione o mesmo cartão utilizado na compra vinculada.');
    }
+   if(compraSelecionada&&monthKey(compraSelecionada.data)!==monthKey(form.data)){
+    throw new Error('A compra vinculada precisa pertencer ao mesmo mês e ano da data da despesa.');
+   }
 
    const payload={
-    user_id:user.id,
-    data:form.data,
-    despesa:form.despesa,
-    valor,
-    categoria:form.categoria,
-    forma_pagamento:form.forma_pagamento,
+    user_id:user.id,data:form.data,despesa:form.despesa,valor,
+    categoria:form.categoria,forma_pagamento:form.forma_pagamento,
     parcelas:Math.max(1,parseInt(form.parcelas,10)||1),
     cartao_id:form.forma_pagamento==='Crédito'?form.cartao_id:null,
     responsavel_id:form.forma_pagamento==='Crédito'
@@ -497,8 +494,7 @@ const Despesas=()=>{
    }
 
    await sincronizarPagamento(despesaId,{
-    ...payload,
-    lancamento_id:form.lancamento_id||null
+    ...payload,lancamento_id:form.lancamento_id||null
    });
 
    toast({
@@ -548,19 +544,15 @@ const Despesas=()=>{
    return;
   }
   exportToExcel(filtered.map(item=>({
-   Data:formatDateDisplay(item.data),
-   Descrição:item.despesa,
-   Categoria:item.categoria||'OUTROS',
-   Pagamento:item.forma_pagamento,
+   Data:formatDateDisplay(item.data),Descrição:item.despesa,
+   Categoria:item.categoria||'OUTROS',Pagamento:item.forma_pagamento,
    Responsável:responsavel(item.responsavel_id)||'-',
    Valor:roundMoney(item.valor)
   })),'Lançamento_Despesas','Despesas');
  };
 
  const clearFilters=()=>{
-  setSearch('');
-  setCategory('all');
-  setPayment('all');
+  setSearch('');setCategory('all');setPayment('all');
  };
 
  return(
@@ -579,12 +571,8 @@ const Despesas=()=>{
       </div>
      </div>
      <div className="flex flex-wrap gap-2">
-      <Button variant="outline" onClick={handleExport} className="border-border bg-transparent">
-       <Download className="mr-2 h-4 w-4"/>Excel
-      </Button>
-      <Button onClick={()=>openDialog()} className="bg-red-500 text-white hover:bg-red-600">
-       <Plus className="mr-2 h-4 w-4"/>Novo Lançamento
-      </Button>
+      <Button variant="outline" onClick={handleExport} className="border-border bg-transparent"><Download className="mr-2 h-4 w-4"/>Excel</Button>
+      <Button onClick={()=>openDialog()} className="bg-red-500 text-white hover:bg-red-600"><Plus className="mr-2 h-4 w-4"/>Novo Lançamento</Button>
      </div>
     </div>
    </div>
@@ -593,20 +581,15 @@ const Despesas=()=>{
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_.65fr_.5fr_.8fr_.8fr_auto]">
      <div className="relative">
       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/>
-      <Input placeholder="Buscar por descrição ou categoria..." value={search}
-       onChange={e=>setSearch(e.target.value)} className="h-11 border-border bg-input pl-10"/>
+      <Input placeholder="Buscar por descrição ou categoria..." value={search} onChange={e=>setSearch(e.target.value)} className="h-11 border-border bg-input pl-10"/>
      </div>
      <Select value={month} onValueChange={setMonth}>
       <SelectTrigger className="h-11 border-border bg-input"><CalendarDays className="mr-2 h-4 w-4 text-muted-foreground"/><SelectValue placeholder="Mês"/></SelectTrigger>
-      <SelectContent className="dark-pessoal border-border bg-card">
-       {meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
-      </SelectContent>
+      <SelectContent className="dark-pessoal border-border bg-card">{meses.map((m,i)=><SelectItem key={i} value={String(i)}>{m}</SelectItem>)}</SelectContent>
      </Select>
      <Select value={year} onValueChange={setYear}>
       <SelectTrigger className="h-11 border-border bg-input"><SelectValue placeholder="Ano"/></SelectTrigger>
-      <SelectContent className="dark-pessoal border-border bg-card">
-       {years.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
-      </SelectContent>
+      <SelectContent className="dark-pessoal border-border bg-card">{years.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
      </Select>
      <Select value={category} onValueChange={setCategory}>
       <SelectTrigger className="h-11 border-border bg-input"><SelectValue placeholder="Categoria"/></SelectTrigger>
@@ -626,9 +609,7 @@ const Despesas=()=>{
        <SelectItem value="Boleto">Boleto</SelectItem>
       </SelectContent>
      </Select>
-     <Button variant="outline" onClick={clearFilters} className="h-11 border-border">
-      <Filter className="mr-2 h-4 w-4"/>Limpar
-     </Button>
+     <Button variant="outline" onClick={clearFilters} className="h-11 border-border"><Filter className="mr-2 h-4 w-4"/>Limpar</Button>
     </div>
    </div>
 
@@ -687,9 +668,7 @@ const Despesas=()=>{
 
     {!loading&&filtered.length>0&&(
      <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="text-sm text-muted-foreground">
-       Mostrando {Math.min((currentPage-1)*pageSize+1,filtered.length)} a {Math.min(currentPage*pageSize,filtered.length)} de {filtered.length} registros
-      </div>
+      <div className="text-sm text-muted-foreground">Mostrando {Math.min((currentPage-1)*pageSize+1,filtered.length)} a {Math.min(currentPage*pageSize,filtered.length)} de {filtered.length} registros</div>
       <div className="flex items-center gap-2">
        <Button variant="outline" size="sm" disabled={currentPage===1} onClick={()=>setCurrentPage(p=>Math.max(1,p-1))}><ChevronLeft className="mr-1 h-4 w-4"/>Anterior</Button>
        <div className="flex h-9 min-w-9 items-center justify-center rounded-md bg-red-500 px-3 text-sm font-semibold text-white">{currentPage}</div>
@@ -706,14 +685,12 @@ const Despesas=()=>{
     description={editing?'Atualize os dados da despesa.':'Preencha os dados da nova despesa.'}
     icon={WalletCards}
     theme="red"
-    footer={
-     <>
-      <Button type="button" variant="outline" onClick={closeModal} className="h-11 rounded-xl border-border px-5">Cancelar</Button>
-      <Button type="submit" form="form-lancamento-despesa" className="h-11 rounded-xl px-6 font-semibold text-white transition-all hover:opacity-90" style={{background:RED,boxShadow:'0 0 18px hsl(0 84% 60% / .22)'}}>
-       {editing?'Salvar Alterações':'Salvar Despesa'}
-      </Button>
-     </>
-    }
+    footer={<>
+     <Button type="button" variant="outline" onClick={closeModal} className="h-11 rounded-xl border-border px-5">Cancelar</Button>
+     <Button type="submit" form="form-lancamento-despesa" className="h-11 rounded-xl px-6 font-semibold text-white transition-all hover:opacity-90" style={{background:RED,boxShadow:'0 0 18px hsl(0 84% 60% / .22)'}}>
+      {editing?'Salvar Alterações':'Salvar Despesa'}
+     </Button>
+    </>}
    >
     <form id="form-lancamento-despesa" onSubmit={save} className="max-h-[calc(100vh-300px)] overflow-y-auto pr-1">
      <div className="space-y-5">
@@ -816,7 +793,8 @@ const Despesas=()=>{
            </ScrollArea>
           </SelectContent>
          </Select>
-         <p className="text-xs text-muted-foreground">Vincule esta despesa à compra exata para que o pagamento reduza somente o saldo dessa compra. Sem vínculo específico, o pagamento será considerado para o responsável selecionado.</p>
+         <p className="text-xs text-muted-foreground">São exibidas somente compras do mesmo mês e ano da data da despesa e, quando selecionado, do cartão escolhido. O vínculo reduz apenas o saldo da compra correspondente.</p>
+         {!comprasDisponiveis.length&&<p className="text-xs text-amber-400">Nenhuma compra disponível para este mês e cartão.</p>}
         </div>
 
         <div className="space-y-2">
@@ -846,4 +824,3 @@ const Despesas=()=>{
 };
 
 export default Despesas;
-
