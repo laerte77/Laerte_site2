@@ -6,7 +6,7 @@ import{Table,TableBody,TableCell,TableFooter,TableHead,TableHeader,TableRow}from
 import{Button}from'@/components/ui/button';
 import{Badge}from'@/components/ui/badge';
 import{formatCurrency}from'@/lib/utils';
-import{AlertCircle,RefreshCw,CheckCircle2,Clock,AlertTriangle, Download,Receipt,DollarSign,TrendingUp,CalendarDays,RotateCcw }from'lucide-react';
+import{AlertCircle,RefreshCw,CheckCircle2,Clock,AlertTriangle,Download,Receipt,DollarSign,TrendingUp,CalendarDays,RotateCcw}from'lucide-react';
 import{format,parseISO}from'date-fns';
 import{useContasMesData}from'@/hooks/useContasMesData';
 import CategoryIcon from'@/components/CategoryIcon';
@@ -29,15 +29,17 @@ const MONTHS=[
 export default function ContasMes(){
  const{user}=useAuth();
  const currentDate=new Date();
+
  const[selectedMonth,setSelectedMonth]=useState(currentDate.getMonth()+1);
  const[selectedYear,setSelectedYear]=useState(currentDate.getFullYear());
  const[selectedCategory,setSelectedCategory]=useState('Todas');
  const[selectedStatus,setSelectedStatus]=useState('Todos');
  const[selectedPerson,setSelectedPerson]=useState('todas');
+ const[selectedCard,setSelectedCard]=useState('todos');
  const[selectedExpense,setSelectedExpense]=useState(null);
  const[isModalOpen,setIsModalOpen]=useState(false);
 
- const{contasMes,loading,error,refetch,pessoas}=useContasMesData(
+ const{contasMes,loading,error,refetch,pessoas,cartoes}=useContasMesData(
   user?.id,selectedMonth,selectedYear
  );
 
@@ -47,81 +49,57 @@ export default function ContasMes(){
  },[]);
 
  const categories=useMemo(()=>[
-  'Todas',
-  ...new Set(contasMes.map(item=>item.categoria).filter(Boolean))
+  'Todas',...new Set(contasMes.map(item=>item.categoria).filter(Boolean))
  ],[contasMes]);
 
- // Aplica mês, categoria, status e pessoa na consulta.
- const filteredData=useMemo(
-  ()=>contasMes.filter(item=>
-   (selectedCategory==='Todas'||item.categoria===selectedCategory)&&
-   (selectedStatus==='Todos'||item.status===selectedStatus)&&
-   (
-    selectedPerson==='todas'||
-    (
-     selectedPerson==='sem_responsavel'
-      ?!item.responsavel_id
-      :String(item.responsavel_id||'')===selectedPerson
-    )
-   )
-  ),
-  [contasMes,selectedCategory,selectedStatus,selectedPerson]
- );
+ // Filtros combinados: categoria, status, pessoa e cartão.
+ const filteredData=useMemo(()=>contasMes.filter(item=>
+  (selectedCategory==='Todas'||item.categoria===selectedCategory)&&
+  (selectedStatus==='Todos'||item.status===selectedStatus)&&
+  (
+   selectedPerson==='todas'||
+   (selectedPerson==='sem_responsavel'
+    ?!item.responsavel_id
+    :String(item.responsavel_id||'')===selectedPerson)
+  )&&
+  (
+   selectedCard==='todos'||
+   String(item.cartao_id||'')===selectedCard
+  )
+ ),[contasMes,selectedCategory,selectedStatus,selectedPerson,selectedCard]);
 
- const subtotals=useMemo(
-  ()=>filteredData.reduce((acc,item)=>({
-   previsto:acc.previsto+toCents(item.valor_previsto),
-   real:acc.real+toCents(item.valor_real),
-   diferenca:acc.diferenca+toCents(item.diferenca)
-  }),{previsto:0,real:0,diferenca:0}),
-  [filteredData]
- );
+ const subtotals=useMemo(()=>filteredData.reduce((acc,item)=>({
+  previsto:acc.previsto+toCents(item.valor_previsto),
+  real:acc.real+toCents(item.valor_real),
+  diferenca:acc.diferenca+toCents(item.diferenca)
+ }),{previsto:0,real:0,diferenca:0}),[filteredData]);
 
- const pendentes=filteredData.filter(
-  item=>item.status==='Pendente'||item.status==='Atrasado'
+ const pendentes=filteredData.filter(item=>
+  item.status==='Pendente'||item.status==='Atrasado'
  ).length;
 
  const getStatusBadge=(status,item)=>{
   let content;
-
   switch(status){
    case'Pago':
-    content=<Badge className="bg-[hsl(var(--status-pago))] text-white">
-     <CheckCircle2 className="mr-1 h-3 w-3"/>Pago
-    </Badge>;
+    content=<Badge className="bg-[hsl(var(--status-pago))] text-white"><CheckCircle2 className="mr-1 h-3 w-3"/>Pago</Badge>;
     break;
-
    case'Pago Parcialmente':
-    content=<Badge className="bg-[hsl(var(--status-parcial))] text-white">
-     <AlertTriangle className="mr-1 h-3 w-3"/>Parcial
-    </Badge>;
+    content=<Badge className="bg-[hsl(var(--status-parcial))] text-white"><AlertTriangle className="mr-1 h-3 w-3"/>Parcial</Badge>;
     break;
-
    case'Atrasado':
-    content=<Badge className="bg-[hsl(var(--status-atrasado))] text-white">
-     <AlertCircle className="mr-1 h-3 w-3"/>Atrasado
-    </Badge>;
+    content=<Badge className="bg-[hsl(var(--status-atrasado))] text-white"><AlertCircle className="mr-1 h-3 w-3"/>Atrasado</Badge>;
     break;
-
    default:
-    content=<Badge className="bg-[hsl(var(--status-pendente))] text-white">
-     <Clock className="mr-1 h-3 w-3"/>Pendente
-    </Badge>;
+    content=<Badge className="bg-[hsl(var(--status-pendente))] text-white"><Clock className="mr-1 h-3 w-3"/>Pendente</Badge>;
   }
 
   return(
    <div className="flex flex-col items-center gap-1">
     {content}
     {item.origem!=='cartao'&&(
-     <Button
-      variant="ghost"
-      size="sm"
-      className="h-6 px-2 text-xs"
-      onClick={()=>{
-       setSelectedExpense(item);
-       setIsModalOpen(true);
-      }}
-     >
+     <Button variant="ghost" size="sm" className="h-6 px-2 text-xs"
+      onClick={()=>{setSelectedExpense(item);setIsModalOpen(true);}}>
       Mudar Status
      </Button>
     )}
@@ -131,12 +109,12 @@ export default function ContasMes(){
 
  const handleExport=()=>{
   if(!filteredData.length)return;
-
   exportToExcel(
    filteredData.map(item=>({
     'Data Vencimento':format(parseISO(item.data_vencimento),'dd/MM/yyyy'),
     'Descrição':item.descricao,
     'Pessoa':item.responsavel_nome||'Sem responsável',
+    'Cartão':cartoes.find(c=>String(c.id)===String(item.cartao_id))?.nome||'—',
     'Categoria':item.categoria||'',
     'Valor Previsto':fromCents(toCents(item.valor_previsto)),
     'Valor Real':fromCents(toCents(item.valor_real)),
@@ -152,6 +130,7 @@ export default function ContasMes(){
   setSelectedCategory('Todas');
   setSelectedStatus('Todos');
   setSelectedPerson('todas');
+  setSelectedCard('todos');
  };
 
  const stats=[
@@ -165,36 +144,17 @@ export default function ContasMes(){
   <div className="dark-pessoal space-y-5">
    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
     <div>
-     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:BLUE}}>
-      Consultas
-     </p>
-     <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">
-      Contas do Mês
-     </h1>
-     <p className="text-sm text-muted-foreground">
-      Acompanhe as despesas, pagamentos e pendências do período.
-     </p>
+     <p className="text-xs font-semibold uppercase tracking-[.2em]" style={{color:BLUE}}>Consultas</p>
+     <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">Contas do Mês</h1>
+     <p className="text-sm text-muted-foreground">Acompanhe as despesas, pagamentos e pendências do período.</p>
     </div>
-
     <div className="flex flex-wrap gap-2">
-     <Button
-      variant="outline"
-      onClick={handleExport}
-      disabled={!filteredData.length}
-      className="border-border hover:bg-blue-500/10"
-      style={{color:BLUE}}
-     >
+     <Button variant="outline" onClick={handleExport} disabled={!filteredData.length}
+      className="border-border hover:bg-blue-500/10" style={{color:BLUE}}>
       <Download className="mr-2 h-4 w-4"/>Exportar
      </Button>
-
-     <Button
-      variant="outline"
-      onClick={refetch}
-      disabled={loading}
-      className="border-border"
-     >
-      <RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>
-      Atualizar
+     <Button variant="outline" onClick={refetch} disabled={loading} className="border-border">
+      <RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>Atualizar
      </Button>
     </div>
    </div>
@@ -204,16 +164,10 @@ export default function ContasMes(){
      <Card key={label} className="border-border bg-card">
       <CardContent className="flex items-center justify-between p-4">
        <div>
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-         {label}
-        </p>
-        <p className="mt-1 text-xl font-bold tabular-nums" style={{color:BLUE}}>
-         {value}
-        </p>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="mt-1 text-xl font-bold tabular-nums" style={{color:BLUE}}>{value}</p>
        </div>
-       <div className="rounded-xl bg-blue-500/10 p-2.5" style={{color:BLUE}}>
-        <Icon className="h-5 w-5"/>
-       </div>
+       <div className="rounded-xl bg-blue-500/10 p-2.5" style={{color:BLUE}}><Icon className="h-5 w-5"/></div>
       </CardContent>
      </Card>
     ))}
@@ -224,33 +178,17 @@ export default function ContasMes(){
      <div className="flex flex-wrap items-end gap-3">
       <div className="space-y-1.5">
        <label className="text-xs font-medium text-muted-foreground">Mês</label>
-       <Select
-        value={String(selectedMonth)}
-        onValueChange={value=>setSelectedMonth(Number(value))}
-       >
+       <Select value={String(selectedMonth)} onValueChange={v=>setSelectedMonth(Number(v))}>
         <SelectTrigger className="h-10 w-[140px] bg-input"><SelectValue/></SelectTrigger>
-        <SelectContent>
-         {MONTHS.map(month=>(
-          <SelectItem key={month.value} value={String(month.value)}>
-           {month.label}
-          </SelectItem>
-         ))}
-        </SelectContent>
+        <SelectContent>{MONTHS.map(m=><SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
        </Select>
       </div>
 
       <div className="space-y-1.5">
        <label className="text-xs font-medium text-muted-foreground">Ano</label>
-       <Select
-        value={String(selectedYear)}
-        onValueChange={value=>setSelectedYear(Number(value))}
-       >
+       <Select value={String(selectedYear)} onValueChange={v=>setSelectedYear(Number(v))}>
         <SelectTrigger className="h-10 w-[110px] bg-input"><SelectValue/></SelectTrigger>
-        <SelectContent>
-         {years.map(year=>(
-          <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-         ))}
-        </SelectContent>
+        <SelectContent>{years.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
        </Select>
       </div>
 
@@ -258,26 +196,29 @@ export default function ContasMes(){
        <label className="text-xs font-medium text-muted-foreground">Categoria</label>
        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
         <SelectTrigger className="h-10 w-[200px] bg-input"><SelectValue/></SelectTrigger>
-        <SelectContent>
-         {categories.map(category=>(
-          <SelectItem key={category} value={category}>{category}</SelectItem>
-         ))}
-        </SelectContent>
+        <SelectContent>{categories.map(c=><SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
        </Select>
       </div>
 
       <div className="space-y-1.5">
        <label className="text-xs font-medium text-muted-foreground">Pessoa</label>
        <Select value={selectedPerson} onValueChange={setSelectedPerson}>
-        <SelectTrigger className="h-10 w-[190px] bg-input">
-         <SelectValue placeholder="Todas as pessoas"/>
-        </SelectTrigger>
+        <SelectTrigger className="h-10 w-[190px] bg-input"><SelectValue placeholder="Todas as pessoas"/></SelectTrigger>
         <SelectContent>
          <SelectItem value="todas">Todas as pessoas</SelectItem>
-         {pessoas.map(p=>(
-          <SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>
-         ))}
+         {pessoas.map(p=><SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>)}
          <SelectItem value="sem_responsavel">Sem responsável</SelectItem>
+        </SelectContent>
+       </Select>
+      </div>
+
+      <div className="space-y-1.5">
+       <label className="text-xs font-medium text-muted-foreground">Cartão de Crédito</label>
+       <Select value={selectedCard} onValueChange={setSelectedCard}>
+        <SelectTrigger className="h-10 w-[190px] bg-input"><SelectValue placeholder="Todos os cartões"/></SelectTrigger>
+        <SelectContent>
+         <SelectItem value="todos">Todos os cartões</SelectItem>
+         {cartoes.map(c=><SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>)}
         </SelectContent>
        </Select>
       </div>
@@ -318,9 +259,7 @@ export default function ContasMes(){
     <Card className="border-border bg-card">
      <CardContent className="p-0">
       {loading?(
-       <div className="p-6">
-        <LoadingSkeleton count={6} height="h-12"/>
-       </div>
+       <div className="p-6"><LoadingSkeleton count={6} height="h-12"/></div>
       ):(
        <div className="overflow-x-auto">
         <Table>
@@ -338,80 +277,34 @@ export default function ContasMes(){
 
          <TableBody>
           {!filteredData.length?(
-           <TableRow>
-            <TableCell colSpan={7} className="py-14 text-center text-muted-foreground">
-             Nenhuma conta encontrada para os filtros selecionados.
+           <TableRow><TableCell colSpan={7} className="py-14 text-center text-muted-foreground">Nenhuma conta encontrada para os filtros selecionados.</TableCell></TableRow>
+          ):filteredData.map(item=>(
+           <TableRow key={item.id} className="transition-colors hover:bg-muted/40">
+            <TableCell className="whitespace-nowrap font-medium">{format(parseISO(item.data_vencimento),'dd/MM/yyyy')}</TableCell>
+            <TableCell>
+             <div className="flex items-center gap-2">
+              <CategoryIcon category={item.categoria} className="h-4 w-4" style={{color:BLUE}}/>
+              <span>{item.descricao}</span>
+             </div>
             </TableCell>
+            <TableCell className="text-muted-foreground">{item.categoria||'—'}</TableCell>
+            <TableCell className="text-right font-medium">{formatCurrency(item.valor_previsto)}</TableCell>
+            <TableCell className="text-right font-semibold text-red-500">{Number(item.valor_real)>0?formatCurrency(item.valor_real):'-'}</TableCell>
+            <TableCell className={`text-right font-semibold ${Number(item.diferenca)>0?'text-green-400':Number(item.diferenca)<0?'text-red-500':'text-muted-foreground'}`}>
+             {formatCurrency(item.diferenca)}
+            </TableCell>
+            <TableCell className="text-center">{getStatusBadge(item.status,item)}</TableCell>
            </TableRow>
-          ):(
-           filteredData.map(item=>(
-            <TableRow key={item.id} className="transition-colors hover:bg-muted/40">
-             <TableCell className="whitespace-nowrap font-medium">
-              {format(parseISO(item.data_vencimento),'dd/MM/yyyy')}
-             </TableCell>
-
-             <TableCell>
-              <div className="flex items-center gap-2">
-               <CategoryIcon
-                category={item.categoria}
-                className="h-4 w-4"
-                style={{color:BLUE}}
-               />
-               <span>{item.descricao}</span>
-              </div>
-             </TableCell>
-
-             <TableCell className="text-muted-foreground">
-              {item.categoria||'—'}
-             </TableCell>
-
-             <TableCell className="text-right font-medium">
-              {formatCurrency(item.valor_previsto)}
-             </TableCell>
-
-             <TableCell className="text-right font-semibold text-red-500">
-              {Number(item.valor_real)>0?formatCurrency(item.valor_real):'-'}
-             </TableCell>
-
-             <TableCell
-              className={`text-right font-semibold ${
-               Number(item.diferenca)>0
-                ?'text-green-400'
-                :Number(item.diferenca)<0
-                 ?'text-red-500'
-                 :'text-muted-foreground'
-              }`}
-             >
-              {formatCurrency(item.diferenca)}
-             </TableCell>
-
-             <TableCell className="text-center">
-              {getStatusBadge(item.status,item)}
-             </TableCell>
-            </TableRow>
-           ))
-          )}
+          ))}
          </TableBody>
 
          {filteredData.length>0&&(
           <TableFooter>
            <TableRow className="bg-secondary/30 font-bold">
             <TableCell colSpan={3} className="text-right">Totais:</TableCell>
-            <TableCell className="text-right">
-             {moneyFromCents(subtotals.previsto)}
-            </TableCell>
-            <TableCell className="text-right text-red-500">
-             {moneyFromCents(subtotals.real)}
-            </TableCell>
-            <TableCell
-             className={`text-right ${
-              subtotals.diferenca>0
-               ?'text-green-400'
-               :subtotals.diferenca<0
-                ?'text-red-500'
-                :'text-muted-foreground'
-             }`}
-            >
+            <TableCell className="text-right">{moneyFromCents(subtotals.previsto)}</TableCell>
+            <TableCell className="text-right text-red-500">{moneyFromCents(subtotals.real)}</TableCell>
+            <TableCell className={`text-right ${subtotals.diferenca>0?'text-green-400':subtotals.diferenca<0?'text-red-500':'text-muted-foreground'}`}>
              {moneyFromCents(subtotals.diferenca)}
             </TableCell>
             <TableCell/>
