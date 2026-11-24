@@ -31,13 +31,6 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 const THEME = 'hsl(var(--neon-comercial))';
-
-const today = () =>
-  new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo'
-  }).format(new Date());
-
-
 const BRASILIA_TIMEZONE = 'America/Sao_Paulo';
 
 const today = () =>
@@ -50,14 +43,13 @@ const formatDate = value => {
 
   let dateValue = String(value).trim();
 
-  // Data sem horário: mantém o dia informado no banco.
+  // Datas sem horário são tratadas como datas de calendário.
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
     dateValue += 'T12:00:00-03:00';
   } else {
-    // Normaliza o formato de data e horário do PostgreSQL.
     dateValue = dateValue.replace(' ', 'T');
 
-    // Quando não houver fuso informado, considera Brasília.
+    // Se não houver fuso informado, considera o horário de Brasília.
     if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(dateValue)) {
       dateValue += '-03:00';
     }
