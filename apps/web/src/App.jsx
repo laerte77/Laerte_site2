@@ -15,6 +15,7 @@ import IgrejaSecretariaDashboard from'@/pages/igreja/secretaria/IgrejaSecretaria
 import EntretenimentoDashboardHome from'@/components/entretenimento/EntretenimentoDashboardHome.jsx';
 import EntretenimentoDashboard from'@/pages/entretenimento/EntretenimentoDashboard.jsx';
 import BarbeariaBrothersDashboard from'@/pages/barbearia/BarbeariaBrothersDashboard.jsx';
+import ComercialDashboard from'@/pages/comercial/ComercialDashboard.jsx';
 import RelatorioEntradasDespesasPDF from'@/components/igreja/tesouraria/relatorios/RelatorioEntradasDespesasPDF.jsx';
 import{useAuth}from'@/contexts/SupabaseAuthContext.jsx';
 import ErrorBoundary from'@/components/ErrorBoundary.jsx';
@@ -88,6 +89,7 @@ function App(){
          <Route path="/pessoal/dashboard/*" element={<PrivateRoute requiredModule="pessoal"><PessoalDashboard/></PrivateRoute>}/>
          <Route path="/lm-impressoes/dashboard/*" element={<PrivateRoute requiredModule="lm-impressoes"><LmImpressoesDashboard/></PrivateRoute>}/>
          <Route path="/barbearia/dashboard/*" element={<PrivateRoute requiredModule="barbearia"><BarbeariaBrothersDashboard/></PrivateRoute>}/>
+         <Route path="/comercial/dashboard/*" element={<PrivateRoute requiredModule="comercial"><ComercialDashboard/></PrivateRoute>}/>
 
          <Route path="/igreja" element={<PrivateRoute requiredModule="igreja"><IgrejaSubmoduleSelection/></PrivateRoute>}/>
          <Route path="/igreja/tesouraria/*" element={<PrivateRoute requiredModule="igreja:tesouraria"><IgrejaDashboard/></PrivateRoute>}/>
@@ -109,3 +111,4 @@ function App(){
 }
 
 export default App;
+
