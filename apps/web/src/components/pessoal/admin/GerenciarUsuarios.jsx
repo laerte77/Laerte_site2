@@ -1,23 +1,13 @@
 import React,{useState,useEffect,useMemo,useCallback}from'react';
-import{
- Edit,Trash,Users,Loader2,AlertTriangle,ShieldAlert,ChevronRight,
- UserPlus,RefreshCw,Search
-}from'lucide-react';
+import{ Edit,Trash,Users,Loader2,AlertTriangle,ShieldAlert,ChevronRight, UserPlus,RefreshCw,Search }from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
 import{Checkbox}from'@/components/ui/checkbox';
 import{Switch}from'@/components/ui/switch';
 import{Badge}from'@/components/ui/badge';
-import{
- Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,
- DialogFooter,DialogClose
-}from'@/components/ui/dialog';
-import{
- AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,
- AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,
- AlertDialogTitle,AlertDialogTrigger
-}from'@/components/ui/alert-dialog';
+import{ Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription, DialogFooter,DialogClose }from'@/components/ui/dialog';
+import{ AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent, AlertDialogDescription,AlertDialogFooter,AlertDialogHeader, AlertDialogTitle,AlertDialogTrigger }from'@/components/ui/alert-dialog';
 import{Card,CardContent,CardHeader,CardTitle}from'@/components/ui/card';
 import{useToast}from'@/components/ui/use-toast';
 import{getAllUsers,updateUserModules,deleteUser}from'@/lib/adminUtils';
@@ -29,7 +19,8 @@ const AVAILABLE_MODULES=[
  {id:'igreja',label:'Igreja',submodules:['Tesouraria','Secretaria']},
  {id:'lm-impressoes',label:'Lanhouse'},
  {id:'entretenimento',label:'Entretenimento'},
- {id:'barbearia',label:'Barbearia'}
+ {id:'barbearia',label:'Barbearia'},
+ {id:'comercial',label:'Comercial'}
 ];
 
 const getBaseModuleId=mod=>
@@ -949,3 +940,4 @@ const GerenciarUsuarios=()=>{
 };
 
 export default GerenciarUsuarios;
+
