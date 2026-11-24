@@ -1,8 +1,6 @@
 import React,{useState}from'react';
 import{useNavigate}from'react-router-dom';
-import{
- UserPlus,Save,X,AlertCircle,CheckCircle2,Loader2,ChevronRight
-}from'lucide-react';
+import{ UserPlus,Save,X,AlertCircle,CheckCircle2,Loader2,ChevronRight }from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -20,7 +18,8 @@ const AVAILABLE_MODULES=[
  {id:'igreja',label:'Igreja',submodules:['Tesouraria','Secretaria']},
  {id:'lm-impressoes',label:'Lanhouse'},
  {id:'entretenimento',label:'Entretenimento'},
- {id:'barbearia',label:'Barbearia'}
+ {id:'barbearia',label:'Barbearia'},
+ {id:'comercial',label:'Comercial'}
 ];
 
 const CriarNovoUsuario=()=>{
