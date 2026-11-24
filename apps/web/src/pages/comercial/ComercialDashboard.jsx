@@ -11,8 +11,10 @@ import { Helmet } from 'react-helmet';
 import { useModuleAccessGuard } from '@/hooks/useModuleAccessGuard';
 import { cn } from '@/lib/utils';
 import {
-  Users, Truck, Package, ShoppingCart,
-  Receipt, Wallet, TrendingUp
+  ShoppingCart,
+  Receipt,
+  Wallet,
+  TrendingUp
 } from 'lucide-react';
 
 const pages = [
@@ -35,9 +37,11 @@ function ComercialHome() {
         <p className="text-sm font-medium text-[hsl(var(--neon-comercial))]">
           GESTÃO COMERCIAL
         </p>
+
         <h1 className="text-2xl font-bold text-white sm:text-3xl">
           Dashboard
         </h1>
+
         <p className="mt-1 text-sm text-muted-foreground">
           Acompanhe os principais indicadores do seu negócio.
         </p>
@@ -58,7 +62,10 @@ function ComercialHome() {
               className="neon-card rounded-2xl border border-[hsl(var(--neon-comercial)/.20)] bg-gray-900/80 p-5"
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-400">{item.title}</span>
+                <span className="text-sm text-gray-400">
+                  {item.title}
+                </span>
+
                 <Icon className="h-5 w-5 text-[hsl(var(--neon-comercial))]" />
               </div>
 
@@ -91,13 +98,17 @@ function PlaceholderPage({ title, icon: Icon }) {
           Módulo Comercial
         </p>
 
-        <h1 className="mt-1 text-2xl font-bold text-white">{title}</h1>
+        <h1 className="mt-1 text-2xl font-bold text-white">
+          {title}
+        </h1>
       </div>
 
       <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-[hsl(var(--neon-comercial)/.20)] bg-gray-900/80 p-6 text-center">
         <Icon className="mb-4 h-10 w-10 text-[hsl(var(--neon-comercial))]" />
 
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
+        <h2 className="text-lg font-semibold text-white">
+          {title}
+        </h2>
 
         <p className="mt-2 max-w-md text-sm text-gray-400">
           Esta tela está preparada. A funcionalidade será desenvolvida na próxima etapa.
@@ -141,10 +152,12 @@ export default function ComercialDashboard() {
         isMobile={isMobile}
       />
 
-      <div className={cn(
-        'flex flex-1 flex-col transition-[margin] duration-300',
-        !isMobile && (isSidebarOpen ? 'ml-60' : 'ml-20')
-      )}>
+      <div
+        className={cn(
+          'flex flex-1 flex-col transition-[margin] duration-300',
+          !isMobile && (isSidebarOpen ? 'ml-60' : 'ml-20')
+        )}
+      >
         <Header
           toggleSidebar={() => setSidebarOpen(v => !v)}
           isSidebarOpen={isSidebarOpen}
@@ -153,7 +166,10 @@ export default function ComercialDashboard() {
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent p-4 md:p-6 lg:p-8">
           <div className="w-full">
             <Routes>
-              <Route path="/" element={<ComercialHome />} />
+              <Route
+                path="/"
+                element={<ComercialHome />}
+              />
 
               {/* CADASTROS */}
               <Route
