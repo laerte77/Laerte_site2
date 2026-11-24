@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   Plus, Search, Package, ArrowDownToLine,
   ArrowUpFromLine, AlertTriangle, Loader2,
-  Boxes, CalendarDays
+  Boxes, Pencil, RotateCcw
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -43,13 +43,11 @@ const formatDate = value => {
 
   let dateValue = String(value).trim();
 
-  // Datas sem horário são tratadas como datas de calendário.
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
     dateValue += 'T12:00:00-03:00';
   } else {
     dateValue = dateValue.replace(' ', 'T');
 
-    // Se não houver fuso informado, considera o horário de Brasília.
     if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(dateValue)) {
       dateValue += '-03:00';
     }
@@ -67,6 +65,20 @@ const formatDate = value => {
   }).format(date);
 };
 
+const dateForInput = value => {
+  if (!value) return today();
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value).slice(0, 10);
+  }
+
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: BRASILIA_TIMEZONE
+  }).format(date);
+};
+
 const formatNumber = value =>
   Number(value || 0).toLocaleString('pt-BR', {
     maximumFractionDigits: 3
@@ -79,6 +91,9 @@ const initialForm = () => ({
   data_movimento: today(),
   observacoes: ''
 });
+
+const isManual = item =>
+  ['MANUAL', 'AJUSTE'].includes(item.origem_tipo);
 
 export default function MovimentacaoEstoque() {
   const { toast } = useToast();
@@ -94,6 +109,10 @@ export default function MovimentacaoEstoque() {
 
   const [search, setSearch] = useState('');
   const [form, setForm] = useState(initialForm);
+
+  const [editingItem, setEditingItem] = useState(null);
+  const [estornarItem, setEstornarItem] = useState(null);
+  const [estornando, setEstornando] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!user) {
@@ -160,15 +179,37 @@ export default function MovimentacaoEstoque() {
   );
 
   const abrirDialog = () => {
+    setEditingItem(null);
     setForm(initialForm());
+    setDialogOpen(true);
+  };
+
+  const abrirEdicao = item => {
+    if (!isManual(item)) return;
+
+    setEditingItem(item);
+
+    setForm({
+      produto_id: String(item.produto_id),
+      tipo_movimento: item.tipo_movimento,
+      quantidade: String(item.quantidade),
+      data_movimento: dateForInput(item.data_movimento),
+      observacoes: item.observacoes || ''
+    });
+
     setDialogOpen(true);
   };
 
   const salvarMovimentacao = async () => {
     const quantidade = Number(form.quantidade);
 
-    if (!user || !form.produto_id || !form.data_movimento ||
-        !Number.isFinite(quantidade) || quantidade <= 0) {
+    if (
+      !user ||
+      !form.produto_id ||
+      !form.data_movimento ||
+      !Number.isFinite(quantidade) ||
+      quantidade <= 0
+    ) {
       toast({
         title: 'Dados obrigatórios',
         description: 'Selecione o produto, informe a data e uma quantidade maior que zero.',
@@ -189,37 +230,100 @@ export default function MovimentacaoEstoque() {
     setSaving(true);
 
     try {
-      const { error } = await supabase
-        .from('comercial_estoque_movimentacoes')
-        .insert({
-          user_id: user.id,
-          produto_id: form.produto_id,
-          tipo_movimento: form.tipo_movimento,
-          origem_tipo: 'MANUAL',
-          quantidade,
-          data_movimento: form.data_movimento,
-          observacoes: form.observacoes.trim() || null
+      const dataMovimento =
+        `${form.data_movimento}T12:00:00-03:00`;
+
+      if (editingItem) {
+        const { error } = await supabase.rpc(
+          'comercial_editar_movimentacao_manual',
+          {
+            p_movimentacao_id: editingItem.movimentacao_id,
+            p_produto_id: form.produto_id,
+            p_tipo_movimento: form.tipo_movimento,
+            p_quantidade: quantidade,
+            p_data_movimento: dataMovimento,
+            p_observacoes: form.observacoes.trim() || null
+          }
+        );
+
+        if (error) throw error;
+
+        toast({
+          title: 'Movimentação editada',
+          description: 'A movimentação anterior foi compensada e a nova foi registrada.'
         });
 
-      if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('comercial_estoque_movimentacoes')
+          .insert({
+            user_id: user.id,
+            produto_id: form.produto_id,
+            tipo_movimento: form.tipo_movimento,
+            origem_tipo: 'MANUAL',
+            quantidade,
+            data_movimento: dataMovimento,
+            observacoes: form.observacoes.trim() || null
+          });
 
-      toast({
-        title: 'Movimentação registrada',
-        description: 'O estoque foi atualizado com sucesso.'
-      });
+        if (error) throw error;
+
+        toast({
+          title: 'Movimentação registrada',
+          description: 'O estoque foi atualizado com sucesso.'
+        });
+      }
 
       setDialogOpen(false);
+      setEditingItem(null);
       setForm(initialForm());
+
       await fetchData();
 
     } catch (error) {
       toast({
-        title: 'Erro ao registrar',
+        title: editingItem ? 'Erro ao editar' : 'Erro ao registrar',
         description: error.message,
         variant: 'destructive'
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmarEstorno = async () => {
+    if (!estornarItem || estornando) return;
+
+    setEstornando(true);
+
+    try {
+      const { error } = await supabase.rpc(
+        'comercial_estornar_movimentacao_manual',
+        {
+          p_movimentacao_id: estornarItem.movimentacao_id,
+          p_observacoes: 'Estorno solicitado pela tela de movimentação de estoque.'
+        }
+      );
+
+      if (error) throw error;
+
+      toast({
+        title: 'Movimentação estornada',
+        description: 'O registro original foi preservado e o estoque foi compensado.'
+      });
+
+      setEstornarItem(null);
+
+      await fetchData();
+
+    } catch (error) {
+      toast({
+        title: 'Erro ao estornar',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setEstornando(false);
     }
   };
 
@@ -397,7 +501,7 @@ export default function MovimentacaoEstoque() {
               Histórico de movimentações
             </h2>
             <p className="text-sm text-muted-foreground">
-              Consulte todas as entradas, saídas, perdas e movimentações automáticas.
+              Consulte entradas, saídas, perdas e movimentações automáticas.
             </p>
           </div>
 
@@ -421,19 +525,20 @@ export default function MovimentacaoEstoque() {
                   <TableHead>Origem</TableHead>
                   <TableHead>Quantidade</TableHead>
                   <TableHead>Observações</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
 
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center">
+                    <TableCell colSpan={7} className="py-10 text-center">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin" />
                     </TableCell>
                   </TableRow>
                 ) : filtrados.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                       Nenhuma movimentação encontrada.
                     </TableCell>
                   </TableRow>
@@ -457,7 +562,17 @@ export default function MovimentacaoEstoque() {
                       </span>
                     </TableCell>
 
-                    <TableCell>{item.origem_tipo}</TableCell>
+                    <TableCell>
+                      <span className={
+                        item.origem_tipo === 'VENDA'
+                          ? 'text-blue-300'
+                          : item.origem_tipo === 'ESTORNO'
+                            ? 'text-orange-400'
+                            : 'text-muted-foreground'
+                      }>
+                        {item.origem_tipo}
+                      </span>
+                    </TableCell>
 
                     <TableCell className="font-semibold">
                       {formatNumber(item.quantidade)} {item.unidade || ''}
@@ -465,6 +580,38 @@ export default function MovimentacaoEstoque() {
 
                     <TableCell className="max-w-64 truncate">
                       {item.observacoes || '—'}
+                    </TableCell>
+
+                    <TableCell>
+                      {isManual(item) ? (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            title="Editar movimentação"
+                            onClick={() => abrirEdicao(item)}
+                            className="h-8 w-8 border-border hover:border-[var(--neon-comercial)]"
+                          >
+                            <Pencil className="h-4 w-4" style={{ color: THEME }} />
+                          </Button>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            title="Estornar movimentação"
+                            onClick={() => setEstornarItem(item)}
+                            className="h-8 w-8 border-red-500/40 hover:border-red-500"
+                          >
+                            <RotateCcw className="h-4 w-4 text-red-400" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Protegido
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -474,14 +621,29 @@ export default function MovimentacaoEstoque() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Modal de cadastro e edição */}
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={open => {
+          if (!saving) {
+            setDialogOpen(open);
+
+            if (!open) {
+              setEditingItem(null);
+              setForm(initialForm());
+            }
+          }
+        }}
+      >
         <DialogContent className="border-border bg-gray-950 text-white sm:max-w-lg">
           <DialogHeader>
             <DialogTitle style={{ color: THEME }}>
-              Nova Movimentação
+              {editingItem ? 'Editar Movimentação' : 'Nova Movimentação'}
             </DialogTitle>
             <DialogDescription>
-              Informe os dados da movimentação do produto.
+              {editingItem
+                ? 'A alteração preservará o registro original por meio de um estorno.'
+                : 'Informe os dados da movimentação do produto.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -497,14 +659,23 @@ export default function MovimentacaoEstoque() {
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um produto" />
                 </SelectTrigger>
+
                 <SelectContent>
-                  {produtos.filter(p => p.ativo !== false).map(p => (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {p.nome} {p.codigo ? `— ${p.codigo}` : ''}
-                    </SelectItem>
-                  ))}
+                  {produtos
+                    .filter(p =>
+                      p.ativo !== false ||
+                      String(p.id) === String(form.produto_id)
+                    )
+                    .map(p => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.nome}
+                        {p.codigo ? ` — ${p.codigo}` : ''}
+                        {p.ativo === false ? ' (Inativo)' : ''}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
+
               {produtoSelecionado && (
                 <p className="text-xs text-muted-foreground">
                   Estoque atual: {formatNumber(estoqueSelecionado?.estoque_atual)}{' '}
@@ -590,7 +761,66 @@ export default function MovimentacaoEstoque() {
               {saving && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Registrar movimentação
+              {editingItem ? 'Salvar alterações' : 'Registrar movimentação'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmação de estorno */}
+      <Dialog
+        open={Boolean(estornarItem)}
+        onOpenChange={open => {
+          if (!open && !estornando) setEstornarItem(null);
+        }}
+      >
+        <DialogContent className="border-border bg-gray-950 text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-400">
+              Estornar movimentação?
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              O registro original não será apagado. O sistema criará uma
+              movimentação inversa para compensar o estoque.
+            </DialogDescription>
+          </DialogHeader>
+
+          {estornarItem && (
+            <div className="space-y-2 rounded-lg border border-border bg-black/30 p-4 text-sm">
+              <p>
+                <strong>Produto:</strong> {estornarItem.produto}
+              </p>
+              <p>
+                <strong>Movimento:</strong> {estornarItem.tipo_movimento}
+              </p>
+              <p>
+                <strong>Quantidade:</strong>{' '}
+                {formatNumber(estornarItem.quantidade)} {estornarItem.unidade || ''}
+              </p>
+              <p>
+                <strong>Data:</strong> {formatDate(estornarItem.data_movimento)}
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEstornarItem(null)}
+              disabled={estornando}
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              onClick={confirmarEstorno}
+              disabled={estornando}
+              className="bg-red-600 font-semibold text-white hover:bg-red-700"
+            >
+              {estornando && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Confirmar estorno
             </Button>
           </DialogFooter>
         </DialogContent>
