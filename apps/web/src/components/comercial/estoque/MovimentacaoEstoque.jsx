@@ -30,7 +30,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 
-const THEME = 'hsl(51 100% 50%)';
+const THEME = 'hsl(var(--neon-comercial))';
 
 const today = () =>
   new Intl.DateTimeFormat('en-CA', {
