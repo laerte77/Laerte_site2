@@ -37,10 +37,43 @@ const today = () =>
     timeZone: 'America/Sao_Paulo'
   }).format(new Date());
 
-const formatDate = value =>
-  value
-    ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR')
-    : '—';
+
+const BRASILIA_TIMEZONE = 'America/Sao_Paulo';
+
+const today = () =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: BRASILIA_TIMEZONE
+  }).format(new Date());
+
+const formatDate = value => {
+  if (!value) return '—';
+
+  let dateValue = String(value).trim();
+
+  // Data sem horário: mantém o dia informado no banco.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+    dateValue += 'T12:00:00-03:00';
+  } else {
+    // Normaliza o formato de data e horário do PostgreSQL.
+    dateValue = dateValue.replace(' ', 'T');
+
+    // Quando não houver fuso informado, considera Brasília.
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(dateValue)) {
+      dateValue += '-03:00';
+    }
+  }
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) return '—';
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: BRASILIA_TIMEZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(date);
+};
 
 const formatNumber = value =>
   Number(value || 0).toLocaleString('pt-BR', {
