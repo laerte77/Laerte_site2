@@ -9,6 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue
+} from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import ModalComercialPadrao from '@/components/comercial/ModalComercialPadrao';
 
@@ -32,7 +36,8 @@ const INITIAL_FORM = {
   nome: '',
   codigo: '',
   descricao: '',
-  unidade: 'UN'
+  unidade: 'UN',
+  ativo: true
 };
 
 export default function CadastroProdutosComercial() {
@@ -107,9 +112,35 @@ export default function CadastroProdutosComercial() {
       nome: produto.nome || '',
       codigo: produto.codigo || '',
       descricao: produto.descricao || '',
-      unidade: produto.unidade || 'UN'
+      unidade: produto.unidade || 'UN',
+      ativo: produto.ativo !== false
     });
     setIsDialogOpen(true);
+  };
+
+  // Gera o próximo código sequencial do usuário.
+  const generateProductCode = async () => {
+    const { data, error } = await supabase
+      .from('comercial_produtos')
+      .select('codigo')
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+
+    const usedNumbers = (data || [])
+      .map(item => {
+        const match = String(item.codigo || '').match(/^PROD-(\d+)$/i);
+        return match ? Number(match[1]) : null;
+      })
+      .filter(number => number !== null);
+
+    let nextNumber = 1;
+
+    while (usedNumbers.includes(nextNumber)) {
+      nextNumber++;
+    }
+
+    return `PROD-${String(nextNumber).padStart(4, '0')}`;
   };
 
   const handleSave = async (event) => {
@@ -127,15 +158,23 @@ export default function CadastroProdutosComercial() {
 
     setSaving(true);
 
-    const payload = {
-      nome: formData.nome.trim(),
-      codigo: formData.codigo.trim() || null,
-      descricao: formData.descricao.trim() || null,
-      unidade: formData.unidade.trim().toUpperCase() || 'UN',
-      user_id: user.id
-    };
-
     try {
+      let codigo = formData.codigo;
+
+      // O código é gerado automaticamente somente no cadastro.
+      if (!editingId) {
+        codigo = await generateProductCode();
+      }
+
+      const payload = {
+        nome: formData.nome.trim(),
+        codigo,
+        descricao: formData.descricao.trim() || null,
+        unidade: formData.unidade.trim().toUpperCase() || 'UN',
+        ativo: formData.ativo,
+        user_id: user.id
+      };
+
       let error;
 
       if (editingId) {
@@ -156,11 +195,12 @@ export default function CadastroProdutosComercial() {
         title: 'Sucesso',
         description: editingId
           ? 'Produto atualizado com sucesso.'
-          : 'Produto cadastrado com sucesso.'
+          : `Produto cadastrado com o código ${codigo}.`
       });
 
       resetForm();
       await fetchProdutos();
+
     } catch (error) {
       toast({
         title: 'Erro ao salvar',
@@ -208,11 +248,15 @@ export default function CadastroProdutosComercial() {
     );
   });
 
+  const produtosAtivos = produtos.filter(p => p.ativo !== false).length;
+  const produtosInativos = produtos.filter(p => p.ativo === false).length;
+
   const exportData = produtosFiltrados.map(produto => ({
     Nome: produto.nome || '',
     Codigo: produto.codigo || '',
     Descricao: produto.descricao || '',
-    Unidade: produto.unidade || 'UN'
+    Unidade: produto.unidade || 'UN',
+    Situacao: produto.ativo === false ? 'Inativo' : 'Ativo'
   }));
 
   const exportExcel = () => {
@@ -227,7 +271,7 @@ export default function CadastroProdutosComercial() {
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     worksheet['!cols'] = [
-      { wch: 35 }, { wch: 18 }, { wch: 45 }, { wch: 15 }
+      { wch: 35 }, { wch: 18 }, { wch: 45 }, { wch: 15 }, { wch: 15 }
     ];
 
     const workbook = XLSX.utils.book_new();
@@ -263,12 +307,13 @@ export default function CadastroProdutosComercial() {
 
     autoTable(doc, {
       startY: 31,
-      head: [['Nome', 'Código', 'Descrição', 'Unidade']],
+      head: [['Nome', 'Código', 'Descrição', 'Unidade', 'Situação']],
       body: exportData.map(produto => [
         produto.Nome,
         produto.Codigo,
         produto.Descricao,
-        produto.Unidade
+        produto.Unidade,
+        produto.Situacao
       ]),
       styles: {
         fontSize: 9,
@@ -312,11 +357,12 @@ export default function CadastroProdutosComercial() {
       })[character]);
 
     const rows = exportData.map(produto => `
-      <tr>
+      <tr class="${produto.Situacao === 'Inativo' ? 'inativo' : ''}">
         <td>${escapeHTML(produto.Nome)}</td>
         <td>${escapeHTML(produto.Codigo)}</td>
         <td>${escapeHTML(produto.Descricao)}</td>
         <td>${escapeHTML(produto.Unidade)}</td>
+        <td>${escapeHTML(produto.Situacao)}</td>
       </tr>
     `).join('');
 
@@ -344,6 +390,7 @@ export default function CadastroProdutosComercial() {
           table { width: 100%; border-collapse: collapse; font-size: 11px; }
           th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
           th { background: #eeeeee; }
+          tr.inativo { background: #fee2e2; color: #b91c1c; }
           @media print { body { padding: 0; } }
         </style>
       </head>
@@ -353,7 +400,7 @@ export default function CadastroProdutosComercial() {
         <table>
           <thead>
             <tr>
-              <th>Nome</th><th>Código</th><th>Descrição</th><th>Unidade</th>
+              <th>Nome</th><th>Código</th><th>Descrição</th><th>Unidade</th><th>Situação</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -415,14 +462,26 @@ export default function CadastroProdutosComercial() {
         <CardContent className="grid gap-3 p-4 md:grid-cols-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={searchNome} onChange={e => setSearchNome(e.target.value)} placeholder="Pesquisar por nome..." className="bg-input pl-9" />
+            <Input
+              value={searchNome}
+              onChange={e => setSearchNome(e.target.value)}
+              placeholder="Pesquisar por nome..."
+              className="bg-input pl-9"
+            />
           </div>
           <div className="relative">
             <Barcode className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={searchCodigo} onChange={e => setSearchCodigo(e.target.value)} placeholder="Pesquisar por código..." className="bg-input pl-9" />
+            <Input
+              value={searchCodigo}
+              onChange={e => setSearchCodigo(e.target.value)}
+              placeholder="Pesquisar por código..."
+              className="bg-input pl-9"
+            />
           </div>
           <div className="flex items-center justify-between md:col-span-2">
-            <span className="text-sm text-muted-foreground">{produtosFiltrados.length} produto(s) encontrado(s)</span>
+            <span className="text-sm text-muted-foreground">
+              {produtosFiltrados.length} produto(s) encontrado(s)
+            </span>
             <Button variant="ghost" size="sm" onClick={() => {
               setSearchNome('');
               setSearchCodigo('');
@@ -437,26 +496,40 @@ export default function CadastroProdutosComercial() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Produtos cadastrados</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Produtos cadastrados
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold" style={{ color: GREEN }}>{produtos.length}</p>
+            <p className="text-2xl font-bold" style={{ color: GREEN }}>
+              {produtos.length}
+            </p>
           </CardContent>
         </Card>
+
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Resultado atual</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Produtos ativos
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{produtosFiltrados.length}</p>
+            <p className="text-2xl font-bold text-emerald-400">
+              {produtosAtivos}
+            </p>
           </CardContent>
         </Card>
+
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Situação</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Produtos inativos
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-emerald-400">Ativo</p>
+            <p className="text-2xl font-bold text-red-400">
+              {produtosInativos}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -470,10 +543,21 @@ export default function CadastroProdutosComercial() {
         icon={Package}
         footer={
           <>
-            <Button type="button" variant="outline" onClick={() => handleDialogChange(false)} disabled={saving}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleDialogChange(false)}
+              disabled={saving}
+            >
               Cancelar
             </Button>
-            <Button type="submit" form="form-produto-comercial" disabled={saving} className="font-bold text-black" style={{ background: GREEN }}>
+            <Button
+              type="submit"
+              form="form-produto-comercial"
+              disabled={saving}
+              className="font-bold text-black"
+              style={{ background: GREEN }}
+            >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editingId ? 'Salvar Alterações' : 'Salvar Produto'}
             </Button>
@@ -483,20 +567,71 @@ export default function CadastroProdutosComercial() {
         <form id="form-produto-comercial" onSubmit={handleSave} className="space-y-5">
           <div className="space-y-2">
             <Label>Nome do produto *</Label>
-            <Input value={formData.nome} onChange={e => updateField('nome', e.target.value)} placeholder="Nome do produto" className="h-11 rounded-xl bg-input" required autoFocus />
+            <Input
+              value={formData.nome}
+              onChange={e => updateField('nome', e.target.value)}
+              placeholder="Nome do produto"
+              className="h-11 rounded-xl bg-input"
+              required
+              autoFocus
+            />
           </div>
+
           <div className="space-y-2">
-            <Label>Código (opcional)</Label>
-            <Input value={formData.codigo} onChange={e => updateField('codigo', e.target.value)} placeholder="Código ou referência do produto" className="h-11 rounded-xl bg-input" />
+            <Label>Código do produto</Label>
+            <Input
+              value={editingId ? formData.codigo : 'Gerado automaticamente ao salvar'}
+              readOnly
+              disabled
+              className="h-11 rounded-xl bg-input opacity-80"
+            />
+            <p className="text-xs text-muted-foreground">
+              O sistema gera o código automaticamente no momento do cadastro.
+            </p>
           </div>
+
           <div className="space-y-2">
             <Label>Descrição (opcional)</Label>
-            <Textarea value={formData.descricao} onChange={e => updateField('descricao', e.target.value)} placeholder="Descreva o produto..." className="rounded-xl bg-input" rows={3} />
+            <Textarea
+              value={formData.descricao}
+              onChange={e => updateField('descricao', e.target.value)}
+              placeholder="Descreva o produto..."
+              className="rounded-xl bg-input"
+              rows={3}
+            />
           </div>
+
           <div className="space-y-2">
             <Label>Unidade</Label>
-            <Input value={formData.unidade} onChange={e => updateField('unidade', e.target.value)} placeholder="Ex.: UN, KG, L, M" className="h-11 rounded-xl bg-input" maxLength={10} />
-            <p className="text-xs text-muted-foreground">Exemplos: UN, KG, L, M, CX, PCT.</p>
+            <Input
+              value={formData.unidade}
+              onChange={e => updateField('unidade', e.target.value)}
+              placeholder="Ex.: UN, KG, L, M"
+              className="h-11 rounded-xl bg-input"
+              maxLength={10}
+            />
+            <p className="text-xs text-muted-foreground">
+              Exemplos: UN, KG, L, M, CX, PCT.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Situação do produto</Label>
+            <Select
+              value={formData.ativo ? 'ativo' : 'inativo'}
+              onValueChange={value => updateField('ativo', value === 'ativo')}
+            >
+              <SelectTrigger className="h-11 rounded-xl bg-input">
+                <SelectValue placeholder="Selecione a situação" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ativo">Ativo</SelectItem>
+                <SelectItem value="inativo">Inativo</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Produtos inativos ficam destacados em vermelho e não devem ser usados em novas vendas.
+            </p>
           </div>
         </form>
       </ModalComercialPadrao>
@@ -504,76 +639,132 @@ export default function CadastroProdutosComercial() {
       {/* TABELA */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg" style={{ color: GREEN }}>Produtos cadastrados</CardTitle>
+          <CardTitle className="text-lg" style={{ color: GREEN }}>
+            Produtos cadastrados
+          </CardTitle>
         </CardHeader>
+
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[650px]">
+            <table className="w-full min-w-[800px]">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
                   <th className="p-4 text-left text-sm font-semibold text-muted-foreground">Nome</th>
                   <th className="p-4 text-left text-sm font-semibold text-muted-foreground">Código</th>
                   <th className="p-4 text-left text-sm font-semibold text-muted-foreground">Unidade</th>
+                  <th className="p-4 text-left text-sm font-semibold text-muted-foreground">Situação</th>
                   <th className="p-4 text-right text-sm font-semibold text-muted-foreground">Ações</th>
                 </tr>
               </thead>
+
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="p-10 text-center text-muted-foreground">
+                    <td colSpan={5} className="p-10 text-center text-muted-foreground">
                       <Loader2 className="mx-auto h-6 w-6 animate-spin" />
                       <span className="mt-2 block">Carregando produtos...</span>
                     </td>
                   </tr>
                 ) : produtosFiltrados.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-10 text-center text-muted-foreground">
+                    <td colSpan={5} className="p-10 text-center text-muted-foreground">
                       <Package className="mx-auto mb-2 h-10 w-10 opacity-50" />
-                      {produtos.length ? 'Nenhum produto corresponde aos filtros.' : 'Nenhum produto cadastrado ainda.'}
+                      {produtos.length
+                        ? 'Nenhum produto corresponde aos filtros.'
+                        : 'Nenhum produto cadastrado ainda.'}
                     </td>
                   </tr>
                 ) : (
-                  produtosFiltrados.map(produto => (
-                    <tr key={produto.id} className="border-b border-border last:border-0 hover:bg-[hsl(var(--neon-comercial)/.04)]">
-                      <td className="p-4 font-medium">
-                        {produto.nome}
-                        {produto.descricao && (
-                          <p className="mt-1 max-w-sm truncate text-xs text-muted-foreground">{produto.descricao}</p>
-                        )}
-                      </td>
-                      <td className="p-4 text-muted-foreground">{produto.codigo || '—'}</td>
-                      <td className="p-4 text-muted-foreground">{produto.unidade || 'UN'}</td>
-                      <td className="p-4 text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => openEditDialog(produto)} className="text-[hsl(var(--neon-comercial))]" title="Editar produto">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="text-red-400 hover:bg-red-500/10" title="Excluir produto">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Deseja realmente excluir o produto <strong>{produto.nome}</strong>?
-                                  Se houver vendas ou movimentações vinculadas, a exclusão poderá ser impedida pelo banco de dados.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(produto.id)} className="bg-red-600 text-white hover:bg-red-700">
-                                  Excluir
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  produtosFiltrados.map(produto => {
+                    const inativo = produto.ativo === false;
+
+                    return (
+                      <tr
+                        key={produto.id}
+                        className={`border-b last:border-0 ${
+                          inativo
+                            ? 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/15'
+                            : 'border-border hover:bg-[hsl(var(--neon-comercial)/.04)]'
+                        }`}
+                      >
+                        <td className="p-4 font-medium">
+                          {produto.nome}
+                          {produto.descricao && (
+                            <p className={`mt-1 max-w-sm truncate text-xs ${
+                              inativo ? 'text-red-300/70' : 'text-muted-foreground'
+                            }`}>
+                              {produto.descricao}
+                            </p>
+                          )}
+                        </td>
+
+                        <td className="p-4">
+                          {produto.codigo || '—'}
+                        </td>
+
+                        <td className="p-4">
+                          {produto.unidade || 'UN'}
+                        </td>
+
+                        <td className="p-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            inativo
+                              ? 'bg-red-500/20 text-red-300'
+                              : 'bg-emerald-500/15 text-emerald-400'
+                          }`}>
+                            {inativo ? 'Inativo' : 'Ativo'}
+                          </span>
+                        </td>
+
+                        <td className="p-4 text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditDialog(produto)}
+                              className={inativo ? 'text-red-300' : 'text-[hsl(var(--neon-comercial))]'}
+                              title="Editar produto"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-red-400 hover:bg-red-500/10"
+                                  title="Excluir produto"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Deseja realmente excluir o produto <strong>{produto.nome}</strong>?
+                                    Se houver vendas ou movimentações vinculadas, a exclusão poderá ser impedida pelo banco de dados.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDelete(produto.id)}
+                                    className="bg-red-600 text-white hover:bg-red-700"
+                                  >
+                                    Excluir
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
