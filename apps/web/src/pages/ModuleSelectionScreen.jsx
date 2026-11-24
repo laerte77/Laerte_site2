@@ -56,7 +56,7 @@ const modules = [
     icon: Store,
     path: '/comercial/dashboard',
     requiredModule: 'comercial',
-    hex: 'hsl(var(--neon-gold))'
+    hex: 'hsl(var(--neon-comercial))'
   }
 ];
 
@@ -249,4 +249,3 @@ export default function ModuleSelectionScreen() {
     </>
   );
 }
-
