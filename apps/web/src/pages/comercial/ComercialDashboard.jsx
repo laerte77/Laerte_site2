@@ -3,6 +3,9 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Sidebar from '@/components/comercial/Sidebar.jsx';
 import Header from '@/components/comercial/Header.jsx';
 import MovimentacaoEstoque from '@/components/comercial/estoque/MovimentacaoEstoque.jsx';
+import CadastroClientesComercial from '@/components/comercial/cadastros/CadastroClientesComercial.jsx';
+import CadastroFornecedoresComercial from '@/components/comercial/cadastros/CadastroFornecedoresComercial.jsx';
+import CadastroProdutosComercial from '@/components/comercial/cadastros/CadastroProdutosComercial.jsx';
 import { DeviceContext } from '@/App.jsx';
 import { Helmet } from 'react-helmet';
 import { useModuleAccessGuard } from '@/hooks/useModuleAccessGuard';
@@ -13,9 +16,6 @@ import {
 } from 'lucide-react';
 
 const pages = [
-  { path: 'cadastros/clientes', title: 'Clientes', icon: Users },
-  { path: 'cadastros/fornecedores', title: 'Fornecedores', icon: Truck },
-  { path: 'cadastros/produtos', title: 'Produtos', icon: Package },
   { path: 'lancamentos/vendas', title: 'Vendas', icon: ShoppingCart },
   { path: 'lancamentos/despesas', title: 'Despesas', icon: Receipt },
   { path: 'lancamentos/custos', title: 'Custos', icon: Wallet },
@@ -155,11 +155,29 @@ export default function ComercialDashboard() {
             <Routes>
               <Route path="/" element={<ComercialHome />} />
 
+              {/* CADASTROS */}
+              <Route
+                path="cadastros/clientes"
+                element={<CadastroClientesComercial />}
+              />
+
+              <Route
+                path="cadastros/fornecedores"
+                element={<CadastroFornecedoresComercial />}
+              />
+
+              <Route
+                path="cadastros/produtos"
+                element={<CadastroProdutosComercial />}
+              />
+
+              {/* ESTOQUE */}
               <Route
                 path="estoque/movimentacoes"
                 element={<MovimentacaoEstoque />}
               />
 
+              {/* DEMAIS TELAS */}
               {pages.map(page => (
                 <Route
                   key={page.path}
