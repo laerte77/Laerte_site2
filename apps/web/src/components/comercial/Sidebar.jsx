@@ -1,16 +1,16 @@
-
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Store, PlusCircle, PieChart, ChevronDown, Users, Truck,
   Package, ArrowLeftRight, LogOut, Building2, Search,
-  ShoppingCart, Receipt, Wallet, TrendingUp
+  ShoppingCart, Receipt, Wallet, TrendingUp, Boxes
 } from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 
 export default function Sidebar({ isOpen, isMobile }) {
   const [openMenus, setOpenMenus] = useState({
     cadastros: true,
+    estoque: false,
     lancamentos: false,
     consultas: false
   });
@@ -108,6 +108,12 @@ export default function Sidebar({ isOpen, isMobile }) {
           </li>
 
           <li>
+            {menu('estoque', Boxes, 'Estoque', <>
+              {item('/comercial/dashboard/estoque/movimentacoes', ArrowLeftRight, 'Movimentações')}
+            </>)}
+          </li>
+
+          <li>
             {menu('lancamentos', ArrowLeftRight, 'Lançamentos', <>
               {item('/comercial/dashboard/lancamentos/vendas', ShoppingCart, 'Vendas')}
               {item('/comercial/dashboard/lancamentos/despesas', Receipt, 'Despesas')}
@@ -147,3 +153,4 @@ export default function Sidebar({ isOpen, isMobile }) {
     </aside>
   );
 }
+
