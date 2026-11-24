@@ -128,7 +128,7 @@ export default function ComercialDashboard() {
       style={{
         '--primary': 'var(--neon-comercial)',
         '--ring': 'var(--neon-comercial)',
-        '--neon-comercial': '51 100% 50%'
+        '--neon-comercial': '120 100% 50%'
       }}
     >
       <Helmet>
