@@ -2,11 +2,15 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Sidebar from '@/components/comercial/Sidebar.jsx';
 import Header from '@/components/comercial/Header.jsx';
+import MovimentacaoEstoque from '@/components/comercial/estoque/MovimentacaoEstoque.jsx';
 import { DeviceContext } from '@/App.jsx';
 import { Helmet } from 'react-helmet';
 import { useModuleAccessGuard } from '@/hooks/useModuleAccessGuard';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Users, Truck, Package, ShoppingCart, Receipt, Wallet, TrendingUp, Search } from 'lucide-react';
+import {
+  Users, Truck, Package, ShoppingCart,
+  Receipt, Wallet, TrendingUp
+} from 'lucide-react';
 
 const pages = [
   { path: 'cadastros/clientes', title: 'Clientes', icon: Users },
@@ -47,6 +51,7 @@ function ComercialHome() {
           { title: 'Investimentos', icon: TrendingUp }
         ].map(item => {
           const Icon = item.icon;
+
           return (
             <div
               key={item.title}
@@ -56,6 +61,7 @@ function ComercialHome() {
                 <span className="text-sm text-gray-400">{item.title}</span>
                 <Icon className="h-5 w-5 text-[hsl(var(--neon-comercial))]" />
               </div>
+
               <p className="mt-5 text-sm text-gray-500">
                 Os indicadores serão configurados nesta etapa.
               </p>
@@ -68,6 +74,7 @@ function ComercialHome() {
         <h2 className="text-lg font-semibold text-white">
           Bem-vindo ao Módulo Comercial
         </h2>
+
         <p className="mt-2 text-sm text-gray-400">
           Aqui ficará o resumo financeiro das vendas, despesas, custos e investimentos.
         </p>
@@ -83,12 +90,15 @@ function PlaceholderPage({ title, icon: Icon }) {
         <p className="text-xs font-semibold uppercase tracking-widest text-[hsl(var(--neon-comercial))]">
           Módulo Comercial
         </p>
+
         <h1 className="mt-1 text-2xl font-bold text-white">{title}</h1>
       </div>
 
       <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-[hsl(var(--neon-comercial)/.20)] bg-gray-900/80 p-6 text-center">
         <Icon className="mb-4 h-10 w-10 text-[hsl(var(--neon-comercial))]" />
+
         <h2 className="text-lg font-semibold text-white">{title}</h2>
+
         <p className="mt-2 max-w-md text-sm text-gray-400">
           Esta tela está preparada. A funcionalidade será desenvolvida na próxima etapa.
         </p>
@@ -145,15 +155,28 @@ export default function ComercialDashboard() {
             <Routes>
               <Route path="/" element={<ComercialHome />} />
 
+              <Route
+                path="estoque/movimentacoes"
+                element={<MovimentacaoEstoque />}
+              />
+
               {pages.map(page => (
                 <Route
                   key={page.path}
                   path={page.path}
-                  element={<PlaceholderPage title={page.title} icon={page.icon} />}
+                  element={
+                    <PlaceholderPage
+                      title={page.title}
+                      icon={page.icon}
+                    />
+                  }
                 />
               ))}
 
-              <Route path="*" element={<Navigate to="/comercial/dashboard" replace />} />
+              <Route
+                path="*"
+                element={<Navigate to="/comercial/dashboard" replace />}
+              />
             </Routes>
           </div>
         </main>
@@ -169,3 +192,4 @@ export default function ComercialDashboard() {
     </div>
   );
 }
+
