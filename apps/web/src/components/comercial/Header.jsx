@@ -53,13 +53,14 @@ export default function Header({ toggleSidebar, isSidebarOpen }) {
           className="hidden items-center gap-2 rounded-md sm:flex"
         >
           <Store className="h-5 w-5 text-[hsl(var(--neon-comercial))]" />
+
           <span className="text-lg font-bold uppercase tracking-wider text-[hsl(var(--neon-comercial))]">
             Comercial
           </span>
         </button>
       </div>
 
-      <UserMenu moduleColor="neon-gold" />
+      <UserMenu moduleColor="neon-comercial" />
     </header>
   );
 }
