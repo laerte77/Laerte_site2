@@ -57,7 +57,6 @@ const NavLink = ({ to, icon: Icon, children }) => {
           style={active ? { color: GREEN } : undefined}
         />
       )}
-
       <span className="truncate">{children}</span>
     </Link>
   );
@@ -65,7 +64,6 @@ const NavLink = ({ to, icon: Icon, children }) => {
 
 const Sidebar = ({ isOpen, setOpen, isMobile }) => {
   const { signOut } = useAuth();
-
   const expanded = isOpen || isMobile;
 
   const trigger = `
@@ -109,7 +107,6 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
               <div className="text-sm font-bold uppercase tracking-wide text-white">
                 COMERCIAL
               </div>
-
               <div
                 className="text-[11px] font-bold uppercase tracking-widest"
                 style={{ color: GREEN }}
@@ -144,20 +141,13 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
 
           {/* DASHBOARD */}
           <li>
-            <NavLink
-              to="/comercial/dashboard"
-              icon={Home}
-            >
+            <NavLink to="/comercial/dashboard" icon={Home}>
               {expanded && 'Dashboard'}
             </NavLink>
           </li>
 
-          {/* MENU ÚNICO: SOMENTE UM GRUPO ABERTO */}
-          <Accordion
-            type="single"
-            collapsible
-            className="w-full"
-          >
+          {/* GRUPOS DO MENU */}
+          <Accordion type="single" collapsible className="w-full">
 
             {/* CADASTROS */}
             <AccordionItem value="cadastros" className="border-b-0">
@@ -179,6 +169,10 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
 
                 <NavLink to="/comercial/dashboard/cadastros/produtos" icon={Package}>
                   Produtos
+                </NavLink>
+
+                <NavLink to="/comercial/dashboard/cadastros/tipos-despesas" icon={Receipt}>
+                  Tipos de Despesas
                 </NavLink>
               </AccordionContent>
             </AccordionItem>
@@ -269,7 +263,6 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
 
       {/* RODAPÉ */}
       <div className="shrink-0 space-y-1 border-t border-[hsl(var(--neon-comercial)/.15)] p-2">
-
         <Link
           to="/modules"
           className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[hsl(var(--neon-comercial)/.08)] hover:text-[hsl(var(--neon-comercial))]"
@@ -286,7 +279,6 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
           <LogOut className="h-4 w-4 shrink-0" />
           {expanded && 'Sair'}
         </button>
-
       </div>
     </aside>
   );
