@@ -1,3 +1,4 @@
+
 import React,{useState,useEffect,useCallback}from'react';
 import{Receipt,Plus,RefreshCw,Loader2}from'lucide-react';
 import{Button}from'@/components/ui/button';
@@ -18,7 +19,7 @@ const money=v=>BRL.format(Number(v)||0);
 const parseValor=v=>Number(String(v||'').replace(/\D/g,''))/100;
 const formatValor=v=>v?money(parseValor(v)):'';
 const brDate=v=>v?new Date(`${v}T12:00:00`).toLocaleDateString('pt-BR'):'—';
-const initial={data:today(),valor:'',tipo_despesa_id:'',categoria:'fixa',fornecedor_id:'',forma_pagamento:'',observacoes:''};
+const initial={data:today(),valor:'',tipo_despesa_id:'',fornecedor_id:'',forma_pagamento:'',observacoes:''};
 
 export default function LancamentoDespesasComercial(){
  const{user}=useAuth();
@@ -69,8 +70,8 @@ export default function LancamentoDespesasComercial(){
   e.preventDefault();
   if(!user||saving)return;
   const valorNumerico=parseValor(form.valor);
-  if(!form.data||!form.tipo_despesa_id||!Number.isFinite(valorNumerico)||!(valorNumerico>0)||!form.forma_pagamento){
-   toast({title:'Confira os campos',description:'Informe data, valor válido, tipo, classificação e forma de pagamento.',variant:'destructive'});
+  if(!form.data||!form.tipo_despesa_id||!tipoSelecionado?.categoria||!Number.isFinite(valorNumerico)||!(valorNumerico>0)||!form.forma_pagamento){
+   toast({title:'Confira os campos',description:'Informe data, valor válido, tipo com categoria cadastrada e forma de pagamento.',variant:'destructive'});
    return;
   }
   setSaving(true);
@@ -80,7 +81,7 @@ export default function LancamentoDespesasComercial(){
     data_despesa:form.data,
     valor:valorNumerico,
     tipo_despesa_id:form.tipo_despesa_id,
-    categoria:form.categoria,
+    categoria:'fixa',
     descricao:tipoNome(form.tipo_despesa_id),
     fornecedor_id:form.fornecedor_id||null,
     forma_pagamento:form.forma_pagamento,
@@ -139,14 +140,8 @@ export default function LancamentoDespesasComercial(){
      {!tipos.length&&<p className="text-xs text-amber-400">Cadastre um tipo antes de lançar uma despesa.</p>}
     </div>
     <div className="space-y-2">
-     <Label>Categoria do tipo</Label>
-     <Input readOnly value={tipoSelecionado?.categoria||'Selecione um tipo de despesa'} className="opacity-80"/>
-    </div>
-    <div className="space-y-2">
-     <Label>Classificação *</Label>
-     <select required value={form.categoria} onChange={e=>set('categoria',e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-white">
-      <option value="fixa">Fixa</option><option value="variavel">Variável</option>
-     </select>
+     <Label>Categoria</Label>
+     <Input readOnly value={tipoSelecionado?.categoria||'Preenchida automaticamente'} className="cursor-not-allowed opacity-80" tabIndex={-1}/>
     </div>
     <div className="space-y-2">
      <Label>Fornecedor (opcional)</Label>
@@ -176,22 +171,21 @@ export default function LancamentoDespesasComercial(){
   <Card className="border-border bg-card">
    <CardHeader><CardTitle style={{color:GREEN}}>Despesas recentes</CardTitle></CardHeader>
    <CardContent className="overflow-x-auto p-0">
-    <table className="w-full min-w-[950px] text-sm">
+    <table className="w-full min-w-[900px] text-sm">
      <thead><tr className="border-y border-border bg-muted/30 text-left text-muted-foreground">
-      <th className="p-3">Data</th><th className="p-3">Tipo</th><th className="p-3">Categoria</th><th className="p-3">Classificação</th><th className="p-3">Fornecedor</th><th className="p-3">Pagamento</th><th className="p-3 text-right">Valor</th>
+      <th className="p-3">Data</th><th className="p-3">Tipo</th><th className="p-3">Categoria</th><th className="p-3">Fornecedor</th><th className="p-3">Pagamento</th><th className="p-3 text-right">Valor</th>
      </tr></thead>
      <tbody>
-      {loading?<tr><td colSpan={7} className="p-8 text-center"><Loader2 className="mx-auto animate-spin"/></td></tr>
+      {loading?<tr><td colSpan={6} className="p-8 text-center"><Loader2 className="mx-auto animate-spin"/></td></tr>
       :rows.length?rows.map(r=><tr key={r.id} className="border-b border-border">
        <td className="p-3">{brDate(r.data_despesa)}</td>
        <td className="p-3">{tipoNome(r.tipo_despesa_id)==='Tipo não informado'?r.descricao:tipoNome(r.tipo_despesa_id)}</td>
        <td className="p-3">{categoriaNome(r.tipo_despesa_id)}</td>
-       <td className="p-3">{r.categoria==='fixa'?'Fixa':r.categoria==='variavel'?'Variável':'Antiga'}</td>
        <td className="p-3">{fornecedorNome(r.fornecedor_id)}</td>
        <td className="p-3">{r.forma_pagamento||'—'}</td>
        <td className="p-3 text-right font-semibold">{money(r.valor)}</td>
       </tr>)
-      :<tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Nenhuma despesa cadastrada.</td></tr>}
+      :<tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhuma despesa cadastrada.</td></tr>}
      </tbody>
     </table>
    </CardContent>
