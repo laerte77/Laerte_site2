@@ -24,13 +24,13 @@ const today = () => new Intl.DateTimeFormat('en-CA', {
   day: '2-digit'
 }).format(new Date());
 
-const money = v => Number(v || 0).toLocaleString('pt-BR', {
+const money = value => Number(value || 0).toLocaleString('pt-BR', {
   style: 'currency',
   currency: 'BRL'
 });
 
-const brDate = v => v
-  ? new Date(`${v}T12:00:00`).toLocaleDateString('pt-BR')
+const brDate = value => value
+  ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR')
   : '—';
 
 const createInitial = type => ({
@@ -423,9 +423,10 @@ export default function LancamentoFinanceiroComercial({ mode = 'outros' }) {
       <ModalComercialPadrao
         open={modalOpen}
         onClose={fecharModal}
-        title={editId
-          ? `Editar ${isCusto ? 'custo' : isInvestimento ? 'investimento' : 'lançamento'}`
-          : `Novo ${isCusto ? 'custo' : isInvestimento ? 'investimento' : 'lançamento'}`
+        title={
+          editId
+            ? `Editar ${isCusto ? 'custo' : isInvestimento ? 'investimento' : 'lançamento'}`
+            : `Novo ${isCusto ? 'custo' : isInvestimento ? 'investimento' : 'lançamento'}`
         }
         description={`Preencha os dados ${isCusto ? 'do custo' : isInvestimento ? 'do investimento' : 'do lançamento'}.`}
         icon={Icon}
