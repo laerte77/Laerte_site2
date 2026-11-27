@@ -1,3 +1,4 @@
+
 import React,{useCallback,useEffect,useMemo,useState}from'react';
 import{Plus,Trash2,ShoppingCart,RefreshCw,Loader2,XCircle,Pencil}from'lucide-react';
 import{Button}from'@/components/ui/button';
@@ -126,6 +127,7 @@ export default function LancamentoVendasComercial(){
 
   setSaving(true);
   let vendaId=editId;
+
   try{
    const cabecalho={
     cliente_id:clienteId||null,
@@ -136,6 +138,7 @@ export default function LancamentoVendasComercial(){
 
    if(editId){
     if(editVenda?.status==='cancelado')throw new Error('Uma venda cancelada não pode ser editada.');
+
     const{error:headerError}=await supabase.from('comercial_vendas').update(cabecalho).eq('id',editId).eq('user_id',user.id);
     if(headerError)throw headerError;
 
@@ -195,7 +198,6 @@ export default function LancamentoVendasComercial(){
      ...cabecalho,
      valor_total:0,
      valor_recebido:0,
-     forma_pagamento:forma,
      status:'pendente'
     }).select('id').single();
 
@@ -229,11 +231,14 @@ export default function LancamentoVendasComercial(){
     toast({title:'Venda registrada!',description:'A venda e o recebimento foram salvos.'});
     limparFormulario();
    }
+
    await carregar();
   }catch(error){
    toast({title:editId?'Erro ao atualizar venda':'Não foi possível registrar a venda',description:error.message,variant:'destructive'});
    await carregar();
-  }finally{setSaving(false)}
+  }finally{
+   setSaving(false);
+  }
  };
 
  const excluir=async venda=>{
@@ -358,23 +363,23 @@ export default function LancamentoVendasComercial(){
        <option value="parcial">Pago parcialmente</option>
       </select>
      </div>
-     {#if statusPagamento === 'parcial'}
-     <div className="grid gap-3 sm:grid-cols-2">
-      <div className="space-y-2">
-       <Label>Valor pago (R$)</Label>
-       <Input type="number" min="0.01" max={Math.max(0,total-0.01)} step="0.01" value={valorPago} onChange={e=>setValorPago(e.target.value)} placeholder="0,00"/>
+     {statusPagamento==='parcial'?(
+      <div className="grid gap-3 sm:grid-cols-2">
+       <div className="space-y-2">
+        <Label>Valor pago (R$)</Label>
+        <Input type="number" min="0.01" max={Math.max(0,total-0.01)} step="0.01" value={valorPago} onChange={e=>setValorPago(e.target.value)} placeholder="0,00"/>
+       </div>
+       <div className="space-y-2">
+        <Label>Valor restante (R$)</Label>
+        <Input readOnly value={money(restante)} className="font-semibold"/>
+       </div>
       </div>
-      <div className="space-y-2">
-       <Label>Valor restante (R$)</Label>
-       <Input readOnly value={money(restante)} className="font-semibold"/>
+     ):(
+      <div className="grid gap-3 sm:grid-cols-2">
+       <div><p className="text-xs text-muted-foreground">Valor pago</p><p className="font-semibold text-emerald-400">{money(pagoCalculado)}</p></div>
+       <div><p className="text-xs text-muted-foreground">Valor restante</p><p className="font-semibold text-amber-400">{money(restante)}</p></div>
       </div>
-     </div>
-     {:else}
-     <div className="grid gap-3 sm:grid-cols-2">
-      <div><p className="text-xs text-muted-foreground">Valor pago</p><p className="font-semibold text-emerald-400">{money(pagoCalculado)}</p></div>
-      <div><p className="text-xs text-muted-foreground">Valor restante</p><p className="font-semibold text-amber-400">{money(restante)}</p></div>
-     </div>
-     {/if}
+     )}
     </div>
    </form>
   </ModalComercialPadrao>
