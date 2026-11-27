@@ -69,9 +69,9 @@ export default function ConsultaDespesasComercial(){
   Valor:Number(r.valor||0),
   Tipo:tipoNome(r.tipo_despesa_id),
   Categoria:categoriaNome(r.tipo_despesa_id),
-  Classificação:r.categoria==='fixa'?'Fixa':r.categoria==='variavel'?'Variável':'Antiga',
   Fornecedor:fornecedorNome(r.fornecedor_id),
   'Forma de pagamento':r.forma_pagamento||'',
+  Status:r.status||'',
   Observações:r.observacoes||''
  }));
  const total=rows.reduce((sum,r)=>sum+Number(r.valor||0),0);
@@ -79,7 +79,7 @@ export default function ConsultaDespesasComercial(){
  const exportExcel=()=>{
   if(!rows.length)return toast({title:'Sem dados para exportar',variant:'destructive'});
   const ws=XLSX.utils.json_to_sheet(exportData);
-  ws['!cols']=[{wch:14},{wch:16},{wch:24},{wch:20},{wch:16},{wch:26},{wch:22},{wch:40}];
+  ws['!cols']=[{wch:14},{wch:16},{wch:24},{wch:20},{wch:26},{wch:22},{wch:16},{wch:40}];
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Despesas');
   XLSX.writeFile(wb,'consulta_de_despesas.xlsx');
@@ -94,8 +94,8 @@ export default function ConsultaDespesasComercial(){
   doc.text(`Registros: ${rows.length} | Total: ${money(total)}`,14,24);
   autoTable(doc,{
    startY:30,
-   head:[['Data','Valor','Tipo','Categoria','Classificação','Fornecedor','Pagamento','Observações']],
-   body:exportData.map(r=>[r.Data,money(r.Valor),r.Tipo,r.Categoria,r.Classificação,r.Fornecedor,r['Forma de pagamento'],r.Observações]),
+   head:[['Data','Valor','Tipo','Categoria','Fornecedor','Pagamento','Status','Observações']],
+   body:exportData.map(r=>[r.Data,money(r.Valor),r.Tipo,r.Categoria,r.Fornecedor,r['Forma de pagamento'],r.Status,r.Observações]),
    styles:{fontSize:7,cellPadding:2,overflow:'linebreak'},
    headStyles:{fillColor:[30,45,32],textColor:[255,255,255]}
   });
@@ -105,10 +105,10 @@ export default function ConsultaDespesasComercial(){
  const imprimir=()=>{
   if(!rows.length)return toast({title:'Sem dados para imprimir',variant:'destructive'});
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-  const htmlRows=exportData.map(r=>`<tr><td>${esc(r.Data)}</td><td>${esc(money(r.Valor))}</td><td>${esc(r.Tipo)}</td><td>${esc(r.Categoria)}</td><td>${esc(r.Classificação)}</td><td>${esc(r.Fornecedor)}</td><td>${esc(r['Forma de pagamento'])}</td><td>${esc(r.Observações)}</td></tr>`).join('');
+  const htmlRows=exportData.map(r=>`<tr><td>${esc(r.Data)}</td><td>${esc(money(r.Valor))}</td><td>${esc(r.Tipo)}</td><td>${esc(r.Categoria)}</td><td>${esc(r.Fornecedor)}</td><td>${esc(r['Forma de pagamento'])}</td><td>${esc(r.Status)}</td><td>${esc(r.Observações)}</td></tr>`).join('');
   const win=window.open('','_blank');
   if(!win)return toast({title:'Impressão bloqueada',description:'Permita a abertura de janelas para imprimir.',variant:'destructive'});
-  win.document.write(`<html><head><title>Consulta de Despesas</title><style>body{font-family:Arial;padding:20px;color:#222}table{width:100%;border-collapse:collapse;font-size:10px}th,td{border:1px solid #ccc;padding:7px;text-align:left}th{background:#eee}h1{font-size:20px}</style></head><body><h1>Consulta de Despesas</h1><p>Registros: ${rows.length} | Total: ${esc(money(total))}</p><table><thead><tr><th>Data</th><th>Valor</th><th>Tipo</th><th>Categoria</th><th>Classificação</th><th>Fornecedor</th><th>Pagamento</th><th>Observações</th></tr></thead><tbody>${htmlRows}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`);
+  win.document.write(`<html><head><title>Consulta de Despesas</title><style>body{font-family:Arial;padding:20px;color:#222}table{width:100%;border-collapse:collapse;font-size:10px}th,td{border:1px solid #ccc;padding:7px;text-align:left}th{background:#eee}h1{font-size:20px}</style></head><body><h1>Consulta de Despesas</h1><p>Registros: ${rows.length} | Total: ${esc(money(total))}</p><table><thead><tr><th>Data</th><th>Valor</th><th>Tipo</th><th>Categoria</th><th>Fornecedor</th><th>Pagamento</th><th>Status</th><th>Observações</th></tr></thead><tbody>${htmlRows}</tbody></table><script>window.onload=function(){window.print()}</script></body></html>`);
   win.document.close();
  };
 
@@ -155,23 +155,22 @@ export default function ConsultaDespesasComercial(){
   <Card className="border-border bg-card">
    <CardHeader><CardTitle style={{color:GREEN}}>Resultado da consulta</CardTitle></CardHeader>
    <CardContent className="overflow-x-auto p-0">
-    <table className="w-full min-w-[1100px] text-sm">
+    <table className="w-full min-w-[1050px] text-sm">
      <thead><tr className="border-y border-border bg-muted/30 text-left text-muted-foreground">
-      <th className="p-3">Data</th><th className="p-3">Tipo</th><th className="p-3">Categoria</th><th className="p-3">Classificação</th><th className="p-3">Fornecedor</th><th className="p-3">Pagamento</th><th className="p-3">Status</th><th className="p-3 text-right">Valor</th>
+      <th className="p-3">Data</th><th className="p-3">Tipo</th><th className="p-3">Categoria</th><th className="p-3">Fornecedor</th><th className="p-3">Pagamento</th><th className="p-3">Status</th><th className="p-3 text-right">Valor</th>
      </tr></thead>
      <tbody>
-      {loading?<tr><td colSpan={8} className="p-8 text-center"><Loader2 className="mx-auto animate-spin"/></td></tr>
+      {loading?<tr><td colSpan={7} className="p-8 text-center"><Loader2 className="mx-auto animate-spin"/></td></tr>
       :rows.length?rows.map(r=><tr key={r.id} className="border-b border-border">
        <td className="p-3">{brDate(r.data_despesa)}</td>
        <td className="p-3">{tipoNome(r.tipo_despesa_id)==='Não informado'?r.descricao:tipoNome(r.tipo_despesa_id)}</td>
        <td className="p-3">{categoriaNome(r.tipo_despesa_id)}</td>
-       <td className="p-3">{r.categoria==='fixa'?'Fixa':r.categoria==='variavel'?'Variável':'Antiga'}</td>
        <td className="p-3">{fornecedorNome(r.fornecedor_id)}</td>
        <td className="p-3">{r.forma_pagamento||'—'}</td>
        <td className="p-3 capitalize">{r.status}</td>
        <td className="p-3 text-right font-semibold">{money(r.valor)}</td>
       </tr>)
-      :<tr><td colSpan={8} className="p-8 text-center text-muted-foreground">Nenhuma despesa encontrada.</td></tr>}
+      :<tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Nenhuma despesa encontrada.</td></tr>}
      </tbody>
     </table>
    </CardContent>
