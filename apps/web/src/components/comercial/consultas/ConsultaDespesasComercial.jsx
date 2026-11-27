@@ -16,6 +16,7 @@ const CATEGORIAS=['Fixa','Variável','Operacional','Custo','Investimento','Admin
 const money=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const brDate=v=>v?new Date(`${v}T12:00:00`).toLocaleDateString('pt-BR'):'—';
 const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const statusNome=()=> 'Pago';
 
 export default function ConsultaDespesasComercial(){
  const{user}=useAuth();
@@ -64,6 +65,7 @@ export default function ConsultaDespesasComercial(){
  const tipoNome=id=>tipoPorId(id)?.nome||'Não informado';
  const categoriaNome=id=>tipoPorId(id)?.categoria||'—';
  const fornecedorNome=id=>fornecedores.find(f=>f.id===id)?.nome||'—';
+
  const exportData=rows.map(r=>({
   Data:brDate(r.data_despesa),
   Valor:Number(r.valor||0),
@@ -71,9 +73,10 @@ export default function ConsultaDespesasComercial(){
   Categoria:categoriaNome(r.tipo_despesa_id),
   Fornecedor:fornecedorNome(r.fornecedor_id),
   'Forma de pagamento':r.forma_pagamento||'',
-  Status:r.status||'',
+  Status:statusNome(),
   Observações:r.observacoes||''
  }));
+
  const total=rows.reduce((sum,r)=>sum+Number(r.valor||0),0);
 
  const exportExcel=()=>{
@@ -119,7 +122,7 @@ export default function ConsultaDespesasComercial(){
   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/70 p-5">
    <div className="flex items-center gap-3">
     <div className="rounded-xl border p-3" style={{borderColor:'hsl(var(--neon-comercial)/.3)',color:GREEN}}><Receipt/></div>
-    <div><p className="text-xs font-semibold uppercase tracking-widest" style={{color:GREEN}}>Consultas</p><h1 className="text-2xl font-bold text-white">Despesas</h1><p className="text-sm text-muted-foreground">Consulte, filtre e exporte seus lançamentos.</p></div>
+    <div><p className="text-xs font-semibold uppercase tracking-widest" style={{color:GREEN}}>Consultas</p><h1 className="text-2xl font-bold text-white">Despesas</h1><p className="text-sm text-muted-foreground">Consulte, filtre e exporte suas despesas pagas.</p></div>
    </div>
    <div className="flex flex-wrap gap-2">
     <Button variant="outline" onClick={consultar}><RefreshCw className="mr-2 h-4 w-4"/>Atualizar</Button>
@@ -167,7 +170,7 @@ export default function ConsultaDespesasComercial(){
        <td className="p-3">{categoriaNome(r.tipo_despesa_id)}</td>
        <td className="p-3">{fornecedorNome(r.fornecedor_id)}</td>
        <td className="p-3">{r.forma_pagamento||'—'}</td>
-       <td className="p-3 capitalize">{r.status}</td>
+       <td className="p-3 font-semibold text-emerald-400">Pago</td>
        <td className="p-3 text-right font-semibold">{money(r.valor)}</td>
       </tr>)
       :<tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Nenhuma despesa encontrada.</td></tr>}
