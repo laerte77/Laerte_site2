@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+
 import {
   Home,
   Store,
@@ -44,42 +45,36 @@ const NavLink = ({ to, icon: Icon, children }) => {
     <Link
       to={to}
       className={cn(
-        'flex min-h-10 w-full items-center gap-3 rounded-lg border px-3 py-2 text-sm font-medium transition-all duration-200',
+        'flex min-h-10 w-full items-center gap-3 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
         active
-          ? 'border-[hsl(var(--neon-comercial)/.40)] bg-[hsl(var(--neon-comercial)/.12)] shadow-[inset_3px_0_0_hsl(var(--neon-comercial))]'
-          : 'border-transparent text-muted-foreground hover:border-[hsl(var(--neon-comercial)/.20)] hover:bg-[hsl(var(--neon-comercial)/.07)] hover:text-white'
+          ? 'border-[hsl(var(--neon-comercial)/.45)] bg-[hsl(var(--neon-comercial)/.10)]'
+          : 'border-transparent text-muted-foreground hover:border-[hsl(var(--neon-comercial)/.20)] hover:bg-muted hover:text-foreground'
       )}
       style={active ? { color: GREEN } : undefined}
     >
       {Icon && (
-        <Icon
-          className="h-4 w-4 shrink-0"
-          style={active ? { color: GREEN } : undefined}
-        />
+        <Icon className="h-4 w-4 shrink-0" />
       )}
-      <span className="truncate">{children}</span>
+
+      <span className="truncate">
+        {children}
+      </span>
     </Link>
   );
 };
 
-const Sidebar = ({ isOpen, setOpen, isMobile }) => {
+export default function Sidebar({ isOpen, setOpen, isMobile }) {
   const { signOut } = useAuth();
+
   const expanded = isOpen || isMobile;
 
-  const trigger = `
-    flex min-h-10 w-full items-center rounded-lg px-3 py-2
-    text-sm font-medium text-muted-foreground
-    transition-all duration-200
-    hover:bg-[hsl(var(--neon-comercial)/.08)]
-    hover:text-[hsl(var(--neon-comercial))]
-    [&[data-state=open]]:bg-[hsl(var(--neon-comercial)/.08)]
-    [&[data-state=open]]:text-[hsl(var(--neon-comercial))]
-  `;
+  const trigger =
+    'flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[hsl(var(--neon-comercial)/.08)] hover:text-foreground';
 
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-[hsl(var(--neon-comercial)/.20)] bg-[#10151b] transition-[width,transform] duration-300',
+        'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-[hsl(var(--neon-comercial)/.20)] bg-[#10151b] transition-[width,transform] duration-300 motion-reduce:transition-none',
         isMobile
           ? isOpen
             ? 'w-60 translate-x-0'
@@ -107,6 +102,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
               <div className="text-sm font-bold uppercase tracking-wide text-white">
                 COMERCIAL
               </div>
+
               <div
                 className="text-[11px] font-bold uppercase tracking-widest"
                 style={{ color: GREEN }}
@@ -123,7 +119,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
             variant="ghost"
             size="icon"
             onClick={() => setOpen(!isOpen)}
-            className="ml-auto shrink-0 hover:bg-[hsl(var(--neon-comercial)/.10)]"
+            className="ml-auto shrink-0 hover:bg-[hsl(var(--neon-comercial)/.08)]"
             style={{ color: GREEN }}
             aria-label={isOpen ? 'Recolher menu' : 'Expandir menu'}
           >
@@ -136,21 +132,17 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
       </div>
 
       {/* NAVEGAÇÃO */}
-      <nav className="flex-1 overflow-auto px-2 py-4 text-sm font-medium">
+      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-4 text-sm font-medium">
         <ul className="space-y-1">
-
-          {/* DASHBOARD */}
           <li>
             <NavLink to="/comercial/dashboard" icon={Home}>
               {expanded && 'Dashboard'}
             </NavLink>
           </li>
 
-          {/* GRUPOS DO MENU */}
           <Accordion type="single" collapsible className="w-full">
-
             {/* CADASTROS */}
-            <AccordionItem value="cadastros" className="border-b-0">
+            <AccordionItem value="cadastros">
               <AccordionTrigger className={trigger}>
                 <span className="flex items-center gap-3">
                   <PlusCircle className="h-4 w-4 shrink-0" />
@@ -158,7 +150,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
                 </span>
               </AccordionTrigger>
 
-              <AccordionContent className="ml-4 mt-1 space-y-1 border-l border-[hsl(var(--neon-comercial)/.25)] pl-3">
+              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-[hsl(var(--neon-comercial)/.25)] pl-3">
                 <NavLink to="/comercial/dashboard/cadastros/clientes" icon={Users}>
                   Clientes
                 </NavLink>
@@ -178,7 +170,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
             </AccordionItem>
 
             {/* ESTOQUE */}
-            <AccordionItem value="estoque" className="border-b-0">
+            <AccordionItem value="estoque">
               <AccordionTrigger className={trigger}>
                 <span className="flex items-center gap-3">
                   <Boxes className="h-4 w-4 shrink-0" />
@@ -186,7 +178,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
                 </span>
               </AccordionTrigger>
 
-              <AccordionContent className="ml-4 mt-1 space-y-1 border-l border-[hsl(var(--neon-comercial)/.25)] pl-3">
+              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-[hsl(var(--neon-comercial)/.25)] pl-3">
                 <NavLink to="/comercial/dashboard/estoque/movimentacoes" icon={ArrowLeftRight}>
                   Movimentações
                 </NavLink>
@@ -194,7 +186,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
             </AccordionItem>
 
             {/* LANÇAMENTOS */}
-            <AccordionItem value="lancamentos" className="border-b-0">
+            <AccordionItem value="lancamentos">
               <AccordionTrigger className={trigger}>
                 <span className="flex items-center gap-3">
                   <Receipt className="h-4 w-4 shrink-0" />
@@ -202,7 +194,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
                 </span>
               </AccordionTrigger>
 
-              <AccordionContent className="ml-4 mt-1 space-y-1 border-l border-[hsl(var(--neon-comercial)/.25)] pl-3">
+              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-[hsl(var(--neon-comercial)/.25)] pl-3">
                 <NavLink to="/comercial/dashboard/lancamentos/vendas" icon={ShoppingCart}>
                   Vendas
                 </NavLink>
@@ -222,7 +214,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
             </AccordionItem>
 
             {/* CONSULTAS */}
-            <AccordionItem value="consultas" className="border-b-0">
+            <AccordionItem value="consultas">
               <AccordionTrigger className={trigger}>
                 <span className="flex items-center gap-3">
                   <Search className="h-4 w-4 shrink-0" />
@@ -230,7 +222,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
                 </span>
               </AccordionTrigger>
 
-              <AccordionContent className="ml-4 mt-1 space-y-1 border-l border-[hsl(var(--neon-comercial)/.25)] pl-3">
+              <AccordionContent className="ml-4 mt-1 space-y-0.5 border-l border-[hsl(var(--neon-comercial)/.25)] pl-3">
                 <NavLink to="/comercial/dashboard/consultas/vendas" icon={ShoppingCart}>
                   Vendas
                 </NavLink>
@@ -256,7 +248,6 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
                 </NavLink>
               </AccordionContent>
             </AccordionItem>
-
           </Accordion>
         </ul>
       </nav>
@@ -265,7 +256,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
       <div className="shrink-0 space-y-1 border-t border-[hsl(var(--neon-comercial)/.15)] p-2">
         <Link
           to="/modules"
-          className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-[hsl(var(--neon-comercial)/.08)] hover:text-[hsl(var(--neon-comercial))]"
+          className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-[hsl(var(--neon-comercial)/.08)] hover:text-foreground"
         >
           <LayoutGrid className="h-4 w-4 shrink-0" />
           {expanded && 'Módulos'}
@@ -274,7 +265,7 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
         <button
           type="button"
           onClick={signOut}
-          className="flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
+          className="flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-500/10"
         >
           <LogOut className="h-4 w-4 shrink-0" />
           {expanded && 'Sair'}
@@ -282,7 +273,4 @@ const Sidebar = ({ isOpen, setOpen, isMobile }) => {
       </div>
     </aside>
   );
-};
-
-export default Sidebar;
-
+}
