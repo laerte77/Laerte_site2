@@ -11,6 +11,7 @@ import{useAuth}from'@/contexts/SupabaseAuthContext';
 
 const GREEN='hsl(var(--neon-comercial))';
 const FORM_ID='form-tipo-despesa';
+const CATEGORIAS=['Fixa','Variável','Operacional','Custo','Investimento','Administrativa','Manutenção','Outras'];
 
 export default function CadastroTiposDespesasComercial(){
  const{user}=useAuth();
@@ -133,8 +134,7 @@ export default function CadastroTiposDespesasComercial(){
     <div className="space-y-2">
      <Label>Categoria *</Label>
      <select required value={categoria} onChange={e=>setCategoria(e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-white">
-      <option value="Operacional">Operacional</option>
-      <option value="Variável">Variável</option>
+      {CATEGORIAS.map(c=><option key={c} value={c}>{c}</option>)}
      </select>
     </div>
    </form>
