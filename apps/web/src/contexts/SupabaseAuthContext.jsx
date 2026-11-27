@@ -7,25 +7,18 @@ import{usePermissionsRealtime}from'@/hooks/usePermissionsRealtime';
 
 const AuthContext=createContext(undefined),INACTIVITY_LIMIT=10*60*1000,PROFILE_TIMEOUT=15000,SESSION_TIMEOUT=15000;
 
-const withTimeout=(promise,ms,message)=>Promise.race([
- promise,
- new Promise((_,reject)=>setTimeout(()=>reject(new Error(message)),ms))
-]);
+const withTimeout=(promise,ms,message)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error(message)),ms))]);
 
 export const AuthProvider=({children})=>{
  const{toast}=useToast(),{ensureProfile}=useProfileEnsure();
  const[user,setUser]=useState(null),[session,setSession]=useState(null),[profile,setProfile]=useState(null),[loading,setLoading]=useState(true);
- const profileRef=useRef(null),profileRequestRef=useRef(0),authEventVersionRef=useRef(0),lastActivityRef=useRef(Date.now()),timerRef=useRef(null),loggingOutRef=useRef(false);
+ const profileRef=useRef(null),profileRequestRef=useRef(0),authEventVersionRef=useRef(0),userIdRef=useRef(null),profileLoadedForUserRef=useRef(null),profileLoadingUserIdRef=useRef(null),lastActivityRef=useRef(Date.now()),timerRef=useRef(null),loggingOutRef=useRef(false);
 
  useEffect(()=>{profileRef.current=profile},[profile]);
 
  const fetchProfile=useCallback(async(currentUser,isUpdate=false,requestId)=>{
   try{
-   const validProfile=await withTimeout(
-    ensureProfile(currentUser),
-    PROFILE_TIMEOUT,
-    'Tempo limite ao carregar o perfil.'
-   );
+   const validProfile=await withTimeout(ensureProfile(currentUser),PROFILE_TIMEOUT,'Tempo limite ao carregar o perfil.');
    if(requestId!==profileRequestRef.current)return;
    if(isUpdate&&profileRef.current){
     const oldModules=JSON.stringify(profileRef.current.allowed_modules),newModules=JSON.stringify(validProfile?.allowed_modules);
@@ -44,21 +37,35 @@ export const AuthProvider=({children})=>{
 
  const processSession=useCallback(currentSession=>{
   const currentUser=currentSession?.user??null;
-  const requestId=++profileRequestRef.current;
+  const currentId=currentUser?.id??null;
 
+  if(currentId&&currentId===userIdRef.current&&(profileLoadedForUserRef.current===currentId||profileLoadingUserIdRef.current===currentId)){
+   setSession(currentSession);
+   setUser(currentUser);
+   return;
+  }
+
+  const requestId=++profileRequestRef.current;
   setSession(currentSession??null);
   setUser(currentUser);
+  userIdRef.current=currentId;
 
   if(currentUser){
    lastActivityRef.current=Date.now();
    loggingOutRef.current=false;
+   profileLoadedForUserRef.current=null;
+   profileLoadingUserIdRef.current=currentId;
    setLoading(true);
-   Promise.resolve()
-    .then(()=>fetchProfile(currentUser,false,requestId))
-    .finally(()=>{
-     if(requestId===profileRequestRef.current)setLoading(false);
-    });
+   Promise.resolve().then(()=>fetchProfile(currentUser,false,requestId)).finally(()=>{
+    if(requestId===profileRequestRef.current){
+     profileLoadingUserIdRef.current=null;
+     profileLoadedForUserRef.current=currentId;
+     setLoading(false);
+    }
+   });
   }else{
+   profileLoadingUserIdRef.current=null;
+   profileLoadedForUserRef.current=null;
    setProfile(null);
    try{localStorage.removeItem('data_sharing_preferences')}catch(e){}
    lastActivityRef.current=Date.now();
@@ -131,41 +138,40 @@ export const AuthProvider=({children})=>{
 
  useEffect(()=>{
   let active=true;
-
   const{data:{subscription}}=supabase.auth.onAuthStateChange((event,currentSession)=>{
    if(!active)return;
    authEventVersionRef.current++;
 
    if(event==='TOKEN_REFRESHED'){
-    console.log('[Auth] Token renovado automaticamente');
+    const currentId=currentSession?.user?.id??null;
+    if(currentId&&!userIdRef.current){
+     processSession(currentSession);
+     return;
+    }
     setSession(currentSession??null);
     setUser(currentSession?.user??null);
     return;
    }
 
-   if(event==='SIGNED_OUT')clearAuthTokens();
+   if(event==='SIGNED_OUT'){
+    clearAuthTokens();
+    processSession(null);
+    return;
+   }
 
    processSession(currentSession);
   });
 
   const initialVersion=authEventVersionRef.current;
-
   const getInitialSession=async()=>{
    try{
-    const{data,error}=await withTimeout(
-     supabase.auth.getSession(),
-     SESSION_TIMEOUT,
-     'Tempo limite ao recuperar a sessão.'
-    );
-
+    const{data,error}=await withTimeout(supabase.auth.getSession(),SESSION_TIMEOUT,'Tempo limite ao recuperar a sessão.');
     if(!active||authEventVersionRef.current!==initialVersion)return;
-
     if(error){
      console.error('Erro ao recuperar sessão:',error);
      processSession(null);
      return;
     }
-
     processSession(data?.session??null);
    }catch(err){
     if(!active||authEventVersionRef.current!==initialVersion)return;
@@ -173,12 +179,14 @@ export const AuthProvider=({children})=>{
     setSession(null);
     setUser(null);
     setProfile(null);
+    userIdRef.current=null;
+    profileLoadedForUserRef.current=null;
+    profileLoadingUserIdRef.current=null;
     setLoading(false);
    }
   };
 
   getInitialSession();
-
   return()=>{
    active=false;
    subscription?.unsubscribe();
