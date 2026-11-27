@@ -2,21 +2,31 @@ import React,{createContext,useContext,useEffect,useState,useCallback,useMemo,us
 import{supabase}from'@/lib/customSupabaseClient';
 import{useToast}from'@/components/ui/use-toast';
 import{useProfileEnsure}from'@/hooks/useProfileEnsure';
-import{validateStoredTokens,clearAuthTokens}from'@/lib/tokenUtils';
+import{clearAuthTokens}from'@/lib/tokenUtils';
 import{usePermissionsRealtime}from'@/hooks/usePermissionsRealtime';
 
-const AuthContext=createContext(undefined),INACTIVITY_LIMIT=10*60*1000;
+const AuthContext=createContext(undefined),INACTIVITY_LIMIT=10*60*1000,PROFILE_TIMEOUT=15000,SESSION_TIMEOUT=15000;
+
+const withTimeout=(promise,ms,message)=>Promise.race([
+ promise,
+ new Promise((_,reject)=>setTimeout(()=>reject(new Error(message)),ms))
+]);
 
 export const AuthProvider=({children})=>{
  const{toast}=useToast(),{ensureProfile}=useProfileEnsure();
  const[user,setUser]=useState(null),[session,setSession]=useState(null),[profile,setProfile]=useState(null),[loading,setLoading]=useState(true);
- const profileRef=useRef(null),lastActivityRef=useRef(Date.now()),timerRef=useRef(null),loggingOutRef=useRef(false);
+ const profileRef=useRef(null),profileRequestRef=useRef(0),authEventVersionRef=useRef(0),lastActivityRef=useRef(Date.now()),timerRef=useRef(null),loggingOutRef=useRef(false);
 
  useEffect(()=>{profileRef.current=profile},[profile]);
 
- const fetchProfile=useCallback(async(currentUser,isUpdate=false)=>{
+ const fetchProfile=useCallback(async(currentUser,isUpdate=false,requestId)=>{
   try{
-   const validProfile=await ensureProfile(currentUser);
+   const validProfile=await withTimeout(
+    ensureProfile(currentUser),
+    PROFILE_TIMEOUT,
+    'Tempo limite ao carregar o perfil.'
+   );
+   if(requestId!==profileRequestRef.current)return;
    if(isUpdate&&profileRef.current){
     const oldModules=JSON.stringify(profileRef.current.allowed_modules),newModules=JSON.stringify(validProfile?.allowed_modules);
     if(oldModules!==newModules)window.dispatchEvent(new CustomEvent('permissionsUpdated',{detail:{allowed_modules:validProfile?.allowed_modules}}));
@@ -25,29 +35,44 @@ export const AuthProvider=({children})=>{
    if(validProfile?.data_sharing_preferences)localStorage.setItem('data_sharing_preferences',JSON.stringify(validProfile.data_sharing_preferences));
    else localStorage.removeItem('data_sharing_preferences');
   }catch(err){
-   console.error('Unexpected error fetching profile in context:',err);
+   if(requestId!==profileRequestRef.current)return;
+   console.error('Erro ao carregar perfil:',err);
    setProfile(null);
-   localStorage.removeItem('data_sharing_preferences');
+   try{localStorage.removeItem('data_sharing_preferences')}catch(e){}
   }
  },[ensureProfile]);
 
- const handleSession=useCallback(async currentSession=>{
-  setSession(currentSession);
-  setUser(currentSession?.user??null);
-  if(currentSession?.user){
+ const processSession=useCallback(currentSession=>{
+  const currentUser=currentSession?.user??null;
+  const requestId=++profileRequestRef.current;
+
+  setSession(currentSession??null);
+  setUser(currentUser);
+
+  if(currentUser){
    lastActivityRef.current=Date.now();
    loggingOutRef.current=false;
-   await fetchProfile(currentSession.user,false);
+   setLoading(true);
+   Promise.resolve()
+    .then(()=>fetchProfile(currentUser,false,requestId))
+    .finally(()=>{
+     if(requestId===profileRequestRef.current)setLoading(false);
+    });
   }else{
    setProfile(null);
-   localStorage.removeItem('data_sharing_preferences');
+   try{localStorage.removeItem('data_sharing_preferences')}catch(e){}
    lastActivityRef.current=Date.now();
    if(timerRef.current){clearTimeout(timerRef.current);timerRef.current=null}
+   setLoading(false);
   }
-  setLoading(false);
  },[fetchProfile]);
 
- const refreshProfile=useCallback(async()=>{if(user)await fetchProfile(user,true)},[user,fetchProfile]);
+ const refreshProfile=useCallback(async()=>{
+  if(!user)return;
+  const requestId=++profileRequestRef.current;
+  await fetchProfile(user,true,requestId);
+ },[user,fetchProfile]);
+
  usePermissionsRealtime(user?.id,refreshProfile);
 
  const signOut=useCallback(async(showToast=false)=>{
@@ -105,38 +130,56 @@ export const AuthProvider=({children})=>{
  },[user,updateActivity,signOut]);
 
  useEffect(()=>{
-  const getSession=async()=>{
+  let active=true;
+
+  const{data:{subscription}}=supabase.auth.onAuthStateChange((event,currentSession)=>{
+   if(!active)return;
+   authEventVersionRef.current++;
+   if(event==='TOKEN_REFRESHED')console.log('[Auth] Token renovado automaticamente');
+   if(event==='SIGNED_OUT')clearAuthTokens();
+
+   // O callback do Supabase não deve aguardar consultas ao próprio Supabase.
+   // O processamento do perfil acontece fora deste callback.
+   processSession(currentSession);
+  });
+
+  const initialVersion=authEventVersionRef.current;
+
+  const getInitialSession=async()=>{
    try{
-    if(localStorage.length>0&&!validateStoredTokens()){
-     clearAuthTokens();
-     await supabase.auth.signOut();
-    }
-    const{data,error}=await supabase.auth.getSession();
+    const{data,error}=await withTimeout(
+     supabase.auth.getSession(),
+     SESSION_TIMEOUT,
+     'Tempo limite ao recuperar a sessão.'
+    );
+
+    if(!active||authEventVersionRef.current!==initialVersion)return;
+
     if(error){
-     console.error('Session retrieval error:',error);
-     if(error.message.includes('Refresh Token Not Found')||error.message.includes('Invalid Refresh Token')){
-      clearAuthTokens();
-      await supabase.auth.signOut();
-     }
+     console.error('Erro ao recuperar sessão:',error);
+     processSession(null);
+     return;
     }
-    await handleSession(data?.session);
+
+    processSession(data?.session??null);
    }catch(err){
-    console.error('Error getting initial session:',err);
-    clearAuthTokens();
+    if(!active||authEventVersionRef.current!==initialVersion)return;
+    console.error('Falha na inicialização da autenticação:',err);
+    setSession(null);
+    setUser(null);
+    setProfile(null);
     setLoading(false);
    }
   };
 
-  getSession();
+  getInitialSession();
 
-  const{data:{subscription}}=supabase.auth.onAuthStateChange(async(event,currentSession)=>{
-   if(event==='TOKEN_REFRESHED')console.log('[Auth] Token successfully refreshed automatically');
-   else if(event==='SIGNED_OUT')clearAuthTokens();
-   await handleSession(currentSession);
-  });
-
-  return()=>subscription?.unsubscribe();
- },[handleSession]);
+  return()=>{
+   active=false;
+   subscription?.unsubscribe();
+   profileRequestRef.current++;
+  };
+ },[processSession]);
 
  const isAdmin=useMemo(()=>profile?.is_admin===true,[profile]);
  const dataSharingPreferences=useMemo(()=>profile?.data_sharing_preferences||{},[profile]);
