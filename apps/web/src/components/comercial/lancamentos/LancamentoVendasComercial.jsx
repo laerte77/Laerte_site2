@@ -1,4 +1,3 @@
-
 import React,{useCallback,useEffect,useMemo,useState}from'react';
 import{Plus,Trash2,ShoppingCart,RefreshCw,Loader2,XCircle,Pencil}from'lucide-react';
 import{Button}from'@/components/ui/button';
@@ -49,7 +48,7 @@ export default function LancamentoVendasComercial(){
   const[c,p,v]=await Promise.all([
    supabase.from('comercial_clientes').select('id,nome,ativo').eq('user_id',user.id).order('nome'),
    supabase.from('comercial_produtos').select('id,nome,codigo,unidade,ativo').eq('user_id',user.id).order('nome'),
-   supabase.from('comercial_vendas').select('id,data_venda,status,forma_pagamento,observacoes,valor_total,valor_recebido,cliente_id,comercial_venda_itens(id,descricao,quantidade,valor_unitario,subtotal,produto_id)').eq('user_id',user.id).order('data_venda',{ascending:false}).limit(100)
+   supabase.from('comercial_vendas').select('id,data_venda,status,forma_pagamento,observacoes,valor_total,valor_recebido,data_recebimento,cliente_id,comercial_venda_itens(id,descricao,quantidade,valor_unitario,subtotal,produto_id)').eq('user_id',user.id).order('data_venda',{ascending:false}).limit(100)
   ]);
   const error=c.error||p.error||v.error;
   if(error)toast({title:'Erro ao carregar vendas',description:error.message,variant:'destructive'});
@@ -110,18 +109,24 @@ export default function LancamentoVendasComercial(){
   if(!user||saving)return;
 
   const validos=itens.filter(i=>i.produto_id&&Number(i.quantidade)>0&&String(i.valor_unitario).trim()!==''&&Number(i.valor_unitario)>=0);
+
   if(!dataVenda||validos.length!==itens.length||!validos.length){
    toast({title:'Confira os dados da venda',description:'Informe a data, selecione os produtos e preencha quantidades e preços válidos.',variant:'destructive'});
    return;
   }
 
   if(statusPagamento==='parcial'&&!(pagoCalculado>0&&pagoCalculado<total)){
-   toast({title:'Valor pago inválido',description:'No pagamento parcial, o valor pago precisa ser maior que zero e menor que o total da venda.',variant:'destructive'});
+   toast({title:'Valor pago inválido',description:'O valor pago precisa ser maior que zero e menor que o total da venda.',variant:'destructive'});
    return;
   }
 
   if(statusPagamento==='recebido'&&total<=0){
-   toast({title:'Total inválido',description:'Adicione produtos com valores válidos antes de marcar a venda como paga.',variant:'destructive'});
+   toast({title:'Total inválido',description:'Adicione produtos com valores válidos.',variant:'destructive'});
+   return;
+  }
+
+  if(pagoCalculado>total){
+   toast({title:'Valor pago inválido',description:'O valor recebido não pode ultrapassar o total da venda.',variant:'destructive'});
    return;
   }
 
@@ -187,11 +192,12 @@ export default function LancamentoVendasComercial(){
 
     const{error:paymentError}=await supabase.from('comercial_vendas').update({
      valor_recebido:pagoCalculado,
-     status:statusPagamento
+     status:statusPagamento,
+     data_recebimento:pagoCalculado>0?hoje():null
     }).eq('id',editId).eq('user_id',user.id);
-    if(paymentError)throw paymentError;
 
-    toast({title:'Venda atualizada',description:'Os dados e o recebimento foram atualizados.'});
+    if(paymentError)throw paymentError;
+    toast({title:'Venda atualizada',description:'Os dados, o pagamento e o valor restante foram atualizados.'});
    }else{
     const{data:venda,error:vendaError}=await supabase.from('comercial_vendas').insert({
      user_id:user.id,
@@ -224,8 +230,10 @@ export default function LancamentoVendasComercial(){
 
     const{error:paymentError}=await supabase.from('comercial_vendas').update({
      valor_recebido:pagoCalculado,
-     status:statusPagamento
+     status:statusPagamento,
+     data_recebimento:pagoCalculado>0?hoje():null
     }).eq('id',vendaId).eq('user_id',user.id);
+
     if(paymentError)throw paymentError;
 
     toast({title:'Venda registrada!',description:'A venda e o recebimento foram salvos.'});
@@ -350,19 +358,24 @@ export default function LancamentoVendasComercial(){
     <div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={observacoes} onChange={e=>setObservacoes(e.target.value)} placeholder="Informações adicionais..."/></div>
 
     <div className="space-y-4 rounded-xl border border-[hsl(var(--neon-comercial)/.3)] bg-[hsl(var(--neon-comercial)/.05)] p-4">
-     <div><p className="text-sm text-gray-400">Total da venda</p><p className="text-2xl font-bold" style={{color:GREEN}}>{money(total)}</p></div>
+     <div>
+      <p className="text-sm text-gray-400">Total da venda</p>
+      <p className="text-2xl font-bold" style={{color:GREEN}}>{money(total)}</p>
+     </div>
      <div className="space-y-2">
       <Label>Status do pagamento</Label>
       <select value={statusPagamento} onChange={e=>{
-       setStatusPagamento(e.target.value);
-       if(e.target.value==='recebido')setValorPago(total.toFixed(2));
-       if(e.target.value==='pendente')setValorPago('0.00');
+       const value=e.target.value;
+       setStatusPagamento(value);
+       if(value==='recebido')setValorPago(total.toFixed(2));
+       if(value==='pendente')setValorPago('0.00');
       }} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-white">
        <option value="recebido">Pago</option>
        <option value="pendente">Devendo</option>
        <option value="parcial">Pago parcialmente</option>
       </select>
      </div>
+
      {statusPagamento==='parcial'?(
       <div className="grid gap-3 sm:grid-cols-2">
        <div className="space-y-2">
