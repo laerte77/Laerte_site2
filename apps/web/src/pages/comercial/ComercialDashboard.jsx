@@ -1,22 +1,29 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+
 import Sidebar from '@/components/comercial/Sidebar.jsx';
 import Header from '@/components/comercial/Header.jsx';
+
 import MovimentacaoEstoque from '@/components/comercial/estoque/MovimentacaoEstoque.jsx';
+
 import CadastroClientesComercial from '@/components/comercial/cadastros/CadastroClientesComercial.jsx';
 import CadastroFornecedoresComercial from '@/components/comercial/cadastros/CadastroFornecedoresComercial.jsx';
 import CadastroProdutosComercial from '@/components/comercial/cadastros/CadastroProdutosComercial.jsx';
 import CadastroTiposDespesasComercial from '@/components/comercial/cadastros/CadastroTiposDespesasComercial.jsx';
+
 import LancamentoVendasComercial from '@/components/comercial/lancamentos/LancamentoVendasComercial.jsx';
 import LancamentoDespesasComercial from '@/components/comercial/lancamentos/LancamentoDespesasComercial.jsx';
 import LancamentoFinanceiroComercial from '@/components/comercial/lancamentos/LancamentoFinanceiroComercial.jsx';
 import LancamentoOutrosLancamentosComercial from '@/components/comercial/lancamentos/LancamentoOutrosLancamentosComercial.jsx';
+
 import ConsultaVendasComercial from '@/components/comercial/consultas/ConsultaVendasComercial.jsx';
 import ConsultaDespesasComercial from '@/components/comercial/consultas/ConsultaDespesasComercial.jsx';
+
 import { DeviceContext } from '@/App.jsx';
 import { Helmet } from 'react-helmet';
 import { useModuleAccessGuard } from '@/hooks/useModuleAccessGuard';
 import { cn } from '@/lib/utils';
+
 import {
   ShoppingCart,
   Receipt,
@@ -49,13 +56,13 @@ const consultationPages = [
 
 function ComercialHome() {
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm font-medium text-[hsl(var(--neon-comercial))]">
+    <div className="w-full min-w-0 space-y-5 md:space-y-6">
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-[hsl(var(--neon-comercial))] sm:text-sm">
           GESTÃO COMERCIAL
         </p>
 
-        <h1 className="text-2xl font-bold text-white sm:text-3xl">
+        <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
           Dashboard
         </h1>
 
@@ -64,7 +71,7 @@ function ComercialHome() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 md:gap-4">
         {[
           { title: 'Vendas', icon: ShoppingCart },
           { title: 'Despesas', icon: Receipt },
@@ -76,17 +83,17 @@ function ComercialHome() {
           return (
             <div
               key={item.title}
-              className="neon-card rounded-2xl border border-[hsl(var(--neon-comercial)/.20)] bg-gray-900/80 p-5"
+              className="neon-card min-w-0 rounded-xl border border-[hsl(var(--neon-comercial)/.20)] bg-gray-900/80 p-4 sm:rounded-2xl sm:p-5"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-gray-400">
                   {item.title}
                 </span>
 
-                <Icon className="h-5 w-5 text-[hsl(var(--neon-comercial))]" />
+                <Icon className="h-5 w-5 shrink-0 text-[hsl(var(--neon-comercial))]" />
               </div>
 
-              <p className="mt-5 text-sm text-gray-500">
+              <p className="mt-4 text-sm text-gray-500 sm:mt-5">
                 Acesse Lançamentos para registrar.
               </p>
             </div>
@@ -94,12 +101,12 @@ function ComercialHome() {
         })}
       </div>
 
-      <div className="rounded-2xl border border-[hsl(var(--neon-comercial)/.20)] bg-gray-900/80 p-6">
+      <div className="min-w-0 rounded-xl border border-[hsl(var(--neon-comercial)/.20)] bg-gray-900/80 p-4 sm:rounded-2xl sm:p-6">
         <h2 className="text-lg font-semibold text-white">
           Bem-vindo ao Módulo Comercial
         </h2>
 
-        <p className="mt-2 text-sm text-gray-400">
+        <p className="mt-2 text-sm leading-relaxed text-gray-400">
           Gerencie vendas, despesas, custos e investimentos.
         </p>
       </div>
@@ -109,7 +116,7 @@ function ComercialHome() {
 
 function PlaceholderPage({ title, icon: Icon }) {
   return (
-    <div className="space-y-5">
+    <div className="w-full min-w-0 space-y-5">
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-[hsl(var(--neon-comercial))]">
           Módulo Comercial
@@ -120,7 +127,7 @@ function PlaceholderPage({ title, icon: Icon }) {
         </h1>
       </div>
 
-      <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-[hsl(var(--neon-comercial)/.20)] bg-gray-900/80 p-6 text-center">
+      <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-[hsl(var(--neon-comercial)/.20)] bg-gray-900/80 p-5 text-center sm:rounded-2xl sm:p-6">
         <Icon className="mb-4 h-10 w-10 text-[hsl(var(--neon-comercial))]" />
 
         <h2 className="text-lg font-semibold text-white">
@@ -155,7 +162,7 @@ export default function ComercialDashboard() {
 
   return (
     <div
-      className="flex h-screen overflow-hidden bg-gradient-professional font-sans text-[#A9A9A9]"
+      className="flex min-h-[100dvh] w-full overflow-hidden bg-gradient-professional font-sans text-[#A9A9A9]"
       style={{
         '--primary': 'var(--neon-comercial)',
         '--ring': 'var(--neon-comercial)',
@@ -174,7 +181,7 @@ export default function ComercialDashboard() {
 
       <div
         className={cn(
-          'flex flex-1 flex-col transition-[margin] duration-300',
+          'flex min-h-0 min-w-0 flex-1 flex-col transition-[margin] duration-300 motion-reduce:transition-none',
           !isMobile && (isSidebarOpen ? 'ml-60' : 'ml-20')
         )}
       >
@@ -183,8 +190,8 @@ export default function ComercialDashboard() {
           isSidebarOpen={isSidebarOpen}
         />
 
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent p-4 md:p-6 lg:p-8">
-          <div className="w-full">
+        <main className="relative min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-transparent p-2 sm:p-3 md:p-4 lg:p-5">
+          <div className="mx-auto w-full min-w-0">
             <Routes>
               <Route path="/" element={<ComercialHome />} />
 
@@ -252,7 +259,6 @@ export default function ComercialDashboard() {
                 element={<ConsultaDespesasComercial />}
               />
 
-              {/* CONSULTAS A DESENVOLVER */}
               {consultationPages.map(page => (
                 <Route
                   key={page.path}
@@ -282,7 +288,7 @@ export default function ComercialDashboard() {
 
       {isMobile && isSidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm"
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
         />
