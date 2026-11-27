@@ -1,6 +1,5 @@
-
 import React,{useState,useEffect,useCallback}from'react';
-import{Receipt,Plus,RefreshCw,Loader2}from'lucide-react';
+import{Receipt,Plus,RefreshCw,Loader2,Pencil,Trash2}from'lucide-react';
 import{Button}from'@/components/ui/button';
 import{Input}from'@/components/ui/input';
 import{Label}from'@/components/ui/label';
@@ -29,8 +28,10 @@ export default function LancamentoDespesasComercial(){
  const[fornecedores,setFornecedores]=useState([]);
  const[rows,setRows]=useState([]);
  const[modalOpen,setModalOpen]=useState(false);
+ const[editId,setEditId]=useState(null);
  const[loading,setLoading]=useState(true);
  const[saving,setSaving]=useState(false);
+ const[deleting,setDeleting]=useState(false);
 
  const carregar=useCallback(async()=>{
   if(!user){setLoading(false);return}
@@ -57,7 +58,21 @@ export default function LancamentoDespesasComercial(){
  const fornecedorNome=id=>fornecedores.find(f=>f.id===id)?.nome||'—';
 
  const abrirModal=()=>{
+  setEditId(null);
   setForm({...initial,data:today()});
+  setModalOpen(true);
+ };
+
+ const editar=r=>{
+  setEditId(r.id);
+  setForm({
+   data:r.data_despesa||today(),
+   valor:String(Math.round(Number(r.valor||0)*100)),
+   tipo_despesa_id:r.tipo_despesa_id||'',
+   fornecedor_id:r.fornecedor_id||'',
+   forma_pagamento:r.forma_pagamento||'',
+   observacoes:r.observacoes||''
+  });
   setModalOpen(true);
  };
 
@@ -77,7 +92,6 @@ export default function LancamentoDespesasComercial(){
   setSaving(true);
   try{
    const payload={
-    user_id:user.id,
     data_despesa:form.data,
     valor:valorNumerico,
     tipo_despesa_id:form.tipo_despesa_id,
@@ -85,18 +99,31 @@ export default function LancamentoDespesasComercial(){
     descricao:tipoNome(form.tipo_despesa_id),
     fornecedor_id:form.fornecedor_id||null,
     forma_pagamento:form.forma_pagamento,
-    observacoes:form.observacoes.trim()||null,
-    status:'pendente'
+    observacoes:form.observacoes.trim()||null
    };
-   const{error}=await supabase.from('comercial_despesas').insert(payload);
-   if(error)throw error;
-   toast({title:'Despesa registrada',description:'O lançamento foi salvo com sucesso.'});
-   setModalOpen(false);
-   setForm({...initial,data:today()});
+   const result=editId
+    ?await supabase.from('comercial_despesas').update(payload).eq('id',editId).eq('user_id',user.id)
+    :await supabase.from('comercial_despesas').insert({...payload,user_id:user.id,status:'pendente'});
+   if(result.error)throw result.error;
+   toast({title:editId?'Despesa atualizada':'Despesa registrada',description:'Os dados foram salvos com sucesso.'});
+   if(!editId)setForm({...initial,data:today()});
    await carregar();
   }catch(error){
    toast({title:'Erro ao salvar despesa',description:error.message,variant:'destructive'});
   }finally{setSaving(false)}
+ };
+
+ const excluir=async r=>{
+  if(!window.confirm('Deseja realmente excluir esta despesa? Esta ação não poderá ser desfeita.'))return;
+  setDeleting(true);
+  const{error}=await supabase.from('comercial_despesas').delete().eq('id',r.id).eq('user_id',user.id);
+  if(error)toast({title:'Erro ao excluir despesa',description:error.message,variant:'destructive'});
+  else{
+   toast({title:'Despesa excluída',description:'O registro foi removido.'});
+   if(editId===r.id){setEditId(null);setModalOpen(false)}
+   await carregar();
+  }
+  setDeleting(false);
  };
 
  return <div className="space-y-5">
@@ -115,22 +142,16 @@ export default function LancamentoDespesasComercial(){
    </div>
   </div>
 
-  <ModalComercialPadrao open={modalOpen} onClose={()=>!saving&&setModalOpen(false)} title="Registrar despesa" description="Preencha os dados para registrar uma nova despesa do negócio." icon={Receipt}
+  <ModalComercialPadrao open={modalOpen} onClose={()=>!saving&&!deleting&&setModalOpen(false)} title={editId?'Editar despesa':'Registrar despesa'} description="Preencha os dados da despesa." icon={Receipt}
    footer={<>
     <Button type="button" variant="outline" onClick={()=>setModalOpen(false)} disabled={saving}>Cancelar</Button>
     <Button type="submit" form={FORM_ID} disabled={saving||!tipos.length} className="font-bold text-black" style={{background:GREEN}}>
-     {saving?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<Plus className="mr-2 h-4 w-4"/>}Salvar despesa
+     {saving?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:editId?<Pencil className="mr-2 h-4 w-4"/>:<Plus className="mr-2 h-4 w-4"/>}{editId?'Salvar alterações':'Salvar despesa'}
     </Button>
    </>}>
    <form id={FORM_ID} onSubmit={salvar} className="grid gap-4 sm:grid-cols-2">
-    <div className="space-y-2">
-     <Label>Data *</Label>
-     <Input type="date" required value={form.data} onChange={e=>set('data',e.target.value)}/>
-    </div>
-    <div className="space-y-2">
-     <Label>Valor (R$) *</Label>
-     <Input type="text" inputMode="numeric" required value={formatValor(form.valor)} onChange={alterarValor} placeholder="R$ 0,00"/>
-    </div>
+    <div className="space-y-2"><Label>Data *</Label><Input type="date" required value={form.data} onChange={e=>set('data',e.target.value)}/></div>
+    <div className="space-y-2"><Label>Valor (R$) *</Label><Input type="text" inputMode="numeric" required value={formatValor(form.valor)} onChange={alterarValor} placeholder="R$ 0,00"/></div>
     <div className="space-y-2">
      <Label>Tipo da despesa *</Label>
      <select required value={form.tipo_despesa_id} onChange={e=>set('tipo_despesa_id',e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-white">
@@ -139,10 +160,7 @@ export default function LancamentoDespesasComercial(){
      </select>
      {!tipos.length&&<p className="text-xs text-amber-400">Cadastre um tipo antes de lançar uma despesa.</p>}
     </div>
-    <div className="space-y-2">
-     <Label>Categoria</Label>
-     <Input readOnly value={tipoSelecionado?.categoria||'Preenchida automaticamente'} className="cursor-not-allowed opacity-80" tabIndex={-1}/>
-    </div>
+    <div className="space-y-2"><Label>Categoria</Label><Input readOnly value={tipoSelecionado?.categoria||'Preenchida automaticamente'} className="cursor-not-allowed opacity-80" tabIndex={-1}/></div>
     <div className="space-y-2">
      <Label>Fornecedor (opcional)</Label>
      <select value={form.fornecedor_id} onChange={e=>set('fornecedor_id',e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-white">
@@ -157,13 +175,9 @@ export default function LancamentoDespesasComercial(){
       {['PIX','Dinheiro','Cartão de crédito','Cartão de débito','Transferência','Boleto','Outro'].map(v=><option key={v} value={v}>{v}</option>)}
      </select>
     </div>
-    <div className="space-y-2 sm:col-span-2">
-     <Label>Observações (opcional)</Label>
-     <Textarea rows={3} value={form.observacoes} onChange={e=>set('observacoes',e.target.value)} placeholder="Informações adicionais..."/>
-    </div>
+    <div className="space-y-2 sm:col-span-2"><Label>Observações (opcional)</Label><Textarea rows={3} value={form.observacoes} onChange={e=>set('observacoes',e.target.value)} placeholder="Informações adicionais..."/></div>
     <div className="rounded-xl border border-[hsl(var(--neon-comercial)/.3)] bg-[hsl(var(--neon-comercial)/.06)] p-4 sm:col-span-2">
-     <p className="text-sm text-gray-400">Valor da despesa</p>
-     <p className="text-2xl font-bold" style={{color:GREEN}}>{money(parseValor(form.valor))}</p>
+     <p className="text-sm text-gray-400">Valor da despesa</p><p className="text-2xl font-bold" style={{color:GREEN}}>{money(parseValor(form.valor))}</p>
     </div>
    </form>
   </ModalComercialPadrao>
@@ -171,12 +185,12 @@ export default function LancamentoDespesasComercial(){
   <Card className="border-border bg-card">
    <CardHeader><CardTitle style={{color:GREEN}}>Despesas recentes</CardTitle></CardHeader>
    <CardContent className="overflow-x-auto p-0">
-    <table className="w-full min-w-[900px] text-sm">
+    <table className="w-full min-w-[1050px] text-sm">
      <thead><tr className="border-y border-border bg-muted/30 text-left text-muted-foreground">
-      <th className="p-3">Data</th><th className="p-3">Tipo</th><th className="p-3">Categoria</th><th className="p-3">Fornecedor</th><th className="p-3">Pagamento</th><th className="p-3 text-right">Valor</th>
+      <th className="p-3">Data</th><th className="p-3">Tipo</th><th className="p-3">Categoria</th><th className="p-3">Fornecedor</th><th className="p-3">Pagamento</th><th className="p-3 text-right">Valor</th><th className="p-3 text-right">Ações</th>
      </tr></thead>
      <tbody>
-      {loading?<tr><td colSpan={6} className="p-8 text-center"><Loader2 className="mx-auto animate-spin"/></td></tr>
+      {loading?<tr><td colSpan={7} className="p-8 text-center"><Loader2 className="mx-auto animate-spin"/></td></tr>
       :rows.length?rows.map(r=><tr key={r.id} className="border-b border-border">
        <td className="p-3">{brDate(r.data_despesa)}</td>
        <td className="p-3">{tipoNome(r.tipo_despesa_id)==='Tipo não informado'?r.descricao:tipoNome(r.tipo_despesa_id)}</td>
@@ -184,8 +198,12 @@ export default function LancamentoDespesasComercial(){
        <td className="p-3">{fornecedorNome(r.fornecedor_id)}</td>
        <td className="p-3">{r.forma_pagamento||'—'}</td>
        <td className="p-3 text-right font-semibold">{money(r.valor)}</td>
+       <td className="p-3 text-right whitespace-nowrap">
+        <Button size="sm" variant="ghost" onClick={()=>editar(r)} disabled={saving||deleting} className="text-emerald-400"><Pencil className="mr-1 h-4 w-4"/>Editar</Button>
+        <Button size="sm" variant="ghost" onClick={()=>excluir(r)} disabled={deleting} className="text-red-400"><Trash2 className="mr-1 h-4 w-4"/>Excluir</Button>
+       </td>
       </tr>)
-      :<tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhuma despesa cadastrada.</td></tr>}
+      :<tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Nenhuma despesa cadastrada.</td></tr>}
      </tbody>
     </table>
    </CardContent>
