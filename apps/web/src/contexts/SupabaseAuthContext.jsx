@@ -12,7 +12,7 @@ const withTimeout=(promise,ms,message)=>Promise.race([promise,new Promise((_,rej
 export const AuthProvider=({children})=>{
  const{toast}=useToast(),{ensureProfile}=useProfileEnsure();
  const[user,setUser]=useState(null),[session,setSession]=useState(null),[profile,setProfile]=useState(null),[loading,setLoading]=useState(true);
- const profileRef=useRef(null),profileRequestRef=useRef(0),authEventVersionRef=useRef(0),userIdRef=useRef(null),profileLoadedForUserRef=useRef(null),profileLoadingUserIdRef=useRef(null),lastActivityRef=useRef(Date.now()),timerRef=useRef(null),loggingOutRef=useRef(false);
+ const profileRef=useRef(null),profileRequestRef=useRef(0),authEventVersionRef=useRef(0),userIdRef=useRef(null),profileLoadedForUserRef=useRef(null),profileLoadingUserIdRef=useRef(null),lastActivityRef=useRef(Date.now()),timerRef=useRef(null),loggingOutRef=useRef(false),initializedRef=useRef(false);
 
  useEffect(()=>{profileRef.current=profile},[profile]);
 
@@ -35,13 +35,24 @@ export const AuthProvider=({children})=>{
   }
  },[ensureProfile]);
 
- const processSession=useCallback(currentSession=>{
+ const processSession=useCallback((currentSession,isInitial=false)=>{
   const currentUser=currentSession?.user??null;
   const currentId=currentUser?.id??null;
+  const sameUser=currentId&&currentId===userIdRef.current;
 
-  if(currentId&&currentId===userIdRef.current&&(profileLoadedForUserRef.current===currentId||profileLoadingUserIdRef.current===currentId)){
+  if(sameUser){
    setSession(currentSession);
    setUser(currentUser);
+   if(profileLoadedForUserRef.current===currentId||profileLoadingUserIdRef.current===currentId)return;
+   const requestId=++profileRequestRef.current;
+   profileLoadingUserIdRef.current=currentId;
+   Promise.resolve().then(()=>fetchProfile(currentUser,false,requestId)).finally(()=>{
+    if(requestId===profileRequestRef.current){
+     profileLoadingUserIdRef.current=null;
+     profileLoadedForUserRef.current=currentId;
+     if(!initializedRef.current){initializedRef.current=true;setLoading(false)}
+    }
+   });
    return;
   }
 
@@ -55,12 +66,12 @@ export const AuthProvider=({children})=>{
    loggingOutRef.current=false;
    profileLoadedForUserRef.current=null;
    profileLoadingUserIdRef.current=currentId;
-   setLoading(true);
+   if(isInitial||!initializedRef.current)setLoading(true);
    Promise.resolve().then(()=>fetchProfile(currentUser,false,requestId)).finally(()=>{
     if(requestId===profileRequestRef.current){
      profileLoadingUserIdRef.current=null;
      profileLoadedForUserRef.current=currentId;
-     setLoading(false);
+     if(!initializedRef.current){initializedRef.current=true;setLoading(false)}
     }
    });
   }else{
@@ -70,6 +81,7 @@ export const AuthProvider=({children})=>{
    try{localStorage.removeItem('data_sharing_preferences')}catch(e){}
    lastActivityRef.current=Date.now();
    if(timerRef.current){clearTimeout(timerRef.current);timerRef.current=null}
+   initializedRef.current=true;
    setLoading(false);
   }
  },[fetchProfile]);
@@ -169,10 +181,10 @@ export const AuthProvider=({children})=>{
     if(!active||authEventVersionRef.current!==initialVersion)return;
     if(error){
      console.error('Erro ao recuperar sessão:',error);
-     processSession(null);
+     processSession(null,true);
      return;
     }
-    processSession(data?.session??null);
+    processSession(data?.session??null,true);
    }catch(err){
     if(!active||authEventVersionRef.current!==initialVersion)return;
     console.error('Falha na inicialização da autenticação:',err);
@@ -182,6 +194,7 @@ export const AuthProvider=({children})=>{
     userIdRef.current=null;
     profileLoadedForUserRef.current=null;
     profileLoadingUserIdRef.current=null;
+    initializedRef.current=true;
     setLoading(false);
    }
   };
@@ -255,3 +268,4 @@ export const useAuth=()=>{
  if(context===undefined)throw new Error('useAuth must be used within an AuthProvider');
  return context;
 };
+
