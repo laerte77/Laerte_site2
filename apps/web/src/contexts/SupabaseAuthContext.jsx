@@ -135,11 +135,16 @@ export const AuthProvider=({children})=>{
   const{data:{subscription}}=supabase.auth.onAuthStateChange((event,currentSession)=>{
    if(!active)return;
    authEventVersionRef.current++;
-   if(event==='TOKEN_REFRESHED')console.log('[Auth] Token renovado automaticamente');
+
+   if(event==='TOKEN_REFRESHED'){
+    console.log('[Auth] Token renovado automaticamente');
+    setSession(currentSession??null);
+    setUser(currentSession?.user??null);
+    return;
+   }
+
    if(event==='SIGNED_OUT')clearAuthTokens();
 
-   // O callback do Supabase não deve aguardar consultas ao próprio Supabase.
-   // O processamento do perfil acontece fora deste callback.
    processSession(currentSession);
   });
 
