@@ -99,13 +99,14 @@ export default function LancamentoDespesasComercial(){
     descricao:tipoNome(form.tipo_despesa_id),
     fornecedor_id:form.fornecedor_id||null,
     forma_pagamento:form.forma_pagamento,
-    observacoes:form.observacoes.trim()||null
+    observacoes:form.observacoes.trim()||null,
+    status:'pago'
    };
    const result=editId
     ?await supabase.from('comercial_despesas').update(payload).eq('id',editId).eq('user_id',user.id)
-    :await supabase.from('comercial_despesas').insert({...payload,user_id:user.id,status:'pendente'});
+    :await supabase.from('comercial_despesas').insert({...payload,user_id:user.id});
    if(result.error)throw result.error;
-   toast({title:editId?'Despesa atualizada':'Despesa registrada',description:'Os dados foram salvos com sucesso.'});
+   toast({title:editId?'Despesa atualizada':'Despesa registrada',description:'Despesa salva com status Pago.'});
    if(!editId)setForm({...initial,data:today()});
    await carregar();
   }catch(error){
@@ -133,7 +134,7 @@ export default function LancamentoDespesasComercial(){
     <div>
      <p className="text-xs font-semibold uppercase tracking-widest" style={{color:GREEN}}>Lançamentos</p>
      <h1 className="text-2xl font-bold text-white">Despesas</h1>
-     <p className="text-sm text-muted-foreground">Registre e organize as despesas do negócio.</p>
+     <p className="text-sm text-muted-foreground">Registre e organize as despesas já pagas do negócio.</p>
     </div>
    </div>
    <div className="flex gap-2">
@@ -142,7 +143,7 @@ export default function LancamentoDespesasComercial(){
    </div>
   </div>
 
-  <ModalComercialPadrao open={modalOpen} onClose={()=>!saving&&!deleting&&setModalOpen(false)} title={editId?'Editar despesa':'Registrar despesa'} description="Preencha os dados da despesa." icon={Receipt}
+  <ModalComercialPadrao open={modalOpen} onClose={()=>!saving&&!deleting&&setModalOpen(false)} title={editId?'Editar despesa':'Registrar despesa'} description="Preencha os dados da despesa já paga." icon={Receipt}
    footer={<>
     <Button type="button" variant="outline" onClick={()=>setModalOpen(false)} disabled={saving}>Cancelar</Button>
     <Button type="submit" form={FORM_ID} disabled={saving||!tipos.length} className="font-bold text-black" style={{background:GREEN}}>
@@ -178,6 +179,7 @@ export default function LancamentoDespesasComercial(){
     <div className="space-y-2 sm:col-span-2"><Label>Observações (opcional)</Label><Textarea rows={3} value={form.observacoes} onChange={e=>set('observacoes',e.target.value)} placeholder="Informações adicionais..."/></div>
     <div className="rounded-xl border border-[hsl(var(--neon-comercial)/.3)] bg-[hsl(var(--neon-comercial)/.06)] p-4 sm:col-span-2">
      <p className="text-sm text-gray-400">Valor da despesa</p><p className="text-2xl font-bold" style={{color:GREEN}}>{money(parseValor(form.valor))}</p>
+     <p className="mt-1 text-xs font-semibold text-emerald-400">Status: Pago</p>
     </div>
    </form>
   </ModalComercialPadrao>
@@ -187,23 +189,24 @@ export default function LancamentoDespesasComercial(){
    <CardContent className="overflow-x-auto p-0">
     <table className="w-full min-w-[1050px] text-sm">
      <thead><tr className="border-y border-border bg-muted/30 text-left text-muted-foreground">
-      <th className="p-3">Data</th><th className="p-3">Tipo</th><th className="p-3">Categoria</th><th className="p-3">Fornecedor</th><th className="p-3">Pagamento</th><th className="p-3 text-right">Valor</th><th className="p-3 text-right">Ações</th>
+      <th className="p-3">Data</th><th className="p-3">Tipo</th><th className="p-3">Categoria</th><th className="p-3">Fornecedor</th><th className="p-3">Pagamento</th><th className="p-3">Status</th><th className="p-3 text-right">Valor</th><th className="p-3 text-right">Ações</th>
      </tr></thead>
      <tbody>
-      {loading?<tr><td colSpan={7} className="p-8 text-center"><Loader2 className="mx-auto animate-spin"/></td></tr>
+      {loading?<tr><td colSpan={8} className="p-8 text-center"><Loader2 className="mx-auto animate-spin"/></td></tr>
       :rows.length?rows.map(r=><tr key={r.id} className="border-b border-border">
        <td className="p-3">{brDate(r.data_despesa)}</td>
        <td className="p-3">{tipoNome(r.tipo_despesa_id)==='Tipo não informado'?r.descricao:tipoNome(r.tipo_despesa_id)}</td>
        <td className="p-3">{categoriaNome(r.tipo_despesa_id)}</td>
        <td className="p-3">{fornecedorNome(r.fornecedor_id)}</td>
        <td className="p-3">{r.forma_pagamento||'—'}</td>
+       <td className="p-3 font-semibold text-emerald-400">Pago</td>
        <td className="p-3 text-right font-semibold">{money(r.valor)}</td>
        <td className="p-3 text-right whitespace-nowrap">
         <Button size="sm" variant="ghost" onClick={()=>editar(r)} disabled={saving||deleting} className="text-emerald-400"><Pencil className="mr-1 h-4 w-4"/>Editar</Button>
         <Button size="sm" variant="ghost" onClick={()=>excluir(r)} disabled={deleting} className="text-red-400"><Trash2 className="mr-1 h-4 w-4"/>Excluir</Button>
        </td>
       </tr>)
-      :<tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Nenhuma despesa cadastrada.</td></tr>}
+      :<tr><td colSpan={8} className="p-8 text-center text-muted-foreground">Nenhuma despesa cadastrada.</td></tr>}
      </tbody>
     </table>
    </CardContent>
